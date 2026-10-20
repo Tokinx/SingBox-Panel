@@ -27,3 +27,17 @@ func TestUninstallSingboxUsesPersistentTransactionalBackup(t *testing.T) {
 		t.Fatalf("uninstall script syntax: %v: %s", err, output)
 	}
 }
+
+// The backup directory lives under /var/lib/singbox-panel-agent, which may not
+// exist yet on a fresh or manually provisioned node. Creating it after mktemp
+// made the script abort under set -e before any uninstall work happened.
+func TestUninstallSingboxCreatesBackupParentBeforeMktemp(t *testing.T) {
+	mkdir := strings.Index(uninstallSingboxScript, "mkdir -p /var/lib/singbox-panel-agent")
+	mktemp := strings.Index(uninstallSingboxScript, "mktemp -d /var/lib/singbox-panel-agent/")
+	if mkdir < 0 || mktemp < 0 {
+		t.Fatalf("uninstall script missing backup parent creation (mkdir=%d mktemp=%d)", mkdir, mktemp)
+	}
+	if mkdir > mktemp {
+		t.Fatal("uninstall script runs mktemp before creating /var/lib/singbox-panel-agent")
+	}
+}

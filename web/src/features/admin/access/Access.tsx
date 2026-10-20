@@ -96,9 +96,50 @@ interface AccessNodeItem {
   id: number
   kind: AccessKind
   name: string
+  serverId?: number
+  serverName?: string
   detail: string
   protocol: string
   enabled: boolean
+}
+
+function formatProtocolDisplayName(typ: string): string {
+  switch (typ) {
+    case 'shadowsocks':
+      return 'Shadowsocks'
+    case 'socks':
+      return 'SOCKS5'
+    case 'vless':
+      return 'VLESS'
+    case 'vmess':
+      return 'VMess'
+    case 'trojan':
+      return 'Trojan'
+    case 'hysteria2':
+      return 'Hysteria2'
+    case 'hysteria':
+      return 'Hysteria'
+    case 'mixed':
+      return 'Mixed'
+    case 'tuic':
+      return 'TUIC'
+    case 'anytls':
+      return 'AnyTLS'
+    case 'snell':
+      return 'Snell'
+    default:
+      return typ.toUpperCase()
+  }
+}
+
+function formatManagedNodeDisplayName(serverName: string, tag: string, typ: string, countOnServer: number): string {
+  const trimmedServer = serverName.trim()
+  if (countOnServer <= 1 && trimmedServer) return trimmedServer
+  const prefix = `${typ}-`
+  if (tag.startsWith(prefix) && tag.length === prefix.length + 6) {
+    return `${trimmedServer} - ${formatProtocolDisplayName(typ)}`
+  }
+  return `${trimmedServer} - ${tag}`
 }
 
 interface AccessGroup {
@@ -171,9 +212,11 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
   const [activeNodeTab, setActiveNodeTab] = useState<'managed' | 'custom'>('managed')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set())
   const [draggedNodeKey, setDraggedNodeKey] = useState<string | null>(null)
+  const [editingNameKey, setEditingNameKey] = useState<string | null>(null)
   const [touchDropIndex, setTouchDropIndex] = useState<number | null>(null)
   const [sortAnnouncement, setSortAnnouncement] = useState('')
   const nodeOrderRef = useRef(nodeOrder)
+  const customNameCacheRef = useRef(new Map<string, string>())
   const orderListRef = useRef<HTMLDivElement>(null)
   const orderItemRefs = useRef(new Map<string, HTMLDivElement>())
   const touchDragRef = useRef<{ key: string; pointerId: number; sourceIndex: number } | null>(null)
@@ -214,6 +257,7 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
       setInboundIDs([])
       setCustomNodeIDs([])
       setNodeOrder([])
+      customNameCacheRef.current.clear()
       setAccessLoaded(false)
       setAccessError(null)
     }
@@ -224,14 +268,19 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
     getUserAccess(userId, controller.signal)
       .then((access) => {
         if (controller.signal.aborted) return
+        const initialOrder = access.node_order ?? []
+        customNameCacheRef.current.clear()
+        for (const item of initialOrder) {
+          if (item.custom_name) customNameCacheRef.current.set(userNodeOrderKey(item), item.custom_name)
+        }
         setLoadedServerIDs(access.server_ids ?? [])
         setLoadedServerWide(!!access.server_wide)
         setLoadedInboundIDs(access.inbound_ids)
         setLoadedCustomNodeIDs(access.custom_node_ids)
-        setLoadedNodeOrder(access.node_order ?? [])
+        setLoadedNodeOrder(initialOrder)
         setInboundIDs(access.inbound_ids)
         setCustomNodeIDs(access.custom_node_ids)
-        setNodeOrder(access.node_order ?? [])
+        setNodeOrder(initialOrder)
         setAccessLoaded(true)
       })
       .catch((e) => {
@@ -262,6 +311,8 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
         id: inbound.id,
         kind: 'managed' as const,
         name: inbound.tag || nodeTypeLabel[inbound.type]?.label || inbound.type,
+        serverId: server.id,
+        serverName: server.name,
         detail: `${server.address || server.public_ip || '-'}:${inbound.listen_port}`,
         protocol: inbound.type,
         enabled: inbound.enabled,
@@ -344,7 +395,10 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
       return b.every((id) => selected.has(id))
     }
     const sameOrder = loadedNodeOrder.length === nodeOrder.length
-      && loadedNodeOrder.every((item, index) => userNodeOrderKey(item) === userNodeOrderKey(nodeOrder[index]))
+      && loadedNodeOrder.every((item, index) =>
+        userNodeOrderKey(item) === userNodeOrderKey(nodeOrder[index])
+        && (item.custom_name ?? '').trim() === (nodeOrder[index].custom_name ?? '').trim(),
+      )
     return !equal(loadedInboundIDs, inboundIDs) || !equal(loadedCustomNodeIDs, customNodeIDs) || !sameOrder
   }, [customNodeIDs, inboundIDs, loadedCustomNodeIDs, loadedInboundIDs, loadedNodeOrder, nodeOrder])
 
@@ -367,13 +421,37 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
     else setCustomNodeIDs(update)
     setNodeOrder((current) => {
       const changedKeys = new Set(ids.map((id) => `${kind}:${id}`))
-      if (!checked) return current.filter((item) => !changedKeys.has(userNodeOrderKey(item)))
+      if (!checked) {
+        for (const item of current) {
+          const key = userNodeOrderKey(item)
+          if (changedKeys.has(key) && item.custom_name) {
+            customNameCacheRef.current.set(key, item.custom_name)
+          }
+        }
+        return current.filter((item) => !changedKeys.has(userNodeOrderKey(item)))
+      }
       const existing = new Set(current.map(userNodeOrderKey))
       const additions = ids
-        .map((id) => ({ node_type: kind, node_id: id }) as UserNodeOrderItem)
+        .map((id) => {
+          const key = `${kind}:${id}`
+          const cachedName = customNameCacheRef.current.get(key)
+          return (cachedName
+            ? { node_type: kind, node_id: id, custom_name: cachedName }
+            : { node_type: kind, node_id: id }) as UserNodeOrderItem
+        })
         .filter((item) => !existing.has(userNodeOrderKey(item)))
       return [...current, ...additions]
     })
+  }, [])
+
+  const updateNodeCustomName = useCallback((key: string, customName: string) => {
+    if (customName) customNameCacheRef.current.set(key, customName)
+    else customNameCacheRef.current.delete(key)
+    setNodeOrder((current) => current.map((item) => (
+      userNodeOrderKey(item) === key
+        ? { ...item, custom_name: customName || undefined }
+        : item
+    )))
   }, [])
 
   const toggleItem = useCallback((item: AccessNodeItem, checked: boolean) => {
@@ -395,6 +473,10 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
   }
 
   const discardChanges = () => {
+    customNameCacheRef.current.clear()
+    for (const item of loadedNodeOrder) {
+      if (item.custom_name) customNameCacheRef.current.set(userNodeOrderKey(item), item.custom_name)
+    }
     setInboundIDs(loadedInboundIDs)
     setCustomNodeIDs(loadedCustomNodeIDs)
     setNodeOrder(loadedNodeOrder)
@@ -587,6 +669,18 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
     return result
   }, [customGroups, managedGroups])
 
+  const selectedManagedPerServer = useMemo(() => {
+    const counts = new Map<number, number>()
+    for (const group of managedGroups) {
+      for (const item of group.items) {
+        if (item.enabled && selectedInboundSet.has(item.id) && item.serverId != null) {
+          counts.set(item.serverId, (counts.get(item.serverId) ?? 0) + 1)
+        }
+      }
+    }
+    return counts
+  }, [managedGroups, selectedInboundSet])
+
   const renderNodeOrder = () => {
     if (nodeOrder.length === 0) {
       return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="请先勾选需要分配的节点" />
@@ -606,6 +700,21 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
           return nodeOrder.map((orderItem, index) => {
             const key = userNodeOrderKey(orderItem)
             const item = nodeItemMap.get(key)
+            const defaultName = item
+              ? (item.kind === 'managed' && item.serverName
+                ? formatManagedNodeDisplayName(
+                  item.serverName,
+                  item.name,
+                  item.protocol,
+                  (item.serverId != null ? selectedManagedPerServer.get(item.serverId) : undefined) ?? 1,
+                )
+                : item.name)
+              : `节点 #${orderItem.node_id}`
+            const subtitle = item
+              ? (item.kind === 'managed' && item.serverName
+                ? `${item.serverName} · ${item.name} · ${item.detail}`
+                : item.detail)
+              : (orderItem.node_type === 'managed' ? '面板节点' : '节点')
             const touchDropClass = touchTargetKey === key
               ? (touchTargetAfter ? ' touch-drop-after' : ' touch-drop-before')
               : ''
@@ -613,12 +722,16 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
               <div
                 className={`access-order-item${draggedNodeKey === key ? ' dragging' : ''}${touchDropClass}`}
                 key={key}
-                draggable={!isMobile && !saving}
+                draggable={!isMobile && !saving && editingNameKey !== key}
                 ref={(element) => {
                   if (element) orderItemRefs.current.set(key, element)
                   else orderItemRefs.current.delete(key)
                 }}
                 onDragStart={(event) => {
+                  if (editingNameKey === key) {
+                    event.preventDefault()
+                    return
+                  }
                   setDraggedNodeKey(key)
                   event.dataTransfer.effectAllowed = 'move'
                   event.dataTransfer.setData('text/plain', key)
@@ -659,9 +772,24 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
                 </Tooltip>
                 <span className="access-order-number">{index + 1}</span>
                 <div className="access-order-content">
-                  <strong>{item?.name || `节点 #${orderItem.node_id}`}</strong>
-                  <small>{item?.detail || (orderItem.node_type === 'managed' ? '面板节点' : '节点')}</small>
+                  <strong>{(orderItem.custom_name ?? '').trim() || defaultName}</strong>
+                  <small>{subtitle}</small>
                 </div>
+                <Input
+                  size="small"
+                  className="access-order-name-input"
+                  placeholder={`默认：${defaultName}`}
+                  aria-label={`自定义 ${defaultName} 的节点名称`}
+                  value={orderItem.custom_name ?? ''}
+                  maxLength={128}
+                  allowClear
+                  disabled={saving}
+                  onFocus={() => setEditingNameKey(key)}
+                  onBlur={() => setEditingNameKey((current) => (current === key ? null : current))}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onChange={(event) => updateNodeCustomName(key, event.target.value)}
+                />
                 <Tag className="access-order-kind" color={orderItem.node_type === 'managed' ? 'blue' : 'purple'}>
                   {orderItem.node_type === 'managed' ? '面板' : '节点'}
                 </Tag>

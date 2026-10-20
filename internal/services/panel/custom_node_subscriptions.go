@@ -27,6 +27,8 @@ type customNodeSubscriptionManager struct {
 	db         *gorm.DB
 	locks      *keyedMutex[uint]
 	audienceMu sync.Mutex
+	// syncSource overrides the per-source sync in tests; nil means m.sync.
+	syncSource func(ctx context.Context, id uint) error
 }
 
 type customNodeSubscriptionSyncResult struct {
@@ -116,6 +118,12 @@ func (m *customNodeSubscriptionManager) run(ctx context.Context) {
 	}
 }
 
+// customNodeSubscriptionSyncWorkers bounds background fan-out. Every sync does
+// an outbound HTTP fetch followed by a write transaction, and SQLite runs on a
+// single connection, so an unbounded burst (e.g. the first scan after start)
+// would queue every admin request and traffic write behind it.
+const customNodeSubscriptionSyncWorkers = 3
+
 func (m *customNodeSubscriptionManager) syncDue(parent context.Context) {
 	var sources []model.CustomNodeSubscription
 	if err := m.db.Where("auto_update = ? AND enabled = ?", true, true).Find(&sources).Error; err != nil {
@@ -123,16 +131,36 @@ func (m *customNodeSubscriptionManager) syncDue(parent context.Context) {
 		return
 	}
 	now := time.Now()
+	sem := make(chan struct{}, customNodeSubscriptionSyncWorkers)
+	var wg sync.WaitGroup
+	// Waiting for the round keeps scans from overlapping: a source still queued
+	// from this round is not yet marked synced and would otherwise be fetched a
+	// second time by the next tick.
+	defer wg.Wait()
 	for i := range sources {
 		source := sources[i]
 		interval := time.Duration(normalizeCustomNodeSubscriptionInterval(source.UpdateIntervalMinutes)) * time.Minute
 		if source.LastSyncAt != nil && now.Sub(*source.LastSyncAt) < interval {
 			continue
 		}
+		select {
+		case <-parent.Done():
+			return
+		case sem <- struct{}{}:
+		}
+		wg.Add(1)
 		go func(id uint) {
+			defer wg.Done()
+			defer func() { <-sem }()
 			ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 			defer cancel()
-			if _, err := m.sync(ctx, id); err != nil {
+			var err error
+			if m.syncSource != nil {
+				err = m.syncSource(ctx, id)
+			} else {
+				_, err = m.sync(ctx, id)
+			}
+			if err != nil {
 				log.Printf("custom subscriptions: sync %d failed: %v", id, err)
 			}
 		}(source.ID)

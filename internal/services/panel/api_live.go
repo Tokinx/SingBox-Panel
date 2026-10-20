@@ -125,6 +125,7 @@ func (a *App) handleTrafficSSE(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "streaming not supported"})
 		return
 	}
+	_ = http.NewResponseController(c.Writer).SetReadDeadline(time.Time{})
 
 	sub, backlog := a.hub.live.subscribe(serverID)
 	defer a.hub.live.unsubscribe(serverID, sub)

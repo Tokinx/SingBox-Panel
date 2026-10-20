@@ -87,3 +87,67 @@ func TestOrderedUserNodeOrderAppendsNewAssignments(t *testing.T) {
 		t.Fatalf("order = %+v", order)
 	}
 }
+
+func TestPerUserCustomNodeNameOverridesManagedAndSingleNodeDefaults(t *testing.T) {
+	db := testDB(t)
+	server := model.Server{Name: "🇭🇰 香港主节点", AgentToken: "cn-agent", Address: "hk.example.com", Region: "HK"}
+	if err := db.Create(&server).Error; err != nil {
+		t.Fatal(err)
+	}
+	ib := model.Inbound{ServerID: server.ID, Tag: "vless-in", Type: model.InboundVLESS, ListenPort: 21001, Enabled: true}
+	if err := db.Create(&ib).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	userA := model.User{
+		Email: "alice", Password: "unused", Role: model.RoleUser, Enabled: true,
+		ServerIDs: []uint{server.ID}, InboundIDs: []uint{ib.ID}, SubToken: "alice-sub",
+	}
+	userB := model.User{
+		Email: "bob", Password: "unused", Role: model.RoleUser, Enabled: true,
+		ServerIDs: []uint{server.ID}, InboundIDs: []uint{ib.ID}, SubToken: "bob-sub",
+	}
+	if err := db.Create(&userA).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&userB).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	// Alice gets a custom display name on her single assigned node; Bob keeps the default.
+	order := []userNodeOrderItem{
+		{NodeType: userNodeTypeManaged, NodeID: ib.ID, CustomName: "  🇯🇵 专属专线 01  "},
+	}
+	if err := validateUserNodeOrder(order, []uint{ib.ID}, nil); err != nil {
+		t.Fatalf("validateUserNodeOrder: %v", err)
+	}
+	if err := saveUserNodeOrder(db, userA.ID, order); err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, err := orderedUserNodeOrder(db, userA.ID, []uint{ib.ID}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 1 || loaded[0].CustomName != "🇯🇵 专属专线 01" {
+		t.Fatalf("orderedUserNodeOrder = %+v", loaded)
+	}
+
+	app := &App{db: db}
+	aliceNodes := app.gatherNodes(&userA)
+	if len(aliceNodes) != 1 || aliceNodes[0].name != "🇯🇵 专属专线 01" || aliceNodes[0].region != "JP" {
+		t.Fatalf("alice nodes = %+v", aliceNodes)
+	}
+	bobNodes := app.gatherNodes(&userB)
+	if len(bobNodes) != 1 || bobNodes[0].name != "🇭🇰 香港主节点" || bobNodes[0].region != "HK" {
+		t.Fatalf("bob nodes = %+v", bobNodes)
+	}
+
+	// Reject control characters in custom names.
+	badOrder := []userNodeOrderItem{
+		{NodeType: userNodeTypeManaged, NodeID: ib.ID, CustomName: "bad\nname"},
+	}
+	if err := validateUserNodeOrder(badOrder, []uint{ib.ID}, nil); err == nil {
+		t.Fatal("expected validateUserNodeOrder to reject newline in custom_name")
+	}
+}

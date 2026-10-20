@@ -239,10 +239,7 @@ func (a *App) testOutbound(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "outbound not found"})
 		return
 	}
-	var st struct {
-		Server     string `json:"server"`
-		ServerPort int    `json:"server_port"`
-	}
+	var st outboundStoredSettings
 	if len(ob.Settings) > 0 {
 		_ = json.Unmarshal(ob.Settings, &st)
 	}
@@ -250,11 +247,14 @@ func (a *App) testOutbound(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "该出站没有落地地址或端口"})
 		return
 	}
+	if isLoopbackOrUnspecifiedHost(st.Server) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "落地服务器不能指向本机回环或未指定地址"})
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 20*time.Second)
 	defer cancel()
-	res, err := a.hub.SendCommand(ctx, sid, protocol.CmdTestOutbound,
-		protocol.TestOutboundCmd{Host: st.Server, Port: st.ServerPort})
+	res, err := a.hub.SendCommand(ctx, sid, protocol.CmdTestOutbound, outboundTestCommand(ob.Type, st))
 	if err != nil {
 		if strings.Contains(err.Error(), "unknown command") {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "该节点的 Agent 版本过旧，请先点「升级 Agent」"})
@@ -270,8 +270,24 @@ func (a *App) testOutbound(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"ok": data.OK, "latency_ms": data.LatencyMS, "error": data.Error,
+		"inconclusive": data.Inconclusive, "note": data.Note,
 		"target": fmt.Sprintf("%s:%d", st.Server, st.ServerPort),
 	})
+}
+
+// outboundTestCommand picks the probe that matches the landing's transport.
+// hysteria2 and tuic run over QUIC and never listen on TCP, so a TCP connect
+// would report every healthy QUIC landing as down.
+func outboundTestCommand(typ string, st outboundStoredSettings) protocol.TestOutboundCmd {
+	cmd := protocol.TestOutboundCmd{Host: st.Server, Port: st.ServerPort}
+	switch typ {
+	case "hysteria2", "hysteria", "tuic":
+		cmd.Network = "quic"
+		// salamander/gecko wrap every datagram; without the key the server
+		// stays silent. ObfsPassword alone has meant salamander historically.
+		cmd.Obfuscated = typ != "tuic" && (st.Settings.ObfsType != "" || st.Settings.ObfsPassword != "")
+	}
+	return cmd
 }
 
 // ---------- route rules ----------

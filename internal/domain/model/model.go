@@ -111,18 +111,20 @@ type User struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// UserNodeOrder stores one user's mixed subscription order. NodeType is
-// "managed" for a panel inbound and "custom" for an external node. The
-// assignment itself remains in User/CustomNode; this table only controls the
-// order in which assigned nodes are emitted.
+// UserNodeOrder stores one user's mixed subscription order and optional
+// per-user display name overrides. NodeType is "managed" for a panel inbound
+// and "custom" for an external node. The assignment itself remains in
+// User/CustomNode; this table controls the order and custom name emitted for
+// that user.
 type UserNodeOrder struct {
-	ID        uint      `gorm:"primaryKey" json:"id"`
-	UserID    uint      `gorm:"not null;index;uniqueIndex:idx_user_node_order,priority:1" json:"user_id"`
-	NodeType  string    `gorm:"size:16;not null;uniqueIndex:idx_user_node_order,priority:2" json:"node_type"`
-	NodeID    uint      `gorm:"not null;uniqueIndex:idx_user_node_order,priority:3" json:"node_id"`
-	SortOrder int       `gorm:"not null;index" json:"sort_order"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	UserID     uint      `gorm:"not null;index;uniqueIndex:idx_user_node_order,priority:1" json:"user_id"`
+	NodeType   string    `gorm:"size:16;not null;uniqueIndex:idx_user_node_order,priority:2" json:"node_type"`
+	NodeID     uint      `gorm:"not null;uniqueIndex:idx_user_node_order,priority:3" json:"node_id"`
+	SortOrder  int       `gorm:"not null;index" json:"sort_order"`
+	CustomName string    `gorm:"size:128" json:"custom_name,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 const (

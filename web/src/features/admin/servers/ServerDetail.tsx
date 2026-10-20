@@ -435,7 +435,11 @@ export default function ServerDetail() {
       // Successful results stay in the fixed-width connectivity cell. This
       // avoids a second transient notification while the administrator tests
       // several outbounds in sequence.
-      if (!r.ok) message.error(`${o.tag} 不通：${r.error || '连接失败'}`)
+      if (r.inconclusive) {
+        message.info(`${o.tag}：${r.note || '无法直接探测端口'}`)
+      } else if (!r.ok) {
+        message.error(`${o.tag} 不通：${r.error || '连接失败'}`)
+      }
     } catch (e) {
       if (!controller.signal.aborted && currentSIDRef.current === targetSID) message.error(errMsg(e))
     } finally {
@@ -906,7 +910,9 @@ export default function ServerDetail() {
                           ? <span style={{ color: 'var(--console-faint)' }}>未测试</span>
                           : t.ok
                             ? <Tag color="green">通 · {t.latency_ms}ms</Tag>
-                            : <Tag color="red" title={t.error}>不通</Tag>}
+                            : t.inconclusive
+                              ? <Tag color="gold" title={t.note}>仅解析</Tag>
+                              : <Tag color="red" title={t.error}>不通</Tag>}
                     </span>
                     <Button
                       size="small"

@@ -331,6 +331,13 @@ var applicationMigrations = []schemaMigration{
 			return tx.AutoMigrate(&model.TrafficUserHourly{})
 		},
 	},
+	{
+		version: 24,
+		name:    "per-user custom node display names",
+		up: func(tx *gorm.DB) error {
+			return tx.AutoMigrate(&model.UserNodeOrder{})
+		},
+	},
 }
 
 // migrationReplaySafe records whether an interrupted attempt of each migration
@@ -373,6 +380,7 @@ var migrationReplaySafe = map[uint]bool{
 	21: true,  // skips inbounds that are no longer multi-user
 	22: true,  // AutoMigrate plus a rollup rebuilt from scratch
 	23: true,  // AutoMigrate
+	24: true,  // AutoMigrate
 }
 
 // runSchemaMigrations applies every pending migration in order. If any

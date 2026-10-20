@@ -51,6 +51,20 @@ func localTrafficPort() int {
 	return addressPort(protocol.LocalTrafficAddress)
 }
 
+func isLoopbackOrUnspecifiedHost(raw string) bool {
+	host := strings.TrimSuffix(strings.ToLower(strings.Trim(strings.TrimSpace(raw), "[]")), ".")
+	if zoneAt := strings.LastIndexByte(host, '%'); zoneAt >= 0 {
+		host = host[:zoneAt]
+	}
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback() || ip.IsUnspecified()
+	}
+	return false
+}
+
 // addressPort returns the numeric port of a fixed host:port constant.
 func addressPort(address string) int {
 	_, portText, err := net.SplitHostPort(address)
@@ -125,6 +139,9 @@ func (a *App) validateOutbound(db *gorm.DB, serverID, excludeID uint, tag, typ s
 	}
 	if strings.TrimSpace(st.Server) == "" || st.ServerPort < 1 || st.ServerPort > 65535 {
 		return fmt.Errorf("落地服务器和 1-65535 端口必填")
+	}
+	if isLoopbackOrUnspecifiedHost(st.Server) {
+		return fmt.Errorf("落地服务器不能指向本机回环或未指定地址")
 	}
 	switch typ {
 	case "vless", "vmess":

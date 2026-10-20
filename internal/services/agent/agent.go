@@ -210,7 +210,7 @@ func (a *Agent) onCommand(ctx context.Context, env protocol.Envelope) protocol.C
 		if err := env.Decode(&c); err != nil {
 			return decodeResult(env.ID, err)
 		}
-		data, _ := json.Marshal(TestOutbound(ctx, c.Host, c.Port))
+		data, _ := json.Marshal(TestOutbound(ctx, c))
 		return protocol.CommandResultEvt{ID: env.ID, OK: true, Data: data}
 
 	case protocol.CmdGetLogs:

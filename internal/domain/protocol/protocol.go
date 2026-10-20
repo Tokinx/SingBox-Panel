@@ -114,9 +114,19 @@ type ServiceActionCmd struct {
 // TestOutboundCmd asks the agent to check reachability of a landing server
 // FROM this node (a TCP connect, which — unlike ICMP — proves the actual port
 // is open and is not blocked by the common "ping disabled" setup).
+//
+// QUIC-based landings (hysteria2 / tuic) listen on UDP only, so a TCP connect
+// would always fail. For those the panel sets Network to "quic" and the agent
+// sends a QUIC version-negotiation probe instead. Older agents ignore the
+// field and keep doing a TCP connect.
 type TestOutboundCmd struct {
-	Host string `json:"host"`
-	Port int    `json:"port"`
+	Host    string `json:"host"`
+	Port    int    `json:"port"`
+	Network string `json:"network,omitempty"` // "" (tcp) | "quic"
+	// Obfuscated marks a QUIC server behind packet obfuscation (hysteria2
+	// salamander/gecko). It answers nothing without the obfs key, so the probe
+	// can only confirm that the address resolves.
+	Obfuscated bool `json:"obfuscated,omitempty"`
 }
 
 // TestOutboundData is the reachability result.
@@ -124,6 +134,10 @@ type TestOutboundData struct {
 	OK        bool   `json:"ok"`
 	LatencyMS int64  `json:"latency_ms"`
 	Error     string `json:"error,omitempty"`
+	// Inconclusive means the target could not be probed without speaking the
+	// full protocol; Note explains what was (and was not) verified.
+	Inconclusive bool   `json:"inconclusive,omitempty"`
+	Note         string `json:"note,omitempty"`
 }
 
 // GetLogsCmd asks the agent for the tail of the sing-box service log.

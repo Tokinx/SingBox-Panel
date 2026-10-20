@@ -530,14 +530,25 @@ body {
   margin-inline-end: 0;
 }
 
+.access-order-name-input {
+  flex: 0 1 220px;
+  min-width: 130px;
+}
+
 @media (max-width: 576px) {
   .access-modal-items {
     grid-template-columns: 1fr;
   }
 
   .access-order-item {
+    flex-wrap: wrap;
     gap: 6px;
     padding: 8px;
+  }
+
+  .access-order-name-input {
+    flex: 1 1 100%;
+    order: 10;
   }
 
   .access-order-protocol {

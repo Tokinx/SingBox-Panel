@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -16,10 +17,11 @@ import (
 )
 
 var (
-	errInvalidServerAccess     = errors.New("服务器列表包含不存在的受管服务器")
-	errInvalidInboundAccess    = errors.New("节点列表包含不存在的受管节点")
-	errInvalidCustomNodeAccess = errors.New("节点列表包含不存在的自定义节点")
-	errInvalidUserNodeOrder    = errors.New("节点排序必须包含每个已分配节点且不能重复")
+	errInvalidServerAccess       = errors.New("服务器列表包含不存在的受管服务器")
+	errInvalidInboundAccess      = errors.New("节点列表包含不存在的受管节点")
+	errInvalidCustomNodeAccess   = errors.New("节点列表包含不存在的自定义节点")
+	errInvalidUserNodeOrder      = errors.New("节点排序必须包含每个已分配节点且不能重复")
+	errInvalidUserNodeCustomName = errors.New("自定义节点名称不能超过 128 个字符，且不能包含换行或制表符")
 )
 
 const (
@@ -44,8 +46,9 @@ type userAccessReq struct {
 }
 
 type userNodeOrderItem struct {
-	NodeType string `json:"node_type"`
-	NodeID   uint   `json:"node_id"`
+	NodeType   string `json:"node_type"`
+	NodeID     uint   `json:"node_id"`
+	CustomName string `json:"custom_name,omitempty"`
 }
 
 type userAccessResp struct {
@@ -244,7 +247,11 @@ func orderedUserNodeOrder(db *gorm.DB, userID uint, inboundIDs, customNodeIDs []
 	out := make([]userNodeOrderItem, 0, len(canonical))
 	seen := make(map[string]bool, len(canonical))
 	for _, row := range saved {
-		item := userNodeOrderItem{NodeType: row.NodeType, NodeID: row.NodeID}
+		item := userNodeOrderItem{
+			NodeType:   row.NodeType,
+			NodeID:     row.NodeID,
+			CustomName: strings.TrimSpace(row.CustomName),
+		}
 		if !valid[userNodeKey(item)] || seen[userNodeKey(item)] {
 			continue
 		}
@@ -275,6 +282,10 @@ func validateUserNodeOrder(order []userNodeOrderItem, inboundIDs, customNodeIDs 
 		if !expected[key] || seen[key] {
 			return errInvalidUserNodeOrder
 		}
+		item.CustomName = strings.TrimSpace(item.CustomName)
+		if strings.ContainsAny(item.CustomName, "\r\n\t") || utf8.RuneCountInString(item.CustomName) > 128 {
+			return errInvalidUserNodeCustomName
+		}
 		seen[key] = true
 	}
 	return nil
@@ -289,7 +300,13 @@ func saveUserNodeOrder(tx *gorm.DB, userID uint, order []userNodeOrderItem) erro
 	}
 	rows := make([]model.UserNodeOrder, len(order))
 	for i, item := range order {
-		rows[i] = model.UserNodeOrder{UserID: userID, NodeType: item.NodeType, NodeID: item.NodeID, SortOrder: i}
+		rows[i] = model.UserNodeOrder{
+			UserID:     userID,
+			NodeType:   item.NodeType,
+			NodeID:     item.NodeID,
+			SortOrder:  i,
+			CustomName: strings.TrimSpace(item.CustomName),
+		}
 	}
 	return tx.Create(&rows).Error
 }
@@ -440,7 +457,7 @@ func (a *App) updateUserAccess(c *gin.Context) {
 	})
 	if err != nil {
 		status := http.StatusInternalServerError
-		if errors.Is(err, errInvalidServerAccess) || errors.Is(err, errInvalidInboundAccess) || errors.Is(err, errInvalidCustomNodeAccess) || errors.Is(err, errInvalidUserNodeOrder) {
+		if errors.Is(err, errInvalidServerAccess) || errors.Is(err, errInvalidInboundAccess) || errors.Is(err, errInvalidCustomNodeAccess) || errors.Is(err, errInvalidUserNodeOrder) || errors.Is(err, errInvalidUserNodeCustomName) {
 			status = http.StatusBadRequest
 		}
 		c.JSON(status, gin.H{"error": err.Error()})

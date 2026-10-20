@@ -193,6 +193,8 @@ export interface OutboundTest {
   ok: boolean
   latency_ms: number
   error?: string
+  inconclusive?: boolean
+  note?: string
   target: string
 }
 // Reachability of a landing target, measured FROM the node itself.
@@ -329,6 +331,7 @@ export interface UserAccess {
 export interface UserNodeOrderItem {
   node_type: 'managed' | 'custom'
   node_id: number
+  custom_name?: string
 }
 export const getUserAccess = (id: number, signal?: AbortSignal) =>
   http.get<{ access: UserAccess }>(`/api/admin/users/${id}/access`, { signal }).then((r) => r.data.access)

@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // ParseShareLink parses a standard share URI (vless://, vmess://, ss://,
@@ -224,8 +225,10 @@ func parseVMess(uri string) (ClientNode, error) {
 func parseShadowsocks(uri string) (ClientNode, error) {
 	rest := uri[len("ss://"):]
 	name := ""
-	if i := strings.LastIndex(rest, "#"); i >= 0 {
-		name = strings.TrimSpace(rest[i+1:])
+	// The fragment starts at the first '#': base64, host and port never contain
+	// one, while a sloppy unescaped display name might ("#香港#01").
+	if i := strings.Index(rest, "#"); i >= 0 {
+		name = strings.TrimSpace(unescapeSharePart(rest[i+1:]))
 		rest = rest[:i]
 	}
 	// SIP002 plugin parameter: ss://base64(method:pass)@host:port/?plugin=…
@@ -236,6 +239,15 @@ func parseShadowsocks(uri string) (ClientNode, error) {
 		}
 		rest = rest[:i]
 	}
+	// SIP002 allows (and this panel's own BuildShareLink emits) an empty path
+	// before the query: host:port/?plugin=…
+	rest = strings.TrimSuffix(rest, "/")
+	if !strings.Contains(rest, "@") {
+		// Legacy form: ss://base64(method:password@host:port)
+		if d, ok := decodeSSBase64(unescapeSharePart(rest)); ok && strings.Contains(d, "@") {
+			rest = d
+		}
+	}
 	at := strings.LastIndex(rest, "@")
 	if at < 0 {
 		return ClientNode{}, fmt.Errorf("ss link missing @")
@@ -245,15 +257,11 @@ func parseShadowsocks(uri string) (ClientNode, error) {
 	if err != nil {
 		return ClientNode{}, err
 	}
-	// userinfo is base64(method:password) or plain method:password
-	decoded := userinfo
-	for _, encoding := range []*base64.Encoding{
-		base64.RawURLEncoding, base64.URLEncoding, base64.RawStdEncoding, base64.StdEncoding,
-	} {
-		if d, err := encoding.DecodeString(userinfo); err == nil {
-			decoded = string(d)
-			break
-		}
+	// userinfo is base64(method:password) (possibly percent-encoded padding) or
+	// the SIP002 plain form, where method and password are percent-encoded.
+	decoded := unescapeSharePart(userinfo)
+	if d, ok := decodeSSBase64(decoded); ok {
+		decoded = d
 	}
 	method, password, ok := strings.Cut(decoded, ":")
 	if !ok || method == "" || password == "" {
@@ -267,6 +275,39 @@ func parseShadowsocks(uri string) (ClientNode, error) {
 	cn.Settings.SingleUser = true
 	cn.Settings.SSServerPSK = password
 	return cn, nil
+}
+
+// unescapeSharePart percent-decodes one share-link component. PathUnescape is
+// used rather than QueryUnescape so a literal '+' (common in base64 keys) is
+// preserved. A malformed escape keeps the original text instead of failing the
+// whole link.
+func unescapeSharePart(s string) string {
+	if !strings.Contains(s, "%") {
+		return s
+	}
+	if u, err := url.PathUnescape(s); err == nil {
+		return u
+	}
+	return s
+}
+
+// decodeSSBase64 accepts every base64 alphabet/padding combination seen in
+// ss:// links, but only when the result looks like method:password text, so a
+// plain SIP002 userinfo that happens to be valid base64 is not mangled.
+func decodeSSBase64(s string) (string, bool) {
+	for _, encoding := range []*base64.Encoding{
+		base64.RawURLEncoding, base64.URLEncoding, base64.RawStdEncoding, base64.StdEncoding,
+	} {
+		d, err := encoding.DecodeString(s)
+		if err != nil {
+			continue
+		}
+		text := string(d)
+		if utf8.ValidString(text) && strings.Contains(text, ":") {
+			return text, true
+		}
+	}
+	return "", false
 }
 
 func splitHostPort(s string) (string, int, error) {

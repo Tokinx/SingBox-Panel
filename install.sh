@@ -436,6 +436,9 @@ read_yaml_nested() {
   printf '%s' "$value"
 }
 
+# Normalize and vet the install directory before anything is read from it:
+# the existing panel.yaml supplies credentials and the JWT secret below.
+validate_install_dir
 PANEL_CONFIG="$INSTALL_DIR/panel.yaml"
 EXISTING_INSTALL=0
 
@@ -526,7 +529,6 @@ fi
 
 [[ "$PANEL_PORT" =~ ^[0-9]+$ ]] || die "port must be a number"
 (( PANEL_PORT >= 1 && PANEL_PORT <= 65535 )) || die "port must be between 1 and 65535"
-validate_install_dir
 # The version becomes a path segment in the release download URL. Restrict it
 # to release-style tags rather than merely excluding obvious shell syntax.
 [[ -z "$PANEL_VERSION" || "$PANEL_VERSION" =~ ^v[0-9]+(\.[0-9]+){1,2}([-+][0-9A-Za-z][0-9A-Za-z.-]*)?$ ]] ||

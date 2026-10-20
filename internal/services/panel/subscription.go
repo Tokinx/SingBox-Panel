@@ -210,9 +210,10 @@ func (a *App) gatherNodesWithError(user *model.User) ([]node, error) {
 	return out, nil
 }
 
-// applyUserNodeOrder performs a stable mixed sort. Nodes absent from a saved
-// order (for example, a newly assigned node) stay at the end in their existing
-// canonical order until the administrator saves a new personal order.
+// applyUserNodeOrder applies per-user custom node display names and performs a
+// stable mixed sort. Nodes absent from a saved order (for example, a newly
+// assigned node) stay at the end in their existing canonical order until the
+// administrator saves a new personal order.
 func applyUserNodeOrder(db *gorm.DB, userID uint, nodes []node) {
 	if len(nodes) == 0 {
 		return
@@ -222,9 +223,22 @@ func applyUserNodeOrder(db *gorm.DB, userID uint, nodes []node) {
 		return
 	}
 	positions := make(map[string]int, len(rows))
+	customNames := make(map[string]string, len(rows))
 	for i, row := range rows {
 		key := row.NodeType + ":" + strconv.FormatUint(uint64(row.NodeID), 10)
 		positions[key] = i
+		if custom := strings.TrimSpace(row.CustomName); custom != "" {
+			customNames[key] = custom
+		}
+	}
+	for i := range nodes {
+		key := nodes[i].orderType + ":" + strconv.FormatUint(uint64(nodes[i].orderID), 10)
+		if custom := customNames[key]; custom != "" {
+			nodes[i].name = custom
+			if flagRegion := regionFromName(custom); flagRegion != "" {
+				nodes[i].region = flagRegion
+			}
+		}
 	}
 	unknown := len(rows)
 	if len(nodes) < 2 {

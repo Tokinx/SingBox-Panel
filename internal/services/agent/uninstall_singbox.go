@@ -6,6 +6,10 @@ import "context"
 // sing-box can resume from the panel without destroying node data.
 const uninstallSingboxScript = `set -eu
 found=0
+umask 077
+# The backup parent must exist before mktemp runs: under set -e a missing
+# directory would abort here, before the restore trap is even installed.
+mkdir -p /var/lib/singbox-panel-agent
 backup_root="$(mktemp -d /var/lib/singbox-panel-agent/.singbox-uninstall.XXXXXX)"
 committed=0
 was_active=0
@@ -37,8 +41,6 @@ cleanup() {
 }
 trap cleanup EXIT
 trap 'exit 1' HUP INT TERM
-umask 077
-mkdir -p /var/lib/singbox-panel-agent
 if [ -d /etc/sing-box ]; then cp -a /etc/sing-box "$backup_root/config"; fi
 if [ -d /var/lib/sing-box ]; then cp -a /var/lib/sing-box "$backup_root/state"; fi
 
