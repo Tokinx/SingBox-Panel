@@ -452,14 +452,12 @@ export default function Settings() {
           {(() => {
             const note = !info.has_update && !info.latest_version ? info.latest_error : undefined
             const showUpdate = !!info.has_update
-            const showReinstall = info.update_supported && info.reinstall_supported
-            if (!note && !showUpdate && !showReinstall) return null
+            if (!note && !showUpdate) return null
             return (
               <div className="settings-card-foot">
                 {note && <span className="settings-note">{note}</span>}
-                {(showUpdate || showReinstall) && (
+                {showUpdate && (
                   <div className="settings-actions">
-                    {showReinstall && <Button loading={updating} onClick={() => doUpdate(true)}>重新安装</Button>}
                     {showUpdate && <Button type="primary" loading={updating} disabled={!info.update_supported} title={info.update_supported ? undefined : (info.update_reason || "当前环境不支持在线更新")} onClick={() => doUpdate()}>更新到 {info.latest_version}</Button>}
                   </div>
                 )}
@@ -491,6 +489,14 @@ export default function Settings() {
                 />
                 <Button disabled={!pickedVersion || !info.update_supported} title={info.update_supported ? undefined : (info.update_reason || '当前环境不支持在线更新')} loading={updating} onClick={() => pickedVersion && installVersion(pickedVersion)}>
                   {pickedVersion && info.current_version && pickedVersion.replace(/^v/, '') !== info.current_version.replace(/^v/, '') && compareVersions(pickedVersion, info.current_version) <= 0 ? '回退' : '安装'}
+                </Button>
+                <Button
+                  loading={updating}
+                  disabled={!info.update_supported || !info.reinstall_supported}
+                  title={info.update_supported ? undefined : (info.update_reason || '当前环境不支持在线更新')}
+                  onClick={() => doUpdate(true)}
+                >
+                  重新安装
                 </Button>
               </div>
             </div>

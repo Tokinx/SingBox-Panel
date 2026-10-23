@@ -6,7 +6,7 @@ import {
   DownloadOutlined,
   ReloadOutlined,
   SearchOutlined,
-  VerticalAlignBottomOutlined,
+  VerticalAlignTopOutlined,
 } from '@ant-design/icons'
 import { errMsg, isCanceledRequest, listServers, serverLogs, streamLogs } from '../../../api'
 import type { Server } from '../../../types'
@@ -226,18 +226,27 @@ function renderContext(value: string, keyword: string): ReactNode {
   )
 }
 
-function compactComponent(value: string, direction: LogDirection) {
+const PROTOCOL_LABELS: Record<string, string> = {
+  anytls: 'AnyTLS', snell: 'Snell', shadowsocks: 'SS', ss: 'SS', vless: 'VLESS', vmess: 'VMess', trojan: 'Trojan',
+  hysteria2: 'Hy2', hysteria: 'Hysteria', tuic: 'TUIC', socks: 'SOCKS', http: 'HTTP', mixed: 'Mixed',
+  direct: 'direct', block: 'block', dns: 'dns', selector: 'select', urltest: 'urltest', wireguard: 'WG',
+}
+
+/** Splits "inbound/snell[Hawaii]" into a short protocol label and the user-defined tag. */
+function compactComponent(value: string, direction: LogDirection): { proto: string; tag: string } {
   let result = value
   if (direction) {
     const prefix = `${direction}/`
     if (result.toLowerCase().startsWith(prefix)) result = result.slice(prefix.length)
   }
-
-  const duplicatedLabel = result.match(/^([^[]+)\[([^\]]+)]$/)
-  if (duplicatedLabel && duplicatedLabel[1].toLowerCase() === duplicatedLabel[2].toLowerCase()) {
-    return duplicatedLabel[2]
-  }
-  return result
+  const match = result.match(/^([^[]+)\[([^\]]+)]$/)
+  if (!match) return { proto: '', tag: result }
+  const type = match[1].trim().toLowerCase()
+  const tag = match[2].trim()
+  const proto = PROTOCOL_LABELS[type] ?? match[1].trim()
+  // "direct[direct]" or "anytls[anytls]" carry no extra name.
+  if (tag.toLowerCase() === type || tag === proto) return { proto: '', tag: proto }
+  return { proto, tag }
 }
 
 function compactMessage(value: string, direction: LogDirection) {
@@ -256,9 +265,10 @@ function renderFlow(message: string, keyword: string): ReactNode {
   const match = message.match(/^connection (to|from) (\S+)(.*)$/i)
   if (!match) return renderSemanticText(message, keyword)
   const [, way, target, rest] = match
+  const incoming = way.toLowerCase() === 'from'
   return <>
-    <span className="lg-arrow" aria-label={way.toLowerCase() === 'to' ? '连接到' : '来自'}>{way.toLowerCase() === 'to' ? '→' : '←'}</span>
-    <span className="lg-target">{highlightText(target, keyword)}</span>
+    <span className="lg-arrow">{incoming ? '← 来自' : '→'}</span>
+    <span className={incoming ? 'lg-source' : 'lg-target'}>{highlightText(target, keyword)}</span>
     {rest ? <span className="lg-rest">{renderSemanticText(rest, keyword)}</span> : null}
   </>
 }
@@ -330,7 +340,7 @@ export default function Logs({ serverId }: { serverId?: number } = {}) {
     setFollowing(true)
     requestAnimationFrame(() => {
       const box = boxRef.current
-      if (box) box.scrollTo({ top: box.scrollHeight, behavior: smooth ? 'smooth' : 'auto' })
+      if (box) box.scrollTo({ top: 0, behavior: smooth ? 'smooth' : 'auto' })
     })
   }, [])
 
@@ -401,17 +411,20 @@ export default function Logs({ serverId }: { serverId?: number } = {}) {
       if (liveEntriesRef.current.length > MAX_LIVE_LINES) {
         liveEntriesRef.current.splice(0, liveEntriesRef.current.length - MAX_LIVE_LINES)
       }
+      // New lines are inserted above the reader; keep their place unless following.
+      const box = boxRef.current
+      const heightBefore = box?.scrollHeight ?? 0
       setLogEntries((current) => {
         const next = [...current, ...additions]
         return next.length > MAX_LIVE_LINES ? next.slice(next.length - MAX_LIVE_LINES) : next
       })
       setLastUpdatedAt(Date.now())
-      if (followingRef.current) {
-        requestAnimationFrame(() => {
-          const box = boxRef.current
-          if (box) box.scrollTop = box.scrollHeight
-        })
-      }
+      requestAnimationFrame(() => {
+        const viewer = boxRef.current
+        if (!viewer) return
+        if (followingRef.current) viewer.scrollTop = 0
+        else viewer.scrollTop += Math.max(0, viewer.scrollHeight - heightBefore)
+      })
     }, 100)
   }, [])
   const { connected: sseConnected } = useSSE(liveUrl, live && !!sid, onSSEMessage)
@@ -501,12 +514,15 @@ export default function Logs({ serverId }: { serverId?: number } = {}) {
     return bands
   }, [filteredLines])
 
+  // Newest first: the live edge sits at the top of the viewer.
+  const displayLines = useMemo(() => [...filteredLines].reverse(), [filteredLines])
+
   const current = servers.find((s) => s.id === sid)
 
   const handleScroll = (event: UIEvent<HTMLDivElement>) => {
     const box = event.currentTarget
-    const isAtBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 36
-    if (isAtBottom !== followingRef.current) setFollowState(isAtBottom)
+    const isAtTop = box.scrollTop < 36
+    if (isAtTop !== followingRef.current) setFollowState(isAtTop)
   }
 
   const handleLiveChange = (checked: boolean) => {
@@ -637,7 +653,7 @@ export default function Logs({ serverId }: { serverId?: number } = {}) {
           <div className="lg-viewer-shell">
             <VirtualList
               ref={boxRef}
-              items={filteredLines}
+              items={displayLines}
               getKey={logEntryKey}
               estimatedItemHeight={28}
               overscan={12}
@@ -662,8 +678,9 @@ export default function Logs({ serverId }: { serverId?: number } = {}) {
                         </span>
                         <span className="lg-subject">
                           {['warn', 'error'].includes(levelClass(line.level)) ? <span className={`lg-badge lg-badge-${levelClass(line.level)}`}>{line.level}</span> : null}
-                          <span className={`lg-component lg-component-${line.direction || 'neutral'}`} title={line.component}>{highlightText(componentText, keyword)}</span>
-                          {line.user ? <span className="lg-user" title={line.user}>{highlightText(line.user, keyword)}</span> : null}
+                          {componentText.proto ? <span className="lg-proto">{componentText.proto}</span> : null}
+                          <span className={`lg-component lg-component-${line.direction || 'neutral'}`} title={line.component}>{highlightText(componentText.tag, keyword)}</span>
+                          {line.user ? <span className="lg-user" title={`用户 ${line.user}`}>{highlightText(line.user, keyword)}</span> : null}
                         </span>
                         <span className="lg-message">{renderFlow(messageText, keyword)}</span>
                         <span className="lg-context" title={line.context}>
@@ -692,7 +709,7 @@ export default function Logs({ serverId }: { serverId?: number } = {}) {
                 className="lg-jump-latest"
                 type="primary"
                 size="small"
-                icon={<VerticalAlignBottomOutlined />}
+                icon={<VerticalAlignTopOutlined />}
                 onClick={() => scrollToLatest(true)}
               >
                 回到最新
