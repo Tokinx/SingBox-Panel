@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import type { FormInstance } from 'antd'
 import type { Inbound } from '../../../types'
-import { assembleSettings, toForm } from './InboundForm'
+import { assembleSettings, scrollToFirstError, toForm } from './InboundForm'
 
 const inbound = {
   id: 1, server_id: 1, type: 'vmess', tag: 'example', listen_port: 8443, enabled: true, remark: '',
@@ -65,5 +66,21 @@ describe('inbound form round trip', () => {
   it('allows clearing both SOCKS credentials for no-auth mode', () => {
     const saved = assembleSettings({ username: 'alice', password: 'example-password' }, { username: '', password: '', multi_user: true }, 'socks')
     expect(saved).toMatchObject({ multi_user: false, single_user: true, username: '', password: '' })
+  })
+})
+
+describe('scrollToFirstError', () => {
+  it('scrolls the first invalid field into view instead of switching tabs', () => {
+    const scrollToField = vi.fn()
+    const form = { scrollToField } as unknown as FormInstance
+    scrollToFirstError(form, { errorFields: [{ name: ['reality_handshake_server'], errors: ['x'] }, { name: ['acme_domain'], errors: ['y'] }] })
+    expect(scrollToField).toHaveBeenCalledTimes(1)
+    expect(scrollToField).toHaveBeenCalledWith(['reality_handshake_server'], expect.objectContaining({ block: 'center' }))
+  })
+
+  it('ignores non-validation errors', () => {
+    const scrollToField = vi.fn()
+    scrollToFirstError({ scrollToField } as unknown as FormInstance, new Error('network'))
+    expect(scrollToField).not.toHaveBeenCalled()
   })
 })

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Card, Col, Divider, List, Modal, Popconfirm, Row, Space, Statistic, Tag, Typography, Upload, message, theme } from 'antd'
+import { Alert, Button, Modal, Popconfirm, Select, Tooltip, Typography, Upload, message } from 'antd'
 import type { UploadFile } from 'antd'
-import { CloudDownloadOutlined, CloudOutlined, DeleteOutlined, DownloadOutlined, InboxOutlined, LinkOutlined, ReloadOutlined, RocketOutlined, UploadOutlined } from '@ant-design/icons'
+import { DeleteOutlined, DownloadOutlined, InboxOutlined, LinkOutlined, ReloadOutlined } from '@ant-design/icons'
 import {
+  listPanelReleases,
   deleteOneDriveBackup,
   downloadBackup,
   downloadOneDriveBackup,
@@ -23,12 +24,36 @@ import {
 import { formatDuration } from '../../../util'
 import { useAuth } from '../../../store'
 import { updateFailureMessage, updateRestartCompleted } from '../../../maintenanceUpdate'
+import { PageHeader, Pills, Status } from '../../../ui/Page'
+import { RequestState } from '../../../components/RequestState'
+import type { PanelRelease } from '../../../api'
+import '../../../styles/settings-user.css'
+
+// Orders vMAJOR.MINOR.PATCH tags; unparsable tags compare equal.
+function compareVersions(a: string, b: string): number {
+  const parse = (v: string) => v.replace(/^v/, '').split(/[.-]/).slice(0, 3).map((n) => Number(n))
+  const pa = parse(a), pb = parse(b)
+  if (pa.length < 3 || pb.length < 3 || [...pa, ...pb].some((n) => !Number.isFinite(n))) return 0
+  for (let i = 0; i < 3; i++) if (pa[i] !== pb[i]) return pa[i] > pb[i] ? 1 : -1
+  return 0
+}
+
+type SettingsView = 'version' | 'backup' | 'restore'
+const VIEWS = [
+  { key: 'version', label: '版本' },
+  { key: 'backup', label: '备份' },
+  { key: 'restore', label: '恢复' },
+]
 
 export default function Settings() {
-  const { token } = theme.useToken()
+  const [view, setView] = useState<SettingsView>('version')
   const [info, setInfo] = useState<MaintenanceInfo | null>(null)
   const [loading, setLoading] = useState(false)
   const [updating, setUpdating] = useState(false)
+  const [releases, setReleases] = useState<PanelRelease[] | null>(null)
+  const [releasesLoading, setReleasesLoading] = useState(false)
+  const [releasesError, setReleasesError] = useState<string | null>(null)
+  const [pickedVersion, setPickedVersion] = useState<string>()
   const [backing, setBacking] = useState(false)
   const [restoring, setRestoring] = useState(false)
   const [restoreFile, setRestoreFile] = useState<UploadFile | null>(null)
@@ -201,14 +226,7 @@ export default function Settings() {
   const doCloudRestore = (id: string, name: string) => {
     Modal.confirm({
       title: '从 OneDrive 恢复备份',
-      content: (
-        <div>
-          <p>服务器将直接从 OneDrive 读取 <b>{name}</b>，覆盖当前节点、用户、订阅和被控 Agent 数据。</p>
-          <p style={{ color: 'var(--console-error-text)', marginBottom: 0 }}>
-            恢复前会自动保留当前数据库快照，恢复完成后面板会重启。请确认备份来源可信。
-          </p>
-        </div>
-      ),
+      content: <>将用 <b>{name}</b> 覆盖全部数据，完成后面板重启。</>,
       okText: '确认恢复',
       okButtonProps: { danger: true },
       cancelText: '取消',
@@ -256,17 +274,7 @@ export default function Settings() {
     }
     Modal.confirm({
       title: '恢复备份',
-      content: (
-        <div>
-          <p>
-            将用 <b>{restoreFile?.name}</b> 覆盖当前所有数据（节点、用户、订阅、被控 Agent 密钥）。
-          </p>
-          <p style={{ color: 'var(--console-error-text)', marginBottom: 0 }}>
-            覆盖前会自动把现有数据库另存为 .pre-restore 备份以便回滚。
-            恢复后面板会重启，你需要重新登录。此操作不可撤销。
-          </p>
-        </div>
-      ),
+      content: <>将用 <b>{restoreFile?.name}</b> 覆盖全部数据，完成后需重新登录。</>,
       okText: '确认恢复',
       okButtonProps: { danger: true },
       cancelText: '取消',
@@ -300,29 +308,52 @@ export default function Settings() {
     })
   }
 
-  const doUpdate = (force = false) => {
-    const target = force ? info?.current_version : info?.latest_version
-    if (!target) return
+  const releasesRequest = useRef<{ generation: number; controller: AbortController | null }>({ generation: 0, controller: null })
+  const loadReleases = (refresh = false) => {
+    releasesRequest.current.controller?.abort()
+    const controller = new AbortController()
+    const generation = ++releasesRequest.current.generation
+    releasesRequest.current.controller = controller
+    setReleasesLoading(true)
+    setReleasesError(null)
+    listPanelReleases(controller.signal, refresh)
+      .then((list) => { if (generation === releasesRequest.current.generation) setReleases(list) })
+      .catch((e) => { if (generation === releasesRequest.current.generation && !controller.signal.aborted) setReleasesError(errMsg(e)) })
+      .finally(() => { if (generation === releasesRequest.current.generation) setReleasesLoading(false) })
+  }
+  useEffect(() => () => {
+    releasesRequest.current.generation++
+    releasesRequest.current.controller?.abort()
+  }, [])
+  useEffect(() => {
+    if (view === 'version' && info && releases === null && !releasesLoading) loadReleases()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, !!info])
+
+  // Installs any published release: newer = update, same = reinstall, older = rollback.
+  const installVersion = (target: string) => {
+    const current = info?.current_version
+    if (!target || !current) return
+    const order = compareVersions(target, current)
+    const same = target.replace(/^v/, '') === current.replace(/^v/, '')
+    // Equal version numbers with a different tag (e.g. a pre-release) are not a
+    // safe upgrade either, so they take the rollback path.
+    const rollback = !same && order <= 0
+    const force = same || rollback
+    const title = same ? '重新安装当前版本' : rollback ? `回退到 ${target}` : `更新到 ${target}`
     Modal.confirm({
-      title: force ? '重新安装当前版本' : '更新面板',
-      content: (
-        <div>
-          <p>
-            {force ? <>将从 GitHub 重新下载并安装 <b>{target}</b>，用于同步该版本重新发布的构建。</> : <>将从 {info?.current_version} 更新到 <b>{target}</b>。</>}
-          </p>
-          <p style={{ color: 'var(--console-error-text)', marginBottom: 0 }}>
-            面板会校验并一起切换后端、前端和 Agent 包，失败时自动回滚，期间约中断数秒。
-            数据、域名、端口、被控 Agent 均不受影响。
-          </p>
-        </div>
-      ),
-      okText: force ? '重新安装' : '开始更新',
+      title,
+      okText: same ? '重新安装' : rollback ? '回退' : '开始更新',
+      okButtonProps: rollback ? { danger: true } : undefined,
       cancelText: '取消',
+      content: rollback
+        ? <><span className="mono">{current}</span> → <b className="mono">{target}</b>。会先自动备份当前数据。</>
+        : <><span className="mono">{current}</span> → <b className="mono">{target}</b>，期间面板中断数秒。</>,
       onOk: async () => {
         setUpdating(true)
         try {
           const before = await getMaintenanceInfo()
-          if (force && !before.instance_id) throw new Error('当前面板尚不支持确认同版本重装，请先更新面板')
+          if (same && !before.instance_id) throw new Error('当前面板尚不支持确认同版本重装，请先更新面板')
           const r = await selfUpdate(target, force)
           if (!r.updated) {
             message.info(r.message)
@@ -330,7 +361,7 @@ export default function Settings() {
             return
           }
           message.success(r.message)
-          if (force && !r.operation_id) throw new Error('无法确认重装结果，请稍后刷新页面检查状态')
+          if (same && !r.operation_id) throw new Error('无法确认重装结果，请稍后刷新页面检查状态')
           waitForRestart(target, before, r.operation_id)
         } catch (e) {
           message.error(errMsg(e))
@@ -338,6 +369,10 @@ export default function Settings() {
         }
       },
     })
+  }
+  const doUpdate = (force = false) => {
+    const target = force ? info?.current_version : info?.latest_version
+    if (target) installVersion(target)
   }
 
   // A same-version reinstall is complete only after a different panel process
@@ -393,238 +428,207 @@ export default function Settings() {
     poll()
   }
 
-  return (
-    <Row gutter={[16, 16]}>
-      <Col xs={24}>
-        <Card
-          title="面板版本"
-          loading={loading}
-          extra={<Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={() => { load(true); loadCloud() }} disabled={updating}>刷新</Button>}
-        >
-          {info && (
-            <Row gutter={[16, 16]} align="middle">
-              <Col xs={12} sm={8} md={6}>
-                <Statistic
-                  title="当前版本"
-                  value={info.current_version}
-                  valueStyle={{ fontSize: 22 }}
-                />
-              </Col>
-              <Col xs={12} sm={8} md={6}>
-                <Statistic
-                  title="最新版本"
-                  value={info.latest_version || '—'}
-                  valueStyle={{ fontSize: 22, color: info.has_update ? 'var(--console-warning-text)' : undefined }}
-                />
-              </Col>
-              <Col xs={12} sm={8} md={6}>
-                <Statistic title="数据库" value={info.db_driver} valueStyle={{ fontSize: 22 }} />
-              </Col>
-              <Col xs={12} sm={8} md={6}>
-                <Statistic
-                  title="已运行"
-                  value={formatDuration(info.uptime_seconds)}
-                  valueStyle={{ fontSize: 22 }}
-                />
-              </Col>
-              <Col xs={24} className="settings-version-actions" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                {!info.update_supported ? (
-                  <Alert
-                    style={{ width: '100%' }}
-                    type="info"
-                    showIcon
-                    message="此部署不支持面板内更新"
-                    description={info.update_reason}
-                  />
-                ) : info.has_update ? (
-                  <Button type="primary" icon={<RocketOutlined />} loading={updating} onClick={() => doUpdate()}>
-                    更新到 {info.latest_version}
-                  </Button>
-                ) : info.latest_version ? (
-                  <Tag
-                    className="settings-version-status"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      height: token.controlHeight,
-                      borderRadius: token.borderRadius,
-                      fontSize: token.fontSize,
-                      paddingInline: token.paddingSM,
-                      marginInlineEnd: 0,
-                    }}
-                  >版本号一致</Tag>
-                ) : info.latest_error ? (
-                  <span style={{ color: 'var(--console-muted)' }}>{info.latest_error}</span>
-                ) : null}
-                {info.update_supported && info.reinstall_supported && (
-                  <Button icon={<ReloadOutlined />} loading={updating} onClick={() => doUpdate(true)}>
-                    重新安装当前版本
-                  </Button>
+  const refreshAll = () => { load(true); void loadCloud() }
+  const cloudError = cloud?.connected ? (cloud.last_error || cloud.cloud_error) : undefined
+  const authLink = authPending ? (authPending.verification_uri_complete || authPending.verification_uri) : ''
+
+  const versionView = (
+    <RequestState loading={loading && !info} hasData={!!info}>
+      {info && (
+        <div className="ui-card settings-card">
+          <dl className="ui-kv">
+            <div><dt>当前版本</dt><dd className="mono">{info.current_version}</dd></div>
+            <div>
+              <dt>最新版本</dt>
+              <dd className="settings-version-latest">
+                <span className="mono">{info.latest_version || '—'}</span>
+                {info.has_update && <Status tone="warn">可更新</Status>}
+                {!info.has_update && info.latest_version && <Status tone="ok">已是最新</Status>}
+              </dd>
+            </div>
+            <div><dt>数据库</dt><dd className="mono">{info.db_driver}</dd></div>
+            <div><dt>已运行</dt><dd>{formatDuration(info.uptime_seconds)}</dd></div>
+          </dl>
+          {(() => {
+            const note = !info.has_update && !info.latest_version ? info.latest_error : undefined
+            const showUpdate = !!info.has_update
+            const showReinstall = info.update_supported && info.reinstall_supported
+            if (!note && !showUpdate && !showReinstall) return null
+            return (
+              <div className="settings-card-foot">
+                {note && <span className="settings-note">{note}</span>}
+                {(showUpdate || showReinstall) && (
+                  <div className="settings-actions">
+                    {showReinstall && <Button loading={updating} onClick={() => doUpdate(true)}>重新安装</Button>}
+                    {showUpdate && <Button type="primary" loading={updating} disabled={!info.update_supported} title={info.update_supported ? undefined : (info.update_reason || "当前环境不支持在线更新")} onClick={() => doUpdate()}>更新到 {info.latest_version}</Button>}
+                  </div>
                 )}
-              </Col>
-            </Row>
+              </div>
+            )
+          })()}
+          {(
+            <div className="settings-card-foot settings-release-picker">
+              <span className="settings-release-label">安装指定版本</span>
+              <div className="settings-actions">
+                <Select
+                  className="settings-release-select"
+                  aria-label="选择版本"
+                  placeholder={releasesError ? '获取失败' : '选择版本'}
+                  loading={releasesLoading}
+                  value={pickedVersion}
+                  onChange={setPickedVersion}
+                  onDropdownVisibleChange={(open) => { if (open && releasesError) loadReleases(true) }}
+                  popupMatchSelectWidth={false}
+                  options={(releases ?? []).map((r) => ({
+                    value: r.version,
+                    label: <span className="settings-release-option">
+                      <span className="mono">{r.version}</span>
+                      {r.current && <span className="ui-tag">当前</span>}
+                      {r.prerelease && <span className="ui-tag">预发布</span>}
+                      {r.published_at && <span className="faint">{new Date(r.published_at).toLocaleDateString('zh-CN')}</span>}
+                    </span>,
+                  }))}
+                />
+                <Button disabled={!pickedVersion || !info.update_supported} title={info.update_supported ? undefined : (info.update_reason || '当前环境不支持在线更新')} loading={updating} onClick={() => pickedVersion && installVersion(pickedVersion)}>
+                  {pickedVersion && info.current_version && pickedVersion.replace(/^v/, '') !== info.current_version.replace(/^v/, '') && compareVersions(pickedVersion, info.current_version) <= 0 ? '回退' : '安装'}
+                </Button>
+              </div>
+            </div>
           )}
-        </Card>
-      </Col>
+        </div>
+      )}
+    </RequestState>
+  )
 
-      <Col xs={24} lg={12}>
-        <Card title="数据备份" style={{ height: '100%' }} loading={cloudLoading && !cloud}>
-          <p style={{ color: 'var(--console-muted)', minHeight: 66 }}>
-            导出包含全部数据（节点、用户、订阅 token、被控 Agent 密钥）与会话密钥（jwt_secret）的备份。
-            在新服务器上恢复此备份并让原域名指向新机，被控 Agent 会自动重连、用户登录也不会失效，无需重装。
-          </p>
-          <Button
-            type="primary"
-            icon={backing ? <DownloadOutlined /> : <CloudDownloadOutlined />}
-            loading={backing}
-            onClick={doBackup}
-          >
-            下载备份
-          </Button>
-
-          <Divider style={{ margin: '24px 0 18px' }} />
-          <Space align="center" size={10}>
-            <Typography.Text strong>OneDrive 云端同步</Typography.Text>
-            {cloud?.connected ? <Tag color="success">已连接</Tag> : <Tag>未连接</Tag>}
-          </Space>
-          <Space wrap size={[10, 10]} style={{ display: 'flex', marginTop: 14 }}>
-            <Button type="primary" icon={<CloudOutlined />} onClick={doConnectCloud} loading={cloudLoading}>
-              {cloud?.connected ? '重新连接 OneDrive' : '连接 OneDrive'}
+  const backupView = (
+    <>
+      <div className="ui-card settings-card settings-rows">
+        <div className="settings-row">
+          <div className="settings-row-main">
+            <b>本地备份</b>
+            <span className="settings-row-meta mono">.tar.gz</span>
+          </div>
+          <div className="settings-actions">
+            <Button icon={<DownloadOutlined />} loading={backing} onClick={doBackup}>下载</Button>
+          </div>
+        </div>
+        <div className="settings-row">
+          <div className="settings-row-main">
+            <b>OneDrive</b>
+            {cloud?.connected ? <Status tone="ok">已连接</Status> : <Status>未连接</Status>}
+            {cloud?.connected && cloud.last_sync_at && (
+              <span className="settings-row-meta">
+                {new Date(cloud.last_sync_at).toLocaleString()}
+                {cloud.last_backup_name ? <> · <span className="mono">{cloud.last_backup_name}</span></> : null}
+              </span>
+            )}
+          </div>
+          <div className="settings-actions">
+            <Button type={cloud?.connected ? 'default' : 'primary'} onClick={doConnectCloud} loading={cloudLoading}>
+              {cloud?.connected ? '重新连接' : '连接'}
             </Button>
             {cloud?.connected && (
-              <>
-                <Button type="primary" icon={<CloudOutlined />} loading={cloudSyncing} onClick={doCloudSync}>
-                  立即同步
-                </Button>
-                <Button icon={<ReloadOutlined />} onClick={loadCloud} loading={cloudLoading}>
-                  刷新列表
-                </Button>
-              </>
+              <Button type="primary" loading={cloudSyncing} onClick={doCloudSync}>立即同步</Button>
             )}
-          </Space>
+          </div>
+        </div>
+        {authPending && (
+          <div className="settings-row settings-auth">
+            <div className="settings-row-main">
+              <b>验证码</b>
+              <Typography.Text className="settings-auth-code mono" copyable={{ text: authPending.user_code }}>{authPending.user_code}</Typography.Text>
+            </div>
+            <div className="settings-actions">
+              <Button icon={<LinkOutlined />} href={authLink} target="_blank" rel="noreferrer">打开授权页面</Button>
+            </div>
+          </div>
+        )}
+      </div>
 
-          {authPending && (
-            <Alert
-              type="warning"
-              showIcon
-              style={{ marginTop: 16 }}
-              message="请完成 OneDrive 授权"
-              description={(
-                <Space direction="vertical" size={4}>
-                  <span>{authPending.message || '打开授权页面并输入下面的代码。'}</span>
-                  <Typography.Text copyable={{ text: authPending.user_code }} strong>
-                    验证码：{authPending.user_code}
-                  </Typography.Text>
-                  <Button
-                    type="link"
-                    icon={<LinkOutlined />}
-                    href={authPending.verification_uri_complete || authPending.verification_uri}
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{ padding: 0, width: 'fit-content' }}
+      {cloudError && <Alert className="settings-alert" type="error" showIcon message={cloudError} />}
+
+      {cloud?.connected && (
+        <section className="settings-cloud">
+          <header className="ui-section-head">
+            <h2>云端备份{cloud.files?.length ? <span className="settings-count">{cloud.files.length}</span> : null}</h2>
+            <div className="ui-section-actions">
+              <Tooltip title="刷新">
+                <Button type="text" icon={<ReloadOutlined />} aria-label="刷新云端备份" onClick={loadCloud} loading={cloudLoading} />
+              </Tooltip>
+            </div>
+          </header>
+          <div className="ui-card settings-files">
+            {(cloud.files ?? []).length === 0 ? (
+              <div className="ui-empty">暂无云端备份</div>
+            ) : (cloud.files ?? []).map((file) => (
+              <div className="settings-file" key={file.id}>
+                <div className="settings-file-main">
+                  <span className="settings-file-name mono">{file.name}</span>
+                  <span className="settings-row-meta">{formatBackupSize(file.size)} · {new Date(file.lastModifiedDateTime).toLocaleString()}</span>
+                </div>
+                <div className="ui-row-actions">
+                  <Button type="text" size="small" loading={cloudRestoring} disabled={restoring} onClick={() => doCloudRestore(file.id, file.name)}>恢复</Button>
+                  <Tooltip title="下载">
+                    <Button type="text" size="small" icon={<DownloadOutlined />} aria-label={`下载 ${file.name}`} onClick={() => doCloudDownload(file.id, file.name)} />
+                  </Tooltip>
+                  <Popconfirm
+                    title="删除这份云端备份？"
+                    okText="删除"
+                    cancelText="取消"
+                    okButtonProps={{ danger: true }}
+                    onConfirm={() => doCloudDelete(file.id)}
                   >
-                    打开 Microsoft 授权页面
-                  </Button>
-                </Space>
-              )}
-            />
-          )}
+                    <Button type="text" size="small" icon={<DeleteOutlined />} aria-label={`删除 ${file.name}`} />
+                  </Popconfirm>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </>
+  )
 
-          {cloud?.connected && (
-            <>
-              {(cloud.last_error || cloud.cloud_error) && (
-                <Alert
-                  type="error"
-                  showIcon
-                  message={cloud.last_error || cloud.cloud_error}
-                  style={{ marginTop: 16 }}
-                />
-              )}
-              {cloud.last_sync_at && (
-                <Typography.Text type="secondary" style={{ display: 'block', marginTop: 14 }}>
-                  最近同步：{new Date(cloud.last_sync_at).toLocaleString()}
-                  {cloud.last_backup_name ? ` · ${cloud.last_backup_name}` : ''}
-                </Typography.Text>
-              )}
-              <List
-                size="small"
-                bordered
-                style={{ marginTop: 14, maxHeight: 280, overflowY: 'auto' }}
-                locale={{ emptyText: '暂无云端备份，点击“立即同步”创建第一份备份' }}
-                dataSource={cloud.files ?? []}
-                renderItem={(file) => (
-                  <List.Item
-                    actions={[
-                      <Button key="restore" type="link" icon={<UploadOutlined />} loading={cloudRestoring} disabled={restoring} onClick={() => doCloudRestore(file.id, file.name)}>
-                        恢复
-                      </Button>,
-                      <Button key="download" type="link" icon={<DownloadOutlined />} onClick={() => doCloudDownload(file.id, file.name)}>
-                        下载
-                      </Button>,
-                      <Popconfirm
-                        key="delete"
-                        title="删除这份云端备份？"
-                        description="删除后无法从 OneDrive 恢复。"
-                        okText="删除"
-                        cancelText="取消"
-                        okButtonProps={{ danger: true }}
-                        onConfirm={() => doCloudDelete(file.id)}
-                      >
-                        <Button danger type="link" icon={<DeleteOutlined />}>删除</Button>
-                      </Popconfirm>,
-                    ]}
-                  >
-                    <List.Item.Meta
-                      title={file.name}
-                      description={`${formatBackupSize(file.size)} · ${new Date(file.lastModifiedDateTime).toLocaleString()}`}
-                    />
-                  </List.Item>
-                )}
-              />
-            </>
-          )}
-        </Card>
-      </Col>
+  const restoreView = (
+    <div className="ui-card settings-card settings-restore">
+      <Upload.Dragger
+        className="settings-dragger"
+        accept=".gz,.tar.gz"
+        maxCount={1}
+        multiple={false}
+        beforeUpload={() => false /* 不自动上传，交给按钮统一提交 */}
+        fileList={restoreFile ? [restoreFile] : []}
+        onChange={({ fileList }) => setRestoreFile(fileList[fileList.length - 1] ?? null)}
+        onRemove={() => setRestoreFile(null)}
+        disabled={restoring || cloudRestoring}
+      >
+        <p className="ant-upload-drag-icon"><InboxOutlined /></p>
+        <p className="ant-upload-text">点击或拖拽备份文件</p>
+        <p className="ant-upload-hint mono">.tar.gz</p>
+      </Upload.Dragger>
+      <div className="settings-card-foot">
+        <span className="settings-note">将覆盖全部数据并重启面板</span>
+        <div className="settings-actions">
+          <Button danger type="primary" loading={restoring} disabled={!restoreFile || cloudRestoring} onClick={doRestore}>
+            恢复并重启
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
 
-      <Col xs={24} lg={12}>
-        <Card title="恢复备份" style={{ height: '100%' }}>
-          <p style={{ color: 'var(--console-muted)', minHeight: 66 }}>
-            上传此前下载的备份文件（.tar.gz），覆盖当前数据并重启面板。常用于迁移到新服务器或回滚。
-            恢复前会自动把现有数据库另存为 <code>.pre-restore</code> 以便回滚。
-          </p>
-          <Space direction="vertical" style={{ display: 'flex' }} size={12}>
-            <Upload.Dragger
-              accept=".gz,.tar.gz"
-              maxCount={1}
-              multiple={false}
-              beforeUpload={() => false /* 不自动上传，交给按钮统一提交 */}
-              fileList={restoreFile ? [restoreFile] : []}
-              onChange={({ fileList }) => setRestoreFile(fileList[fileList.length - 1] ?? null)}
-              onRemove={() => setRestoreFile(null)}
-              disabled={restoring || cloudRestoring}
-            >
-              <p className="ant-upload-drag-icon" style={{ marginBottom: 4 }}>
-                <InboxOutlined />
-              </p>
-              <p className="ant-upload-text">点击或拖拽备份文件到此处</p>
-              <p className="ant-upload-hint" style={{ color: 'var(--console-muted)' }}>
-                仅支持本面板导出的 singbox-panel-backup-*.tar.gz
-              </p>
-            </Upload.Dragger>
-            <Button
-              danger
-              type="primary"
-              icon={<UploadOutlined />}
-              loading={restoring}
-              disabled={!restoreFile || cloudRestoring}
-              onClick={doRestore}
-            >
-              恢复并重启
-            </Button>
-          </Space>
-        </Card>
-      </Col>
-
-    </Row>
+  return (
+    <div className="settings-page">
+      <PageHeader
+        title="设置"
+        actions={<Button icon={<ReloadOutlined />} loading={loading} onClick={refreshAll} disabled={updating}>刷新</Button>}
+      />
+      <Pills label="设置分类" items={VIEWS} active={view} onChange={(key) => setView(key as SettingsView)} />
+      <div className="settings-view">
+        {view === 'version' ? versionView : view === 'backup' ? (
+          <RequestState loading={cloudLoading && !cloud} hasData={!!cloud}>{backupView}</RequestState>
+        ) : restoreView}
+      </div>
+    </div>
   )
 }

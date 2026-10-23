@@ -4,57 +4,47 @@
   min-height: 100dvh;
   align-items: center;
   justify-content: center;
-  padding: 32px clamp(20px, 2vw, 32px);
-  background: #fff;
-  color: #302f2d;
-  -webkit-font-smoothing: antialiased;
-}
-
-.login-stack {
-  width: 100%;
-  max-width: 408px;
+  padding: 32px 20px;
+  background: var(--console-surface);
+  color: var(--console-ink);
 }
 
 .login-card {
-  padding: 34px 30px 30px;
-  border: 1px solid #e7e5e2;
-  border-radius: 12px;
-  background: #fff;
-  box-shadow: 0 8px 20px rgb(35 32 27 / 7%), 0 2px 4px rgb(35 32 27 / 2%);
+  width: 100%;
+  max-width: 380px;
+  padding: 32px 28px 28px;
+  border: 1px solid var(--console-border);
+  border-radius: var(--app-radius, 12px);
+  background: var(--console-container);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%), 0 12px 32px -16px rgb(0 0 0 / 12%);
 }
 
-.login-card-header {
-  margin-bottom: 26px;
+.login-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 28px;
   text-align: center;
 }
 
-.login-card-header h1 {
-  margin: 0;
-  color: #302f2d;
-  font-size: 25px;
-  font-weight: 650;
-  line-height: 1.4;
-  letter-spacing: -0.7px;
-}
-
-.login-card-logo {
+.login-logo {
   display: block;
-  width: 80px;
-  height: 80px;
-  margin: 0 auto 14px;
-  object-fit: contain;
+  width: 52px;
+  height: 52px;
 }
 
-.login-card-header h1 span {
-  color: var(--console-brand, #3a5bff);
+.login-head h1 {
+  margin: 0;
+  color: var(--console-ink);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.3px;
 }
 
 .login-card .ant-form-item {
-  margin-bottom: 22px;
-}
-
-.login-card .ant-form-item-label > label {
-  font-weight: 500;
+  margin-bottom: 18px;
 }
 
 .login-card .ant-input-lg,
@@ -72,49 +62,34 @@
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: #817d77;
-  font-size: 16px;
+  color: var(--console-faint);
+  font-size: 15px;
   cursor: pointer;
 }
 
 .login-card button.ant-input-password-icon:hover {
-  color: #302f2d;
+  color: var(--console-ink);
 }
 
 .login-card button.ant-input-password-icon:focus-visible {
-  outline: 2px solid #817d77;
+  outline: 2px solid var(--console-focus);
   outline-offset: 1px;
 }
 
 .login-card .login-submit {
-  margin-top: 6px;
+  margin-top: 8px;
   font-size: 14px;
-  font-weight: 600;
-  box-shadow: none;
+  font-weight: 500;
 }
 
-@media (min-width: 1800px) {
-  .login-stack {
-    max-width: 428px;
-  }
-
-  .login-card {
-    padding: 38px 32px 34px;
-  }
-}
-
-@media (max-width: 900px) {
+@media (max-width: 767px) {
   .login-page {
-    padding: 24px 20px;
+    align-items: flex-start;
+    padding: 72px 16px 24px;
   }
 
   .login-card {
-    padding: 24px;
-  }
-
-  .login-card-header,
-  .login-card .ant-form-item {
-    margin-bottom: 18px;
+    padding: 28px 20px 22px;
   }
 
   .login-card .ant-input-lg,

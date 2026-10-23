@@ -5,7 +5,7 @@ Run from web/: python3 scripts/gen-pwa-icons.py
 
 - icon-{192,512}.png          purpose "any"      — logo on a transparent canvas
 - icon-maskable-{192,512}.png purpose "maskable" — logo inside the 80% safe zone
-                               on a full-bleed brand-blue canvas, so Android's
+                               on a full-bleed white canvas, so Android's
                                adaptive-icon mask never clips the artwork.
 """
 from pathlib import Path
@@ -16,9 +16,9 @@ WEB = Path(__file__).resolve().parent.parent
 SOURCE = WEB / "src/assets/singbox-panel-logo.png"
 PUBLIC = WEB / "public"
 
-# Sampled from the logo itself, so the maskable canvas is seamless with the
-# artwork's own blue instead of a visibly different second brand colour.
-BRAND = (52, 91, 250, 255)
+# The mark is a dark cube; a white canvas matches the panel's light chrome.
+# Source artwork: src/assets/logo.svg (rendered to the 1024px PNG above).
+BRAND = (255, 255, 255, 255)
 SIZES = (192, 512)
 
 

@@ -1,27 +1,31 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Card, DatePicker, Descriptions, Form, Grid, Input, Modal, Segmented, Space, Switch, Table, Tag, Tooltip, Typography, message } from 'antd'
-import { ApartmentOutlined, DeleteOutlined, EditOutlined, HistoryOutlined, PlusOutlined } from '@ant-design/icons'
+import { Button, Form, Input, Modal, Segmented, Table, message } from 'antd'
+import type { ColumnsType } from 'antd/es/table'
+import { ApartmentOutlined, DeleteOutlined, EditOutlined, HistoryOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import { createUser, deleteUser, errMsg, getUserSubFetches, getUserTraffic, listCustomNodes, listServers, listUsers, updateUser } from '../../../api'
 import type { CustomNode, SubscriptionFetch } from '../../../api'
 import type { Server, User, UserTrafficInbound, UserTrafficRange, UserTrafficSeries } from '../../../types'
-import { daysUntil, formatBytes, relativeTime } from '../../../util'
+import { formatBytes, relativeTime } from '../../../util'
 import { ProtocolTag } from '../servers/ServerTraffic'
 import { AssignModal } from '../access/Access'
 import { RequestState } from '../../../components/RequestState'
+import { PageHeader, Status } from '../../../ui/Page'
+import '../../../styles/users.css'
+import { MODAL_LG, MODAL_SM } from '../../../ui/modal'
+
 
 function SubscriptionSummary({ user }: { user: User }) {
   return (
-    <Descriptions size="small" bordered column={{ xs: 1, sm: 2 }}>
-      <Descriptions.Item label="最近拉取">
-        {user.last_sub_at ? (
-          <Tooltip title={new Date(user.last_sub_at).toLocaleString('zh-CN')}><span>{relativeTime(user.last_sub_at)}</span></Tooltip>
-        ) : '从未'}
-      </Descriptions.Item>
-      <Descriptions.Item label="客户端">{user.last_sub_client || '—'}</Descriptions.Item>
-      <Descriptions.Item label="24 小时拉取">{user.sub_fetches_24h ?? 0} 次</Descriptions.Item>
-      <Descriptions.Item label="累计拉取">{user.sub_fetch_count ?? 0} 次</Descriptions.Item>
-    </Descriptions>
+    <div className="um-mini-stats">
+      <div>
+        <span>最近拉取</span>
+        <b title={user.last_sub_at ? new Date(user.last_sub_at).toLocaleString('zh-CN') : undefined}>{user.last_sub_at ? relativeTime(user.last_sub_at) : '从未'}</b>
+      </div>
+      <div><span>客户端</span><b>{user.last_sub_client || '—'}</b></div>
+      <div><span>24 小时</span><b className="mono">{user.sub_fetches_24h ?? 0} 次</b></div>
+      <div><span>累计</span><b className="mono">{user.sub_fetch_count ?? 0} 次</b></div>
+    </div>
   )
 }
 
@@ -35,8 +39,6 @@ const USER_TRAFFIC_RANGES: { label: string; value: UserTrafficRange }[] = [
 // multi-user mode can tell users apart; single-user inbounds count toward
 // their port totals on the traffic page instead.
 function UserTraffic({ user }: { user: User }) {
-  const screens = Grid.useBreakpoint()
-  const compact = !screens.sm
   const [range, setRange] = useState<UserTrafficRange>('24h')
   const [data, setData] = useState<UserTrafficSeries | null>(null)
   const [loading, setLoading] = useState(false)
@@ -59,50 +61,40 @@ function UserTraffic({ user }: { user: User }) {
       })
     return () => controller.abort()
   }, [user.id, range, reloadKey])
-  const rangeSelector = (
-    <Segmented<UserTrafficRange> block={compact} size="small" options={USER_TRAFFIC_RANGES} value={range} onChange={setRange} />
-  )
   return (
-    <Card
-      size="small"
-      title="用户用量"
-      extra={compact ? undefined : rangeSelector}
-    >
-      {compact && <div style={{ marginBottom: 12 }}>{rangeSelector}</div>}
+    <section className="um-group">
+      <header className="um-group-head">
+        <h4>用量</h4>
+        <Segmented<UserTrafficRange> options={USER_TRAFFIC_RANGES} value={range} onChange={setRange} />
+      </header>
       <RequestState loading={loading && !data} error={error} hasData={!!data} onRetry={() => setReloadKey((k) => k + 1)}>
         {data ? (
-          <Space direction="vertical" size="small" style={{ width: '100%' }}>
-            <Space size="large" wrap>
-              <span>上传 ↑ <b style={{ color: 'var(--console-upload)' }}>{formatBytes(data.upload)}</b></span>
-              <span>下载 ↓ <b style={{ color: 'var(--console-download)' }}>{formatBytes(data.download)}</b></span>
-              <span>合计 <b>{formatBytes(data.upload + data.download)}</b></span>
-            </Space>
+          <>
+            <div className="um-mini-stats is-3">
+              <div><span>下载 ↓</span><b className="mono">{formatBytes(data.download)}</b></div>
+              <div><span>上传 ↑</span><b className="mono">{formatBytes(data.upload)}</b></div>
+              <div><span>合计</span><b className="mono">{formatBytes(data.upload + data.download)}</b></div>
+            </div>
             <Table<UserTrafficInbound>
               size="small"
               rowKey={(r) => `${r.server_id}-${r.inbound_id}`}
               pagination={false}
               dataSource={data.inbounds}
-              scroll={{ x: 620 }}
+              scroll={{ x: 640 }}
               locale={{ emptyText: '暂无记录' }}
               columns={[
-                { title: '主机', dataIndex: 'server_name', render: (v: string, r) => v || (r.deleted ? <Typography.Text type="secondary">已删除</Typography.Text> : '—') },
-                {
-                  title: '协议', dataIndex: 'type', width: 100,
-                  render: (v: string) => v ? <ProtocolTag type={v} /> : '—',
-                },
-                { title: '端口', dataIndex: 'port', width: 70, render: (v: number, r) => v ? <Tooltip title={r.tag}>{v}</Tooltip> : '—' },
-                { title: '上传 ↑', dataIndex: 'upload', width: 100, sorter: (a, b) => a.upload - b.upload, render: (v: number) => <span style={{ color: 'var(--console-upload)' }}>{formatBytes(v)}</span> },
-                { title: '下载 ↓', dataIndex: 'download', width: 100, sorter: (a, b) => a.download - b.download, render: (v: number) => <span style={{ color: 'var(--console-download)' }}>{formatBytes(v)}</span> },
-                { title: '合计', key: 'total', width: 100, sorter: (a, b) => a.upload + a.download - b.upload - b.download, render: (_: unknown, r) => <b>{formatBytes(r.upload + r.download)}</b> },
+                { title: '主机', dataIndex: 'server_name', width: 150, ellipsis: true, render: (v: string, r) => v || (r.deleted ? <span className="faint">已删除</span> : '—') },
+                { title: '协议', dataIndex: 'type', width: 110, render: (v: string) => v ? <ProtocolTag type={v} /> : '—' },
+                { title: '端口', dataIndex: 'port', width: 80, render: (v: number, r) => v ? <span className="mono" title={r.tag}>{v}</span> : '—' },
+                { title: '下载', dataIndex: 'download', width: 100, align: 'right', sorter: (a, b) => a.download - b.download, render: (v: number) => <span className="mono">{formatBytes(v)}</span> },
+                { title: '上传', dataIndex: 'upload', width: 100, align: 'right', sorter: (a, b) => a.upload - b.upload, render: (v: number) => <span className="mono muted">{formatBytes(v)}</span> },
+                { title: '合计', key: 'total', width: 100, align: 'right', sorter: (a, b) => a.upload + a.download - b.upload - b.download, render: (_: unknown, r) => <span className="mono um-strong">{formatBytes(r.upload + r.download)}</span> },
               ]}
             />
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              共用凭据节点的用量计入「流量」页总量，无法按用户区分。
-            </Typography.Text>
-          </Space>
+          </>
         ) : null}
       </RequestState>
-    </Card>
+    </section>
   )
 }
 
@@ -136,32 +128,32 @@ function SubscriptionHistory({ user, open, onClose }: { user: User | null; open:
     return () => controller.abort()
   }, [open, user?.id, reloadKey])
   return (
-    <Modal title={user ? `${user.email} · 使用情况` : ''} open={open} onCancel={onClose} footer={null} width={760} destroyOnClose>
-      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-        {open && user && <UserTraffic key={user.id} user={user} />}
-        <Card size="small" title="订阅拉取记录" extra={<Typography.Text type="secondary">保留 {retention} 天</Typography.Text>}>
-          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-            {user && <SubscriptionSummary user={user} />}
-            <RequestState loading={loading} error={error} hasData={loaded} onRetry={() => setReloadKey((k) => k + 1)}>
-              <Table<SubscriptionFetch>
-                size="small"
-                rowKey="id"
-                pagination={false}
-                dataSource={fetches}
-                scroll={{ x: 590, y: 260 }}
-                locale={{ emptyText: '暂无记录' }}
-                columns={[
-                  { title: '时间', dataIndex: 'created_at', width: 170, render: (v: string) => new Date(v).toLocaleString('zh-CN') },
-                  { title: 'IP', dataIndex: 'ip', width: 150 },
-                  { title: '客户端', dataIndex: 'client', width: 110, render: (v: string, r) => <Tooltip title={r.user_agent}><span>{v}</span></Tooltip> },
-                  { title: '格式', dataIndex: 'format', width: 90 },
-                  { title: '结果', dataIndex: 'status', width: 70, render: (v: number) => (v === 200 ? <Tag color="green">成功</Tag> : <Tag color="red">{v}</Tag>) },
-                ]}
-              />
-            </RequestState>
-          </Space>
-        </Card>
-      </Space>
+    <Modal title={user ? `${user.email} · 使用记录` : ''} open={open} onCancel={onClose} footer={null} width={MODAL_LG} className="um-modal" destroyOnClose>
+      {open && user && <UserTraffic key={user.id} user={user} />}
+      <section className="um-group">
+        <header className="um-group-head">
+          <h4>订阅拉取</h4>
+          <span className="faint">保留 {retention} 天</span>
+        </header>
+        {user && <SubscriptionSummary user={user} />}
+        <RequestState loading={loading} error={error} hasData={loaded} onRetry={() => setReloadKey((k) => k + 1)}>
+          <Table<SubscriptionFetch>
+            size="small"
+            rowKey="id"
+            pagination={false}
+            dataSource={fetches}
+            scroll={{ x: 590, y: 260 }}
+            locale={{ emptyText: '暂无记录' }}
+            columns={[
+              { title: '时间', dataIndex: 'created_at', width: 170, render: (v: string) => <span className="mono">{dayjs(v).format('YYYY-MM-DD HH:mm:ss')}</span> },
+              { title: 'IP', dataIndex: 'ip', width: 150, render: (v: string) => <span className="mono">{v}</span> },
+              { title: '客户端', dataIndex: 'client', width: 110, render: (v: string, r) => <span title={r.user_agent}>{v}</span> },
+              { title: '格式', dataIndex: 'format', width: 90, render: (v: string) => <span className="muted">{v}</span> },
+              { title: '结果', dataIndex: 'status', width: 80, render: (v: number) => (v === 200 ? <Status tone="ok">成功</Status> : <Status tone="error">{v}</Status>) },
+            ]}
+          />
+        </RequestState>
+      </section>
     </Modal>
   )
 }
@@ -181,6 +173,7 @@ export default function Users() {
   const [assignOpen, setAssignOpen] = useState(false)
   const [assignOrigin, setAssignOrigin] = useState<{ x: number; y: number }>()
   const [historyUser, setHistoryUser] = useState<User | null>(null)
+  const [search, setSearch] = useState('')
   const openAssign = (user: User, button: HTMLElement) => {
     const rect = button.getBoundingClientRect()
     setAssignOrigin({ x: rect.left + rect.width / 2 + window.scrollX, y: rect.top + rect.height / 2 + window.scrollY })
@@ -191,7 +184,7 @@ export default function Users() {
   const nodeLoadRef = useRef<{ generation: number; controller: AbortController | null }>({ generation: 0, controller: null })
   const [form] = Form.useForm()
   const submitLock = useRef(false)
-  const serverNames = (u: User) => u.server_ids.map((id) => servers.find((s) => s.id === id)?.name ?? `#${id}`)
+  const serverNames = (u: User) => (u.server_ids ?? []).map((id) => servers.find((s) => s.id === id)?.name ?? `#${id}`)
 
   const load = () => {
     userLoadRef.current.controller?.abort()
@@ -265,8 +258,6 @@ export default function Users() {
   const openCreate = () => {
     setEditing(null)
     form.resetFields()
-    // default: enabled account, no expiry
-    form.setFieldsValue({ enabled: true })
     setOpen(true)
   }
 
@@ -277,8 +268,6 @@ export default function Users() {
     form.resetFields()
     form.setFieldsValue({
       email: u.email,
-      expire: u.expire_at ? dayjs(u.expire_at) : null,
-      enabled: u.enabled,
     })
     setOpen(true)
   }
@@ -292,8 +281,9 @@ export default function Users() {
       const body = {
         email: v.email,
         password: v.password || undefined,
-        expire_at: v.expire ? Math.floor((v.expire as dayjs.Dayjs).valueOf() / 1000) : 0,
-        enabled: v.enabled,
+        // Accounts never expire and are never paused: access ends by deleting the user.
+        expire_at: 0,
+        enabled: true,
       }
       if (editing) await updateUser(editing.id, body)
       else await createUser(body)
@@ -308,11 +298,13 @@ export default function Users() {
     }
   }
 
-  const addUserButton = <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openCreate}>新增用户</Button>
+  const addUserButton = <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新增用户</Button>
 
   const removeUser = (user: User) => {
     Modal.confirm({
-      title: `删除用户 ${user.email}?`,
+      title: `删除用户 ${user.email}？`,
+      content: '删除后无法恢复。',
+      okText: '删除',
       okType: 'danger',
       onOk: async () => {
         await deleteUser(user.id)
@@ -343,90 +335,116 @@ export default function Users() {
       : { at: u.last_login_at!, what: '登录面板', ip: u.last_login_ip }
   }
 
-  const userCard = (u: User) => {
-    const names = serverNames(u)
-    const groups = externalGroups(u)
-    const active = lastActive(u)
-    const expireDays = daysUntil(u.expire_at)
-    return (
-      <div className="user-card" key={u.id}>
-        <div className="user-card-head">
-          <div className="user-card-title">
-            <span className="user-card-name">{u.email}</span>
-            {u.role === 'admin' ? <Tag color="red">管理员</Tag> : null}
-            {!u.enabled ? <Tag>已停用</Tag> : null}
-            {expireDays !== null && expireDays < 0 ? <Tag color="red">已到期</Tag> : null}
-          </div>
-          <Space size={2} className="user-card-actions">
-            <Button size="small" type="text" icon={<EditOutlined />} title="编辑" aria-label="编辑" onClick={() => openEdit(u)} />
-            <Button size="small" type="text" icon={<ApartmentOutlined />} title="分配节点" aria-label="分配节点" onClick={(e) => openAssign(u, e.currentTarget)} />
-            <Button size="small" type="text" icon={<HistoryOutlined />} title="使用记录" aria-label="使用记录" onClick={() => setHistoryUser(u)} />
-            {u.role !== 'admin' ? (
-              <Button size="small" type="text" danger icon={<DeleteOutlined />} title="删除" aria-label="删除" onClick={() => removeUser(u)} />
-            ) : null}
-          </Space>
-        </div>
+  const query = search.trim().toLocaleLowerCase()
+  const visibleUsers = users.filter((u) => !query || u.email.toLocaleLowerCase().includes(query))
 
-        <div className="user-card-row">
-          <span className="user-card-label">主机</span>
-          <div className="user-card-tags">
-            {names.length ? names.map((name) => <Tag key={name}>{name}</Tag>) : <span className="user-card-muted">未分配</span>}
-          </div>
-        </div>
-
-        <div className="user-card-row">
-          <span className="user-card-label">节点</span>
-          <div className="user-card-tags">
-            {groups.length
-              ? groups.map(([group, count]) => <Tag key={group} color="blue">{group} · {count}</Tag>)
-              : <span className="user-card-muted">无</span>}
-          </div>
-        </div>
-
-        <div className="user-card-row">
-          <span className="user-card-label">流量</span>
-          <div className="user-card-tags">
-            {(u.traffic_upload_30d ?? 0) + (u.traffic_download_30d ?? 0) > 0 ? (
-              <Tooltip title="近 30 天，仅统计多用户入站">
-                <span>
-                  <span style={{ color: 'var(--console-download)' }}>↓{formatBytes(u.traffic_download_30d ?? 0)}</span>
-                  {' '}
-                  <span style={{ color: 'var(--console-upload)' }}>↑{formatBytes(u.traffic_upload_30d ?? 0)}</span>
-                </span>
-              </Tooltip>
-            ) : <span className="user-card-muted">近 30 天无记录</span>}
-          </div>
-        </div>
-
-        <div className="user-card-foot">
-          <span>
-            {active
-              ? <Tooltip title={`${new Date(active.at).toLocaleString('zh-CN')}${active.ip ? ` · ${active.ip}` : ''}`}><span>{relativeTime(active.at)}{active.what ? ` ${active.what}` : ''}</span></Tooltip>
-              : <span className="user-card-muted">尚未使用</span>}
+  const columns: ColumnsType<User> = [
+    {
+      title: '用户',
+      key: 'email',
+      render: (_, u) => (
+        <span className="um-user">
+          <span className="um-user-name">{u.email}</span>
+          {u.role === 'admin' ? <span className="ui-tag">管理员</span> : null}
+        </span>
+      ),
+    },
+    {
+      title: '节点',
+      key: 'nodes',
+      responsive: ['sm'],
+      render: (_, u) => {
+        // Panel nodes by server, external nodes by group; no per-node detail.
+        const chips = [
+          ...serverNames(u).map((name) => ({ key: `s-${name}`, label: name, external: false })),
+          ...externalGroups(u).map(([group]) => ({ key: `g-${group}`, label: group, external: true })),
+        ]
+        if (!chips.length) return <span className="faint">未分配</span>
+        const shown = chips.slice(0, 3)
+        return (
+          <span className="um-chips" title={chips.map((c) => c.label).join('、')}>
+            {shown.map((c) => <span key={c.key} className={`ui-tag${c.external ? ' um-chip-ext' : ''}`}>{c.label}</span>)}
+            {chips.length > shown.length && <span className="faint">+{chips.length - shown.length}</span>}
           </span>
-          <span className="user-card-muted">
-            {u.sub_fetch_count ? `拉取 ${u.sub_fetch_count} 次` : ''}
-            {u.sub_fetch_count && u.expire_at ? ' · ' : ''}
-            {u.expire_at ? `到期 ${new Date(u.expire_at).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })}` : ''}
+        )
+      },
+    },
+    {
+      title: '近 30 天',
+      key: 'traffic',
+      width: 120,
+      responsive: ['md'],
+      render: (_, u) => (u.traffic_upload_30d ?? 0) + (u.traffic_download_30d ?? 0) > 0 ? (
+        <span className="mono um-stack">
+          <span>↓ {formatBytes(u.traffic_download_30d ?? 0)}</span>
+          <small>↑ {formatBytes(u.traffic_upload_30d ?? 0)}</small>
+        </span>
+      ) : <span className="faint">—</span>,
+    },
+    {
+      title: '最近活动',
+      key: 'active',
+      width: 150,
+      responsive: ['lg'],
+      render: (_, u) => {
+        const active = lastActive(u)
+        if (!active) return <span className="faint">—</span>
+        return (
+          <span className="um-stack" title={`${new Date(active.at).toLocaleString('zh-CN')}${active.ip ? ` · ${active.ip}` : ''}`}>
+            <span>{relativeTime(active.at)}</span>
+            <small>{active.what}</small>
           </span>
-        </div>
-      </div>
-    )
-  }
-
+        )
+      },
+    },
+    {
+      title: <span className="sr-only">操作</span>,
+      key: 'actions',
+      width: 136,
+      align: 'right',
+      fixed: 'right',
+      render: (_, u) => (
+        <span className="ui-row-actions">
+          <Button size="small" type="text" icon={<EditOutlined />} title="编辑" aria-label={`编辑 ${u.email}`} onClick={() => openEdit(u)} />
+          <Button size="small" type="text" icon={<ApartmentOutlined />} title="分配节点" aria-label={`分配节点 ${u.email}`} onClick={(e) => openAssign(u, e.currentTarget)} />
+          <Button size="small" type="text" icon={<HistoryOutlined />} title="使用记录" aria-label={`使用记录 ${u.email}`} onClick={() => setHistoryUser(u)} />
+          {u.role !== 'admin' ? (
+            <Button size="small" type="text" icon={<DeleteOutlined />} title="删除" aria-label={`删除 ${u.email}`} onClick={() => removeUser(u)} />
+          ) : <Button size="small" type="text" icon={<DeleteOutlined />} className="um-action-gap" tabIndex={-1} aria-hidden />}
+        </span>
+      ),
+    },
+  ]
 
   return (
-    <>
-      <Card
+    <div className="um-page">
+      <PageHeader
         title="用户"
-        extra={addUserButton}
-      >
-        <RequestState loading={loading} error={loadError} hasData={users.length > 0} empty={!loading && !loadError && users.length === 0} emptyDescription="暂无用户" onRetry={load}>
-          <div className="user-card-grid">
-            {users.map(userCard)}
-          </div>
-        </RequestState>
-      </Card>
+        meta={users.length ? <span>{users.length} 个用户</span> : undefined}
+        actions={<>
+          <Input
+            allowClear
+            className="um-search"
+            prefix={<SearchOutlined />}
+            placeholder="搜索用户"
+            aria-label="搜索用户"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+          {addUserButton}
+        </>}
+      />
+      <RequestState loading={loading} error={loadError} hasData={users.length > 0} empty={!loading && !loadError && users.length === 0} emptyDescription="暂无用户" onRetry={load}>
+        <Table<User>
+          rowKey="id"
+          className="um-table"
+          dataSource={visibleUsers}
+          columns={columns}
+          pagination={false}
+          scroll={{ x: 'max-content' }}
+          locale={{ emptyText: '没有匹配的用户' }}
+        />
+      </RequestState>
 
       <SubscriptionHistory user={historyUser} open={!!historyUser} onClose={() => setHistoryUser(null)} />
 
@@ -445,6 +463,7 @@ export default function Users() {
 
       <Modal
         title={editing ? '编辑用户' : '新增用户'}
+        width={MODAL_SM}
         open={open}
         onOk={submit}
         onCancel={() => setOpen(false)}
@@ -453,23 +472,17 @@ export default function Users() {
       >
         <Form form={form} layout="vertical">
           <Form.Item name="email" label="用户名" rules={[{ required: true }]}>
-            <Input placeholder="用于登录的用户名" maxLength={191} />
+            <Input placeholder="alice" maxLength={191} autoComplete="off" />
           </Form.Item>
           <Form.Item
             name="password"
-            label={editing ? '新密码（留空不修改）' : '密码'}
+            label={editing ? '新密码' : '密码'}
             rules={editing ? [{ max: 72 }] : [{ required: true, message: '请输入密码' }, { max: 72 }]}
           >
-            <Input.Password />
-          </Form.Item>
-          <Form.Item name="expire" label="到期时间（留空永不过期）">
-            <DatePicker showTime style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item name="enabled" label="启用" valuePropName="checked">
-            <Switch />
+            <Input.Password placeholder={editing ? '不修改' : undefined} autoComplete="new-password" />
           </Form.Item>
         </Form>
       </Modal>
-    </>
+    </div>
   )
 }

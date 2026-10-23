@@ -217,6 +217,7 @@ func (a *App) routes() *gin.Engine {
 		// a full data backup (SQLite DB + jwt_secret) for migration.
 		admin.GET("/maintenance/info", a.maintenanceInfo)
 		admin.POST("/maintenance/update", a.selfUpdate)
+		admin.GET("/maintenance/releases", a.maintenanceReleases)
 		admin.GET("/maintenance/backup", a.downloadBackup)
 		admin.POST("/maintenance/restore", a.restoreBackup)
 		admin.GET("/maintenance/onedrive", a.oneDriveStatus)

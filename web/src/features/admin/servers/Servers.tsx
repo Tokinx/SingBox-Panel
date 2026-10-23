@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent } from 'react'
-import { Alert, Button, Card, Form, Grid, Input, Modal, Radio, Select, Space, Tag, Typography, message } from 'antd'
-import { ArrowUpOutlined, CloudDownloadOutlined, DeleteOutlined, EditOutlined, PlusOutlined, ReloadOutlined } from '@ant-design/icons'
+import { Button, Dropdown, Form, Grid, Input, Modal, Segmented, Select, Typography, message } from 'antd'
+import { DownOutlined, EditOutlined, HolderOutlined, MoreOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { createServer, deleteServer, errMsg, getOverview, getServersMeta, installSingbox, isCanceledRequest, updateAllAgents, updateServer, updateServerOrder } from '../../../api'
 import type { Server } from '../../../types'
 import { formatBytes } from '../../../util'
 import { RequestState } from '../../../components/RequestState'
+import { PageHeader, Pills, Stats, Status } from '../../../ui/Page'
+import '../../../styles/servers.css'
+import { MODAL_MD, MODAL_SM } from '../../../ui/modal'
 
 const rate = (n: number) => `${formatBytes(n)}/s`
 
@@ -27,7 +30,9 @@ export default function Servers() {
   const [draggingID, setDraggingID] = useState<number | null>(null)
   const [dropTarget, setDropTarget] = useState<{ id: number; after: boolean } | null>(null)
   const [sortAnnouncement, setSortAnnouncement] = useState('')
-  const [usersExpiring, setUsersExpiring] = useState(0)
+  const [usersTotal, setUsersTotal] = useState<number | null>(null)
+  const [filter, setFilter] = useState('all')
+  const [query, setQuery] = useState('')
   const pointerDragRef = useRef<{ id: number; pointerId: number } | null>(null)
   const pointerDropRef = useRef<{ id: number; after: boolean } | null>(null)
   const loadRef = useRef<{ generation: number; controller: AbortController | null }>({ generation: 0, controller: null })
@@ -38,7 +43,7 @@ export default function Servers() {
   const handleUpdateAllAgents = () => {
     Modal.confirm({
       title: '批量同步 Agent',
-      content: '确定要将所有在线服务器同步到面板当前提供的 Agent 版本吗？',
+      content: '所有在线服务器将同步到当前 Agent 版本。',
       okText: '确认同步',
       onOk: async () => {
         setUpdatingAll(true)
@@ -48,7 +53,7 @@ export default function Servers() {
             const failed = res.results.filter((result) => !result.success)
             Modal.warning({
               title: res.message,
-              width: 620,
+              width: MODAL_MD,
               content: (
                 <div style={{ maxHeight: 320, overflowY: 'auto' }}>
                   {failed.map((result) => (
@@ -132,10 +137,10 @@ export default function Servers() {
       })
     getOverview(controller.signal)
       .then((o) => {
-        if (generation === loadRef.current.generation) setUsersExpiring(o.users_expiring)
+        if (generation === loadRef.current.generation) setUsersTotal(o.users_total)
       })
       .catch(() => {
-        // Only feeds the expiry banner; the table does not depend on it.
+        // Only feeds the summary strip; the list does not depend on it.
       })
   }
   useEffect(() => {
@@ -184,14 +189,13 @@ export default function Servers() {
       form.resetFields()
       load()
       Modal.success({
-        title: '主机已创建 · 在 VPS 上执行以下命令接入',
-        width: 680,
+        title: '在服务器上以 root 执行',
+        width: MODAL_MD,
         content: (
           <div>
             <Typography.Paragraph copyable={{ text: install_command }} code style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
               {install_command}
             </Typography.Paragraph>
-            <Typography.Text type="secondary">以 root 运行；Agent 会反连面板并可远程安装官方 sing-box。</Typography.Text>
           </div>
         ),
       })
@@ -205,18 +209,10 @@ export default function Servers() {
 
   const onDelete = (s: Server) => {
     Modal.confirm({
-      icon: null,
-      title: <div style={{ textAlign: 'center' }}>删除面板节点 {s.name}?</div>,
-      okText: '确认删除',
+      title: `删除 ${s.name}？`,
+      okText: '删除',
       okType: 'danger',
-      content: (
-        <Alert
-          type="warning"
-          showIcon
-          message="仅从面板中移除该节点"
-          description="不会向 VPS 下发任何操作，不会修改 sing-box 配置文件，也不会停止、重启或卸载 sing-box 服务；Agent 和自启服务同样保留。"
-        />
-      ),
+      content: '仅从面板移除，服务器上的程序和配置不受影响。',
       onOk: async () => {
         try {
           await deleteServer(s.id)
@@ -235,8 +231,8 @@ export default function Servers() {
     setDropTarget(null)
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', String(s.id))
-    const card = e.currentTarget.closest<HTMLElement>('.server-card')
-    if (card) e.dataTransfer.setDragImage(card, 24, 24)
+    const row = e.currentTarget.closest<HTMLElement>('.srv-row')
+    if (row) e.dataTransfer.setDragImage(row, 24, 24)
   }
 
   const dropServer = async (targetID: number, after: boolean, sourceIDOverride?: number) => {
@@ -276,29 +272,18 @@ export default function Servers() {
     void dropServer(target.id, direction > 0, server.id)
   }
 
-  // Find the insertion slot among the cards that remain after the dragged
-  // server is removed. Cards flow in reading order inside a grid, so a point
-  // inside a card picks its left/right half; a point between cards snaps to
-  // the nearest card on that row, else to the first card of the next row.
-  const pointerDropTargetAt = (sourceID: number, clientX: number, clientY: number) => {
-    const cards = Array.from(document.querySelectorAll<HTMLElement>('.servers-card .server-card[data-server-id]'))
-      .map((card) => ({ rect: card.getBoundingClientRect(), id: Number(card.dataset.serverId) }))
+  // Rows are stacked vertically: the upper/lower half of a row decides the
+  // insertion side; above or below the list snaps to the first/last row.
+  const pointerDropTargetAt = (sourceID: number, _clientX: number, clientY: number) => {
+    const rows = Array.from(document.querySelectorAll<HTMLElement>('.srv-list .srv-row[data-server-id]'))
+      .map((row) => ({ rect: row.getBoundingClientRect(), id: Number(row.dataset.serverId) }))
       .filter((entry) => Number.isFinite(entry.id) && entry.id !== sourceID)
-    if (cards.length === 0) return null
-    for (const { rect, id } of cards) {
-      if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
-        return { id, after: clientX >= rect.left + rect.width / 2 }
-      }
+    if (rows.length === 0) return null
+    for (const { rect, id } of rows) {
+      if (clientY >= rect.top && clientY <= rect.bottom) return { id, after: clientY >= rect.top + rect.height / 2 }
     }
-    const sameRow = cards.filter(({ rect }) => clientY >= rect.top && clientY <= rect.bottom)
-    if (sameRow.length) {
-      const leftOf = sameRow.filter(({ rect }) => rect.left > clientX)
-      if (leftOf.length) return { id: leftOf[0].id, after: false }
-      return { id: sameRow[sameRow.length - 1].id, after: true }
-    }
-    const below = cards.filter(({ rect }) => rect.top > clientY)
-    if (below.length) return { id: below[0].id, after: false }
-    return { id: cards[cards.length - 1].id, after: true }
+    if (clientY < rows[0].rect.top) return { id: rows[0].id, after: false }
+    return { id: rows[rows.length - 1].id, after: true }
   }
 
   const handlePointerDragStart = (event: ReactPointerEvent<HTMLSpanElement>, server: Server) => {
@@ -353,161 +338,136 @@ export default function Servers() {
     setDropTarget(null)
   }
 
+  const online = servers.filter((s) => s.online)
+  const totalDown = online.reduce((sum, s) => sum + (s.traffic_available ? s.traffic_download_rate ?? 0 : 0), 0)
+  const totalUp = online.reduce((sum, s) => sum + (s.traffic_available ? s.traffic_upload_rate ?? 0 : 0), 0)
+  const q = query.trim().toLowerCase()
+  const shown = servers.filter((s) => (filter === 'all' || (filter === 'online') === s.online)
+    && (!q || `${s.name} ${s.address} ${s.public_ip || ''} ${s.remark || ''}`.toLowerCase().includes(q)))
+  const open_ = (s: Server) => nav(`/admin/servers/${s.id}`)
+  // Reordering a filtered view would move servers relative to hidden rows.
+  const canSort = filter === 'all' && !q
+
   return (
-    <Card
-      className="servers-card"
-      title="主机"
-      extra={
-        <Space wrap>
-          <Button
-            icon={<CloudDownloadOutlined />}
-            onClick={handleUpdateSingbox}
-            loading={updatingSingbox}
-            title="更新 sing-box"
-            aria-label="更新 sing-box"
-          >
-            <span className="server-action-label">更新 sing-box</span>
-          </Button>
-          <Button
-            icon={<ReloadOutlined />}
-            onClick={handleUpdateAllAgents}
-            loading={updatingAll}
-            title="更新 Agent"
-            aria-label="更新 Agent"
-          >
-            <span className="server-action-label">更新 Agent</span>
-          </Button>
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate} title="新增主机" aria-label="新增主机">
-            <span className="server-action-label">新增主机</span>
-          </Button>
-        </Space>
-      }
-    >
-      {(() => {
-        const offline = servers.filter((s) => !s.online)
-        const notes: string[] = []
-        if (offline.length) notes.push(`${offline.length} 台离线：${offline.map((s) => s.name).join('、')}`)
-        if (usersExpiring > 0) notes.push(`${usersExpiring} 个用户将在 7 天内到期`)
-        return notes.length ? (
-          <Alert type="warning" showIcon style={{ marginBottom: 14 }} message={notes.map((n) => <div key={n}>{n}</div>)} />
-        ) : null
-      })()}
-      <RequestState loading={loading} error={loadError} hasData={servers.length > 0} empty={!loading && !loadError && servers.length === 0} emptyDescription="暂无主机" onRetry={() => load()}>
-      <div className="server-card-grid">
-        {servers.map((s) => {
+    <div className="srv-page">
+      <PageHeader
+        title="服务器"
+        actions={<>
+          <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: [
+            { key: 'singbox', label: '更新 sing-box', disabled: updatingSingbox, onClick: handleUpdateSingbox },
+            { key: 'agent', label: '同步 Agent', disabled: updatingAll, onClick: handleUpdateAllAgents },
+          ] }}>
+            <Button loading={updatingSingbox || updatingAll}>批量维护 <DownOutlined style={{ fontSize: 10 }} /></Button>
+          </Dropdown>
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新增服务器</Button>
+        </>}
+      />
+      <Stats items={[
+        { label: '在线', value: <>{online.length}<span className="srv-stat-total"> / {servers.length}</span></> },
+        { label: '下行速率', value: rate(totalDown) },
+        { label: '上行速率', value: rate(totalUp) },
+        { label: '用户', value: usersTotal ?? '—' },
+      ]} />
+      <Pills
+        label="筛选"
+        active={filter}
+        onChange={setFilter}
+        items={[
+          { key: 'all', label: '全部', count: servers.length },
+          { key: 'online', label: '在线', count: online.length },
+          { key: 'offline', label: '离线', count: servers.length - online.length },
+        ]}
+        actions={<Input allowClear className="srv-search" prefix={<SearchOutlined />} placeholder="搜索" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="搜索服务器" />}
+      />
+      <RequestState loading={loading} error={loadError} hasData={servers.length > 0} empty={!loading && !loadError && servers.length === 0} emptyDescription="暂无服务器" onRetry={() => load()}>
+      <div className="srv-list" role="list">
+        {shown.length === 0 && <div className="ui-empty">没有匹配的服务器</div>}
+        {shown.map((s) => {
           const memPct = s.mem_total ? Math.round((s.mem_used / s.mem_total) * 100) : null
-          const dropClass = dropTarget?.id === s.id ? (dropTarget.after ? ' server-card-drop-after' : ' server-card-drop-before') : ''
+          const position = servers.findIndex((item) => item.id === s.id)
+          const dropClass = dropTarget?.id === s.id ? (dropTarget.after ? ' is-drop-after' : ' is-drop-before') : ''
           return (
             <div
               key={s.id}
+              role="listitem"
               data-server-id={s.id}
-              className={`server-card${s.online ? '' : ' is-offline'}${draggingID === s.id ? ' server-card-dragging' : ''}${dropClass}`}
-              role="link"
-              tabIndex={0}
-              onClick={() => nav(`/admin/servers/${s.id}`)}
-              onKeyDown={(event) => {
-                if (event.target !== event.currentTarget) return
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault()
-                  nav(`/admin/servers/${s.id}`)
-                }
+              className={`srv-row${s.online ? '' : ' is-offline'}${draggingID === s.id ? ' is-dragging' : ''}${dropClass}`}
+              onClick={(e) => {
+                if ((e.target as Element).closest('button, a, input, [role="button"], .ant-dropdown') || window.getSelection()?.toString()) return
+                open_(s)
               }}
               onDragOver={(e) => {
                 if (draggingID === null || draggingID === s.id) return
                 e.preventDefault()
                 e.dataTransfer.dropEffect = 'move'
                 const rect = e.currentTarget.getBoundingClientRect()
-                setDropTarget({ id: s.id, after: e.clientX >= rect.left + rect.width / 2 })
+                setDropTarget({ id: s.id, after: e.clientY >= rect.top + rect.height / 2 })
               }}
               onDrop={(e) => {
                 if (draggingID === null) return
                 e.preventDefault()
                 e.stopPropagation()
                 const rect = e.currentTarget.getBoundingClientRect()
-                void dropServer(s.id, e.clientX >= rect.left + rect.width / 2)
+                void dropServer(s.id, e.clientY >= rect.top + rect.height / 2)
               }}
             >
-              <div className="server-card-head">
-                <span
-                  className="server-drag-handle"
-                  draggable={!isMobile && !sorting}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`拖动 ${s.name} 排序`}
-                  aria-describedby="server-sort-help"
-                  title="按住拖动排序"
-                  onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => {
-                    e.stopPropagation()
-                    if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-                      e.preventDefault()
-                      moveServerByKeyboard(s, e.key === 'ArrowUp' || e.key === 'ArrowLeft' ? -1 : 1)
-                    }
-                  }}
-                  onPointerDown={(e) => handlePointerDragStart(e, s)}
-                  onPointerMove={handlePointerDragMove}
-                  onPointerUp={finishPointerDrag}
-                  onPointerCancel={cancelPointerDrag}
-                  onDragStart={(e) => startDrag(e, s)}
-                  onDragEnd={() => {
-                    setDraggingID(null)
-                    setDropTarget(null)
-                    pointerDragRef.current = null
-                    pointerDropRef.current = null
-                  }}
-                >
-                  <span className="server-drag-bars" aria-hidden="true"><i /><i /><i /></span>
-                </span>
-                <span className="server-card-name">{s.name}</span>
-                {s.online ? <Tag color="green">在线</Tag> : <Tag>离线</Tag>}
-                <Space size={0} className="server-card-actions" onClick={(e) => e.stopPropagation()}>
-                  <Button size="small" type="text" icon={<EditOutlined />} aria-label="编辑" title="编辑" onClick={() => openEdit(s)} />
-                  <Button size="small" type="text" danger icon={<DeleteOutlined />} aria-label="删除" title="删除" onClick={() => onDelete(s)} />
-                </Space>
+              <span
+                className={`srv-drag${canSort ? '' : ' is-hidden'}`}
+                draggable={!isMobile && !sorting && canSort}
+                aria-hidden={!canSort || undefined}
+                tabIndex={canSort ? 0 : -1}
+                role="button"
+                aria-label={`拖动 ${s.name} 排序`}
+                aria-describedby="server-sort-help"
+                onKeyDown={(e) => {
+                  if (!canSort) return
+                  if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                    e.preventDefault()
+                    moveServerByKeyboard(s, e.key === 'ArrowUp' ? -1 : 1)
+                  }
+                }}
+                onPointerDown={(e) => { if (canSort) handlePointerDragStart(e, s) }}
+                onPointerMove={handlePointerDragMove}
+                onPointerUp={finishPointerDrag}
+                onPointerCancel={cancelPointerDrag}
+                onDragStart={(e) => startDrag(e, s)}
+                onDragEnd={() => {
+                  setDraggingID(null)
+                  setDropTarget(null)
+                  pointerDragRef.current = null
+                  pointerDropRef.current = null
+                }}
+              >
+                <HolderOutlined />
+              </span>
+              <div className="srv-name">
+                <a href={`/admin/servers/${s.id}`} onClick={(e) => { e.preventDefault(); open_(s) }}>{s.name}</a>
+                <span className="mono">{s.address || s.public_ip || '未设置地址'}</span>
               </div>
-
-              <div className="server-card-versions">
-                {!s.singbox_installed ? (
-                  <Tag color="orange">sing-box 未安装</Tag>
-                ) : s.singbox_has_update ? (
-                  <Tag color="orange" icon={<ArrowUpOutlined />} title={`发现新版本 ${s.singbox_latest_version || ''}，进入详情升级`}>sing-box {s.singbox_version || '已安装'} · 可升级</Tag>
-                ) : (
-                  <Tag color="blue">sing-box {s.singbox_version || '已安装'}</Tag>
-                )}
-                {s.agent_version ? (
-                  s.online && s.agent_has_update ? (
-                    <Tag color="orange" title={`同步至 ${s.agent_latest_version || latestAgentVer}`}>Agent {s.agent_version} · 待同步</Tag>
-                  ) : (
-                    <Tag color="purple">Agent {s.agent_version}</Tag>
-                  )
-                ) : null}
+              <div className="srv-status"><Status tone={s.online ? 'ok' : 'off'}>{s.online ? '在线' : '离线'}</Status></div>
+              <div className="srv-version">
+                <span>{s.singbox_installed ? `sing-box ${s.singbox_version || ''}` : '未安装 sing-box'}{s.singbox_has_update && <i className="srv-up" title={`可升级至 ${s.singbox_latest_version || ''}`}>↑</i>}</span>
+                <small>Agent {s.agent_version || '—'}{s.online && s.agent_has_update && <i className="srv-up" title={`同步至 ${s.agent_latest_version || latestAgentVer}`}>↑</i>}</small>
               </div>
-
-              <div className="server-card-metrics">
-                <div>
-                  <span className="server-card-metric-label">负载</span>
-                  <span className="server-card-metric-value">{s.online ? s.load1.toFixed(2) : '—'}</span>
-                </div>
-                <div>
-                  <span className="server-card-metric-label">内存</span>
-                  <span className="server-card-metric-value" style={{ color: memPct !== null && s.online ? (memPct >= 85 ? 'var(--console-error)' : memPct >= 60 ? 'var(--console-warning)' : undefined) : undefined }}>
-                    {s.online && memPct !== null ? `${memPct}%` : '—'}
-                  </span>
-                </div>
-                <div>
-                  <span className="server-card-metric-label">下行</span>
-                  <span className="server-card-metric-value">{s.online && s.traffic_available ? rate(s.traffic_download_rate ?? 0) : '—'}</span>
-                </div>
-                <div>
-                  <span className="server-card-metric-label">上行</span>
-                  <span className="server-card-metric-value">{s.online && s.traffic_available ? rate(s.traffic_upload_rate ?? 0) : '—'}</span>
-                </div>
+              <div className="srv-load">
+                <span className="srv-label">负载 / 内存</span>
+                <span>{s.online ? s.load1.toFixed(2) : '—'}<span className="faint"> · </span><span className={memPct !== null && s.online && memPct >= 85 ? 'srv-hot' : undefined}>{s.online && memPct !== null ? `${memPct}%` : '—'}</span></span>
               </div>
-
-
-              <div className="server-card-foot">
-                <span className="server-card-muted" title="客户端连接地址">{s.address || s.public_ip || '未设置地址'}</span>
-                <span className="server-card-muted">入站 {s.inbounds?.length ?? 0}</span>
+              <div className="srv-rate mono">
+                <span>↓ {s.online && s.traffic_available ? rate(s.traffic_download_rate ?? 0) : '—'}</span>
+                <span className="faint">↑ {s.online && s.traffic_available ? rate(s.traffic_upload_rate ?? 0) : '—'}</span>
+              </div>
+              <div className="srv-inbounds"><span className="srv-label">入站 </span>{s.inbounds?.length ?? 0}</div>
+              <div className="ui-row-actions">
+                <Button size="small" type="text" icon={<EditOutlined />} aria-label={`编辑 ${s.name}`} onClick={() => openEdit(s)} />
+                <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: [
+                  { key: 'up', label: '上移', disabled: !canSort || position <= 0 || sorting, onClick: () => moveServerByKeyboard(s, -1) },
+                  { key: 'down', label: '下移', disabled: !canSort || position >= servers.length - 1 || sorting, onClick: () => moveServerByKeyboard(s, 1) },
+                  { type: 'divider' },
+                  { key: 'delete', label: '删除', danger: true, onClick: () => onDelete(s) },
+                ] }}>
+                  <Button size="small" type="text" icon={<MoreOutlined />} aria-label={`${s.name} 更多操作`} />
+                </Dropdown>
               </div>
             </div>
           )
@@ -518,7 +478,8 @@ export default function Servers() {
       <div className="sr-only" aria-live="polite" aria-atomic="true">{sortAnnouncement}</div>
 
       <Modal
-        title={editing ? `编辑 ${editing.name}` : '新增主机'}
+        title={editing ? `编辑 ${editing.name}` : '新增服务器'}
+        width={MODAL_SM}
         open={open}
         onOk={onSubmit}
         onCancel={() => setOpen(false)}
@@ -529,11 +490,7 @@ export default function Servers() {
           <Form.Item name="name" label="名称" rules={[{ required: true }]}>
             <Input placeholder="hk-1" />
           </Form.Item>
-          <Form.Item
-            name="address"
-            label="连接地址"
-            extra="客户端订阅里使用的域名或 IP。留空则用 Agent 上报的公网 IP。"
-          >
+          <Form.Item name="address" label="连接地址">
             <Input placeholder="hk.example.com" />
           </Form.Item>
           <Form.Item name="remark" label="备注">
@@ -543,22 +500,17 @@ export default function Servers() {
       </Modal>
 
       <Modal
-        title="更新 sing-box"
+        title="批量更新 sing-box"
+        width={MODAL_SM}
         open={singboxModalOpen}
         onOk={doUpdateSingbox}
         onCancel={() => setSingboxModalOpen(false)}
         okText="开始更新"
         destroyOnClose
       >
-        <div style={{ fontSize: 13, color: 'var(--console-muted)', marginBottom: 12 }}>
-          向所有<b>在线</b>节点下发官方 sing-box 安装/升级指令。点击开始后窗口即关闭，更新在后台进行，完成后节点列表会自动刷新。
-        </div>
         <Form form={singboxForm} layout="vertical" initialValues={{ channel: 'stable', method: 'script' }}>
           <Form.Item name="channel" label="版本渠道">
-            <Radio.Group>
-              <Radio.Button value="stable">稳定版</Radio.Button>
-              <Radio.Button value="beta">测试版 (beta)</Radio.Button>
-            </Radio.Group>
+            <Segmented options={[{ value: 'stable', label: '稳定版' }, { value: 'beta', label: '测试版' }]} />
           </Form.Item>
           <Form.Item name="method" label="安装方式">
             <Select
@@ -569,12 +521,11 @@ export default function Servers() {
               ]}
             />
           </Form.Item>
-          <Form.Item name="version" label="指定版本" extra="留空则安装所选渠道的最新版（仅脚本方式支持指定版本）">
-            <Input placeholder="如 1.14.2，可留空" />
+          <Form.Item name="version" label="版本">
+            <Input placeholder="最新" />
           </Form.Item>
         </Form>
       </Modal>
-
-    </Card>
+    </div>
   )
 }

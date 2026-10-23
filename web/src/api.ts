@@ -470,6 +470,12 @@ export const getMaintenanceInfo = (signal?: AbortSignal, refresh = false) =>
     signal,
     params: refresh ? { refresh: 1 } : undefined,
   }).then((r) => r.data)
+export type PanelRelease = { version: string; name?: string; published_at?: string; prerelease: boolean; current: boolean }
+export const listPanelReleases = (signal?: AbortSignal, refresh = false) =>
+  http.get<{ releases: PanelRelease[] }>('/api/admin/maintenance/releases', {
+    signal,
+    params: refresh ? { refresh: 1 } : undefined,
+  }).then((r) => r.data.releases)
 export const selfUpdate = (version?: string, force = false) =>
   http
     .post<{ ok: boolean; updated: boolean; message: string; version?: string; operation_id?: string }>(

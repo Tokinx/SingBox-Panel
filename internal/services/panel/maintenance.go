@@ -205,7 +205,9 @@ func (a *App) maintenanceInfo(c *gin.Context) {
 	refresh := c.Query("refresh") == "1" || strings.EqualFold(c.Query("refresh"), "true")
 	if latest, err := latestPanelRelease(refresh); err == nil {
 		resp["latest_version"] = latest
-		resp["has_update"] = supported && latest != "" && compareVersions(latest, a.version) > 0
+		// A newer release is reported even where in-place update is unsupported;
+		// update_supported decides whether the UI can act on it.
+		resp["has_update"] = latest != "" && compareVersions(latest, a.version) > 0
 	} else {
 		resp["latest_error"] = err.Error()
 	}
@@ -640,6 +642,30 @@ func (a *App) selfUpdate(c *gin.Context) {
 			_ = os.Remove(updateLockPath)
 		}
 	}()
+	// A forced install of a different release is a rollback (or an equal-numbered
+	// pre-release). The swap discards its own DB snapshot once the target starts,
+	// so keep a full backup archive the administrator can restore later.
+	rollbackBackup := ""
+	if body.Force && !sameVersion(target, a.version) {
+		archivePath, archiveName, cleanupArchive, err := a.createBackupArchive()
+		if err != nil {
+			cleanupArchive()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "回退前备份失败：" + err.Error()})
+			return
+		}
+		keepDir := filepath.Join(installDir, "backups")
+		if err := os.MkdirAll(keepDir, 0o700); err == nil {
+			rollbackBackup = filepath.Join(keepDir, "pre-"+target+"-"+archiveName)
+			if err := copyFile(archivePath, rollbackBackup); err != nil {
+				rollbackBackup = ""
+			}
+		}
+		cleanupArchive()
+		if rollbackBackup == "" {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "回退前备份失败：无法写入 " + keepDir})
+			return
+		}
+	}
 	stageDir, err := os.MkdirTemp(updateRoot, target+"-")
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建版本暂存目录失败：" + err.Error()})
@@ -747,10 +773,14 @@ func (a *App) selfUpdate(c *gin.Context) {
 	releaseMaintenanceLock = false
 	go a.releaseMaintenanceAfterDetachedUpdate(updateLockPath)
 
+	msg := "已开始完整更新到 " + target + "，后端、前端和 Agent 包将一起切换并自动验证。"
+	if rollbackBackup != "" {
+		msg = "已备份当前数据到 " + rollbackBackup + "，开始安装 " + target + "。"
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"ok":           true,
 		"updated":      true,
-		"message":      "已开始完整更新到 " + target + "，后端、前端和 Agent 包将一起切换并自动验证。",
+		"message":      msg,
 		"version":      target,
 		"operation_id": operation.ID,
 	})

@@ -1,12 +1,8 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-	Alert,
   AutoComplete,
   Button,
-  Card,
   Checkbox,
-  Descriptions,
-  Empty,
   Form,
   Grid,
   Input,
@@ -18,20 +14,20 @@ import {
   Spin,
   Switch,
   Table,
-  Tabs,
-  Tag,
-  Tooltip,
   Typography,
   message,
 } from 'antd'
+import type { ColumnsType } from 'antd/es/table'
 import {
   DeleteOutlined,
   DownOutlined,
+  EditOutlined,
+  EyeOutlined,
   HolderOutlined,
   PlusOutlined,
   ReloadOutlined,
   RightOutlined,
-  SaveOutlined,
+  SearchOutlined,
   UndoOutlined,
   UpOutlined,
 } from '@ant-design/icons'
@@ -57,6 +53,9 @@ import { VirtualList } from '../../../components/VirtualList'
 import { SHADOWSOCKS_METHODS } from '../../../util'
 import { RequestState } from '../../../components/RequestState'
 import { buildCustomNodeParams } from '../../../customNodeForm'
+import { Pills, Status } from '../../../ui/Page'
+import '../../../styles/users.css'
+import { MODAL_LG, MODAL_MD } from '../../../ui/modal'
 
 // ======================= 节点分配 =======================
 
@@ -165,13 +164,11 @@ const AccessItem = memo(function AccessItem({ item, checked, disabled, onToggle 
   onToggle: (item: AccessNodeItem, checked: boolean) => void
 }) {
   return (
-    <label className={`access-chip${checked ? ' checked' : ''}${disabled ? ' disabled' : ''}`} title={item.detail}>
+    <label className={`um-access-chip${checked ? ' checked' : ''}${disabled ? ' disabled' : ''}`} title={item.detail}>
       <Checkbox checked={checked} disabled={disabled} onChange={(event) => onToggle(item, event.target.checked)} />
-      <span className="access-chip-name">{item.name}</span>
-      <Tag color={nodeTypeLabel[item.protocol]?.color} className="access-chip-tag">
-        {nodeTypeLabel[item.protocol]?.label || item.protocol || '-'}
-      </Tag>
-      {!item.enabled ? <Tag className="access-chip-tag">停用</Tag> : null}
+      <span className="um-access-chip-name">{item.name}</span>
+      <span className="um-access-chip-proto">{nodeTypeLabel[item.protocol]?.label || item.protocol || '-'}</span>
+      {!item.enabled ? <span className="um-access-chip-off">停用</span> : null}
     </label>
   )
 })
@@ -375,12 +372,14 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
   }, [open, userId])
 
   useEffect(() => {
+    // Wait for the server list; otherwise the dialog always lands on 外部.
+    if (!serversLoaded) return
     if (activeNodeTab === 'managed' && managedGroups.length === 0 && customGroups.length > 0) {
       setActiveNodeTab('custom')
     } else if (activeNodeTab === 'custom' && customGroups.length === 0 && managedGroups.length > 0) {
       setActiveNodeTab('managed')
     }
-  }, [activeNodeTab, customGroups.length, managedGroups.length])
+  }, [activeNodeTab, customGroups.length, managedGroups.length, serversLoaded])
 
   const selectedInboundSet = useMemo(() => new Set(inboundIDs), [inboundIDs])
   const selectedCustomSet = useMemo(() => new Set(customNodeIDs), [customNodeIDs])
@@ -621,13 +620,15 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
       return result
     }, { managed: [], custom: [] })
     return (
-      <section className="access-modal-group" key={group.key}>
-        <div className="access-modal-group-head">
+      <section className="um-access-modal-group" key={group.key}>
+        <div className="um-access-modal-group-head">
           <button
             type="button"
-            className="access-group-toggle"
+            className="um-access-group-toggle"
             onClick={() => toggleGroupExpanded(group.key)}
             title={expanded ? '收起' : '展开'}
+            aria-label={`${expanded ? '收起' : '展开'} ${group.label}`}
+            aria-expanded={expanded}
           >
             {expanded ? <DownOutlined /> : <RightOutlined />}
           </button>
@@ -640,12 +641,12 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
               setIDs('custom', kinds.custom, event.target.checked)
             }}
           />
-          <strong>{group.label === '未分组' ? <span className="access-group-unnamed">{group.label}</span> : group.label}</strong>
+          <strong>{group.label === '未分组' ? <span className="um-access-group-unnamed">{group.label}</span> : group.label}</strong>
           {group.meta ? <small>{group.meta}</small> : null}
-          <span className="access-group-count">{groupSelectedCount} / {group.items.length}</span>
+          <span className="um-access-group-count">{groupSelectedCount} / {group.items.length}</span>
         </div>
         {expanded ? (
-          <div className="access-modal-items">
+          <div className="um-access-modal-items">
             {group.items.map((item) => (
               <AccessItem
                 key={`${item.kind}:${item.id}`}
@@ -683,10 +684,10 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
 
   const renderNodeOrder = () => {
     if (nodeOrder.length === 0) {
-      return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="请先勾选需要分配的节点" />
+      return <div className="ui-empty">未选择节点</div>
     }
     return (
-      <div className="access-order-list" ref={orderListRef}>
+      <div className="um-access-order-list" ref={orderListRef}>
         {(() => {
           const touchRemaining = draggedNodeKey
             ? nodeOrder.filter((candidate) => userNodeOrderKey(candidate) !== draggedNodeKey)
@@ -720,7 +721,7 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
               : ''
             return (
               <div
-                className={`access-order-item${draggedNodeKey === key ? ' dragging' : ''}${touchDropClass}`}
+                className={`um-access-order-item${draggedNodeKey === key ? ' dragging' : ''}${touchDropClass}`}
                 key={key}
                 draggable={!isMobile && !saving && editingNameKey !== key}
                 ref={(element) => {
@@ -749,10 +750,9 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
                 }}
                 onDragEnd={() => setDraggedNodeKey(null)}
               >
-                <Tooltip title="拖动排序；也可用上下方向键调整">
-                  <button
+                <button
                     type="button"
-                    className="access-order-handle"
+                    className="um-access-order-handle"
                     disabled={saving}
                     aria-label={`调整第 ${index + 1} 个节点顺序`}
                     aria-describedby="access-sort-help"
@@ -769,16 +769,15 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
                   >
                     <HolderOutlined />
                   </button>
-                </Tooltip>
-                <span className="access-order-number">{index + 1}</span>
-                <div className="access-order-content">
+                <span className="um-access-order-number">{index + 1}</span>
+                <div className="um-access-order-content">
                   <strong>{(orderItem.custom_name ?? '').trim() || defaultName}</strong>
                   <small>{subtitle}</small>
                 </div>
                 <Input
                   size="small"
-                  className="access-order-name-input"
-                  placeholder={`默认：${defaultName}`}
+                  className="um-access-order-name-input"
+                  placeholder={defaultName}
                   aria-label={`自定义 ${defaultName} 的节点名称`}
                   value={orderItem.custom_name ?? ''}
                   maxLength={128}
@@ -790,10 +789,8 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
                   onPointerDown={(event) => event.stopPropagation()}
                   onChange={(event) => updateNodeCustomName(key, event.target.value)}
                 />
-                <Tag className="access-order-kind" color={orderItem.node_type === 'managed' ? 'blue' : 'purple'}>
-                  {orderItem.node_type === 'managed' ? '面板' : '节点'}
-                </Tag>
-                {item?.protocol ? <Tag className="access-order-protocol" color={nodeTypeLabel[item.protocol]?.color}>{nodeTypeLabel[item.protocol]?.label || item.protocol}</Tag> : null}
+                <span className="um-access-order-kind">{orderItem.node_type === 'managed' ? '面板' : '外部'}</span>
+                {item?.protocol ? <span className="ui-tag um-access-order-protocol">{nodeTypeLabel[item.protocol]?.label || item.protocol}</span> : null}
               </div>
             )
           })
@@ -802,90 +799,68 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
     )
   }
 
+  const managedCount = managedGroups.reduce((sum, group) => sum + group.items.length, 0)
+  const customCount = customGroups.reduce((sum, group) => sum + group.items.length, 0)
+  const view = activeTab === 'order' ? 'order' : activeNodeTab
+  const activeGroups = activeNodeTab === 'managed' ? managedGroups : customGroups
+
   return (
     <Modal
-      title={userEmail ? `节点分配 - ${userEmail}` : '节点分配'}
-      className="access-assign-modal"
+      title={userEmail ? `节点分配 · ${userEmail}` : '节点分配'}
+      className="um-access-assign-modal um-modal"
       mousePosition={mousePosition}
       open={open}
       onCancel={handleClose}
-      footer={null}
-      width={820}
+      width={MODAL_LG}
       style={{ maxWidth: 'calc(100vw - 16px)' }}
       destroyOnClose
+      footer={(
+        <div className="um-access-footer">
+          <span className={isDirty ? 'is-dirty' : ''}>{isDirty ? '有未保存更改' : '已同步'}</span>
+          <div className="um-access-footer-actions">
+            <Button icon={<UndoOutlined />} disabled={!isDirty || saving} onClick={discardChanges}>撤销</Button>
+            <Button onClick={handleClose}>取消</Button>
+            <Button type="primary" loading={saving} disabled={!isDirty || accessLoading} onClick={() => void save()}>保存</Button>
+          </div>
+        </div>
+      )}
     >
       <RequestState loading={accessLoading || serversLoading} error={accessError || serversError} hasData={accessLoaded && serversLoaded} onRetry={() => setRetryKey((value) => value + 1)}>
       <Spin spinning={accessLoading || serversLoading}>
-        {loadedServerWide ? (
-          <Alert
-            type="info"
-            showIcon
-            style={{ marginBottom: 12 }}
-            message="整机授权"
-            description={`该用户已获整机授权：${loadedServerIDs.map((id) => servers.find((server) => server.id === id)?.name || `#${id}`).join('、')}。当前及未来新增的入站都会自动授权；仅调整外部节点或排序不会改变此语义。`}
-          />
-        ) : null}
-        <Tabs
-          activeKey={activeTab}
-          onChange={(key) => setActiveTab(key as 'nodes' | 'order')}
+        <Pills
+          label="节点分配视图"
+          active={view}
+          onChange={(key) => {
+            if (key === 'order') {
+              setActiveTab('order')
+            } else {
+              setActiveTab('nodes')
+              setActiveNodeTab(key as 'managed' | 'custom')
+            }
+          }}
           items={[
-            {
-              key: 'nodes',
-              label: '节点',
-              children: allNodeGroups.length === 0 ? (
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无可分配节点" />
-              ) : (
-                <div className="access-node-panel">
-                  <Tabs
-                    type="card"
-                    activeKey={activeNodeTab}
-                    onChange={(key) => setActiveNodeTab(key as 'managed' | 'custom')}
-                    tabBarExtraContent={allGroupKeys.length > 1 ? (
-                      <Button size="small" type="text" icon={allCollapsed ? <DownOutlined /> : <RightOutlined />} onClick={toggleAllGroups}>
-                        {allCollapsed ? '全部展开' : '全部收起'}
-                      </Button>
-                    ) : null}
-                    items={[
-                      {
-                        key: 'managed',
-                        label: `面板（${managedGroups.reduce((sum, group) => sum + group.items.length, 0)}）`,
-                        children: managedGroups.length === 0 ? (
-                          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无面板节点" />
-                        ) : (
-                          <div className="access-modal-body">{renderGroupSections(managedGroups)}</div>
-                        ),
-                      },
-                      {
-                        key: 'custom',
-                        label: `外部（${customGroups.reduce((sum, group) => sum + group.items.length, 0)}）`,
-                        children: customGroups.length === 0 ? (
-                          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无外部节点" />
-                        ) : (
-                          <div className="access-modal-body">{renderGroupSections(customGroups)}</div>
-                        ),
-                      },
-                    ]}
-                  />
-                </div>
-              ),
-            },
-            {
-              key: 'order',
-              label: '管理',
-              children: renderNodeOrder(),
-            },
+            { key: 'managed', label: '面板', count: managedCount },
+            { key: 'custom', label: '外部', count: customCount },
+            { key: 'order', label: '排序', count: nodeOrder.length },
           ]}
+          actions={view !== 'order' && allGroupKeys.length > 1 ? (
+            <Button size="small" type="text" icon={allCollapsed ? <DownOutlined /> : <RightOutlined />} onClick={toggleAllGroups}>
+              {allCollapsed ? '全部展开' : '全部收起'}
+            </Button>
+          ) : null}
         />
+        {loadedServerWide ? (
+          <p className="um-access-note">
+            整机授权：{loadedServerIDs.map((id) => servers.find((server) => server.id === id)?.name || `#${id}`).join('、')}
+          </p>
+        ) : null}
+        {view === 'order' ? renderNodeOrder() : activeGroups.length === 0 ? (
+          <div className="ui-empty">{allNodeGroups.length === 0 ? '暂无可分配节点' : activeNodeTab === 'managed' ? '暂无面板节点' : '暂无外部节点'}</div>
+        ) : (
+          <div className="um-access-modal-body">{renderGroupSections(activeGroups)}</div>
+        )}
       </Spin>
       </RequestState>
-      <div className="access-modal-footer">
-        <span className={isDirty ? 'dirty' : ''}>{isDirty ? '有未保存更改' : '分配已同步'}</span>
-        <Space>
-          <Button icon={<UndoOutlined />} disabled={!isDirty || saving} onClick={discardChanges}>撤销</Button>
-          <Button onClick={handleClose}>取消</Button>
-          <Button type="primary" icon={<SaveOutlined />} loading={saving} disabled={!isDirty || accessLoading} onClick={() => void save()}>保存</Button>
-        </Space>
-      </div>
       <span id="access-sort-help" className="sr-only">使用上方向键或下方向键调整节点顺序</span>
       <div className="sr-only" aria-live="polite" aria-atomic="true">{sortAnnouncement}</div>
     </Modal>
@@ -921,7 +896,7 @@ const detailParamLabels: Record<string, string> = {
 
 function nodeDisplayName(node: CustomNode) {
   const code = node.detail?.region || regionCodeFromFlag(node.name)
-  const name = removeRegionFlag(node.name) || '（未命名）'
+  const name = removeRegionFlag(node.name) || '未命名'
   return (
     <span className="custom-node-name">
       {code ? <RegionFlag code={code} fallback={false} /> : null}
@@ -951,31 +926,31 @@ const MobileNodeCard = memo(function MobileNodeCard({
   const protocol = node.link?.trim() ? protocolOf(node.link) : node.protocol
   const type = nodeTypeLabel[protocol]
   const group = node.group?.trim() || '未分组'
+  const address = node.detail?.address || node.address
+  const port = node.detail?.port || node.port
 
   return (
     <div
-      className="mobile-node-card"
+      className="um-mcard is-clickable"
       onClick={(event) => {
         const target = event.target as HTMLElement
         if (target.closest('button, input')) return
         onDetail(node)
       }}
     >
-      <div className="mobile-node-card-top">
-        <div className="mobile-node-card-name">{nodeDisplayName(node)}</div>
-        <Tag color={type?.color}>{type?.label || protocol || '-'}</Tag>
+      <div className="um-mcard-top">
+        <span className="um-mcard-name">{nodeDisplayName(node)}</span>
+        <span className="ui-row-actions">
+          <Button size="small" type="text" icon={<EditOutlined />} aria-label={`编辑 ${node.name || '节点'}`} onClick={() => onEdit(node)} />
+          <Button size="small" type="text" icon={<DeleteOutlined />} aria-label={`删除 ${node.name || '节点'}`} onClick={() => onRemove(node)} />
+        </span>
       </div>
-      <div className="mobile-node-card-meta">
-        <span>分组：{group}</span>
-        {node.detail?.address || node.address ? (
-          <span>{node.detail?.address || node.address}{(node.detail?.port || node.port) ? `:${node.detail?.port || node.port}` : ''}</span>
-        ) : null}
+      <div className="um-mcard-meta">
+        <span className="ui-tag">{type?.label || protocol || '-'}</span>
+        <span>{group}</span>
+        {!node.enabled ? <span>停用</span> : null}
       </div>
-      <div className="mobile-card-actions">
-        <Button size="small" type="link" onClick={() => onDetail(node)}>详情</Button>
-        <Button size="small" type="link" onClick={() => onEdit(node)}>编辑</Button>
-        <Button size="small" type="link" danger onClick={() => onRemove(node)}>删除</Button>
-      </div>
+      {address ? <div className="um-mcard-addr mono">{address}{port ? `:${port}` : ''}</div> : null}
     </div>
   )
 })
@@ -1001,6 +976,7 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
   const nodeLinkSource = Form.useWatch('link', nodeForm)
   const [selectedGroup, setSelectedGroup] = useState<string>()
   const [nodeSearch, setNodeSearch] = useState('')
+  const [section, setSection] = useState<'subscriptions' | 'nodes'>('subscriptions')
   const [detailNode, setDetailNode] = useState<CustomNode | null>(null)
   const [groupMoving, setGroupMoving] = useState(false)
   const [subscriptions, setSubscriptions] = useState<CustomNodeSubscription[]>([])
@@ -1066,7 +1042,7 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
   const groupOptions = useMemo(
     () => Array.from(groupCounts.keys())
       .sort((a, b) => a.localeCompare(b, 'zh'))
-      .map((g) => ({ value: g, label: `${g}（${groupCounts.get(g)} 个节点）` })),
+      .map((g) => ({ value: g, label: `${g} · ${groupCounts.get(g)}` })),
     [groupCounts],
   )
 
@@ -1171,7 +1147,7 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
   const removeSubscription = (subscription: CustomNodeSubscription) => {
     Modal.confirm({
       title: `删除订阅「${subscription.name}」？`,
-      content: `这会同时删除该订阅管理的 ${subscription.node_count} 个节点，手工节点不受影响。`,
+      content: `将同时删除其下 ${subscription.node_count} 个节点。`,
       okType: 'danger',
       okText: '删除',
       onOk: async () => {
@@ -1279,7 +1255,8 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
 
   const removeNode = (n: CustomNode) => {
     Modal.confirm({
-      title: `删除自定义节点 ${n.name || n.link.slice(0, 24)}?`,
+      title: `删除节点「${n.name || n.link.slice(0, 24)}」？`,
+      okText: '删除',
       okType: 'danger',
       onOk: async () => {
         await deleteCustomNode(n.id)
@@ -1330,7 +1307,7 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
   const groupFilterOptions = useMemo(() => {
     const opts = groupOptions.map((g) => ({ label: g.label, value: g.value }))
     const ungrouped = nodes.filter((n) => !(n.group || '').trim()).length
-    if (ungrouped > 0) opts.push({ label: `未分组（${ungrouped} 个节点）`, value: '__none__' })
+    if (ungrouped > 0) opts.push({ label: `未分组 · ${ungrouped}`, value: '__none__' })
     return opts
   }, [groupOptions, nodes])
 
@@ -1357,137 +1334,169 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
     ? subscriptions.find((subscription) => subscription.id === detailNode.subscription_id)
     : undefined
 
-  const nodeColumns = [
+  const nodeAddress = (node: CustomNode) => {
+    const address = node.detail?.address || node.address
+    const port = node.detail?.port || node.port
+    return address ? `${address}${port ? `:${port}` : ''}` : ''
+  }
+
+  const nodeColumns: ColumnsType<CustomNode> = [
     {
       title: '名称',
       dataIndex: 'name',
       ellipsis: true,
-      render: (_: string, node: CustomNode) => nodeDisplayName(node),
+      render: (_: string, node: CustomNode) => (
+        <span className="um-node-title">
+          {nodeDisplayName(node)}
+          {!node.enabled ? <span className="ui-tag">停用</span> : null}
+        </span>
+      ),
     },
     {
       title: '分组',
       dataIndex: 'group',
-      width: 150,
+      width: 160,
       render: (v: string, n: CustomNode) => n.subscription_id ? (
-        <Tag color="geekblue" title="分组由订阅统一管理">{v?.trim() || '未分组'}</Tag>
+        <span className="um-group-label" title="由订阅管理">{v?.trim() || '未分组'}</span>
       ) : (
-      <span className="custom-node-row-action">
-      <Popover
-      trigger="click"
-      open={quickGroup?.id === n.id}
-      onOpenChange={(open) => {
-        if (open) {
-          openQuickGroup(n)
-        } else if (!groupMoving) {
-          // Only close when this popover is the one currently open.
-          // Without the guard, clicking another row's tag first fires the
-          // "click outside" close for the previous popover, which clears
-          // quickGroup and instantly closes the newly opened one too.
-          setQuickGroup((current) => (current?.id === n.id ? null : current))
-        }
-      }}
-      content={(
-        <div style={{ width: 240 }}>
-          <AutoComplete
-            autoFocus
-            allowClear
-            value={quickGroupValue}
-            onChange={setQuickGroupValue}
-            options={groupOptions}
-            filterOption={(input, option) => (option?.value ?? '').toLowerCase().includes(input.toLowerCase())}
-            placeholder="选择分组或输入新分组"
-            style={{ width: '100%' }}
-            // Render the dropdown inside the popover, otherwise clicking an
-            // option is seen as a "click outside" and closes the popover
-            // before the selection registers.
-            getPopupContainer={(trigger) => trigger.parentElement ?? document.body}
-          />
-          <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-            <Button size="small" onClick={closeQuickGroup}>取消</Button>
-            <Button size="small" type="primary" loading={groupMoving} onClick={() => void saveQuickGroup()}>保存</Button>
-          </div>
-        </div>
-      )}
-      >
-          {v && v.trim() ? (
-            <Tag color="geekblue" style={{ cursor: 'pointer' }} title="点击修改分组">{v.trim()}</Tag>
-          ) : (
-            <Tag style={{ cursor: 'pointer', color: 'var(--console-muted)' }} title="点击设置分组">未分组 ▾</Tag>
-          )}
-        </Popover>
-      </span>
+        <span className="custom-node-row-action">
+          <Popover
+            trigger="click"
+            open={quickGroup?.id === n.id}
+            onOpenChange={(open) => {
+              if (open) {
+                openQuickGroup(n)
+              } else if (!groupMoving) {
+                // Only close when this popover is the one currently open.
+                // Without the guard, clicking another row's tag first fires the
+                // "click outside" close for the previous popover, which clears
+                // quickGroup and instantly closes the newly opened one too.
+                setQuickGroup((current) => (current?.id === n.id ? null : current))
+              }
+            }}
+            content={(
+              <div className="um-quick-group">
+                <AutoComplete
+                  autoFocus
+                  allowClear
+                  value={quickGroupValue}
+                  onChange={setQuickGroupValue}
+                  options={groupOptions}
+                  filterOption={(input, option) => (option?.value ?? '').toLowerCase().includes(input.toLowerCase())}
+                  placeholder="分组名"
+                  style={{ width: '100%' }}
+                  // Render the dropdown inside the popover, otherwise clicking an
+                  // option is seen as a "click outside" and closes the popover
+                  // before the selection registers.
+                  getPopupContainer={(trigger) => trigger.parentElement ?? document.body}
+                />
+                <div className="um-quick-group-actions">
+                  <Button size="small" onClick={closeQuickGroup}>取消</Button>
+                  <Button size="small" type="primary" loading={groupMoving} onClick={() => void saveQuickGroup()}>保存</Button>
+                </div>
+              </div>
+            )}
+          >
+            <button type="button" className={`um-group-button${v && v.trim() ? '' : ' is-empty'}`} aria-label={`修改分组：${v?.trim() || '未分组'}`}>
+              <span>{v && v.trim() ? v.trim() : '未分组'}</span>
+              <DownOutlined />
+            </button>
+          </Popover>
+        </span>
       ),
     },
     {
       title: '类型',
-      width: 100,
+      width: 110,
       render: (_: unknown, n: CustomNode) => {
         const key = n.link && n.link.trim() ? protocolOf(n.link) : n.protocol
-        const t = nodeTypeLabel[key]
-        return t ? <Tag color={t.color}>{t.label}</Tag> : <Tag>{key || '-'}</Tag>
+        return <span className="ui-tag">{nodeTypeLabel[key]?.label || key || '-'}</span>
       },
     },
     {
-      title: '操作',
-      width: 160,
+      title: '地址',
+      width: 220,
+      ellipsis: true,
+      render: (_: unknown, n: CustomNode) => {
+        const address = nodeAddress(n)
+        return address ? <span className="mono muted" title={address}>{address}</span> : <span className="faint">—</span>
+      },
+    },
+    {
+      title: <span className="sr-only">操作</span>,
+      width: 112,
+      align: 'right',
       render: (_: unknown, n: CustomNode) => (
-        <Space size={isMobile ? 2 : 6} className="custom-node-row-action">
-          <Button size="small" type="link" style={{ padding: '0 4px' }} onClick={() => setDetailNode(n)}>详情</Button>
-          <Button size="small" type="link" style={{ padding: '0 4px' }} onClick={() => openNodeEdit(n)}>编辑</Button>
-          <Button size="small" type="link" danger style={{ padding: '0 4px' }} onClick={() => removeNode(n)}>删除</Button>
-        </Space>
+        <span className="ui-row-actions custom-node-row-action">
+          <Button size="small" type="text" icon={<EyeOutlined />} title="详情" aria-label={`查看 ${n.name || '节点'}`} onClick={() => setDetailNode(n)} />
+          <Button size="small" type="text" icon={<EditOutlined />} title="编辑" aria-label={`编辑 ${n.name || '节点'}`} onClick={() => openNodeEdit(n)} />
+          <Button size="small" type="text" icon={<DeleteOutlined />} title="删除" aria-label={`删除 ${n.name || '节点'}`} onClick={() => removeNode(n)} />
+        </span>
       ),
     },
   ]
 
-  const mobileSubscriptionList = subscriptions.length === 0 ? (
-    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无保存的订阅。" />
-  ) : (
+  const syncLabel = (subscription: CustomNodeSubscription) => subscription.last_sync_at
+    ? new Date(subscription.last_sync_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : '尚未同步'
+
+  const subscriptionActions = (subscription: CustomNodeSubscription) => (
+    <span className="ui-row-actions">
+      <Button
+        size="small"
+        type="text"
+        icon={<ReloadOutlined />}
+        title="立即同步"
+        aria-label={`同步 ${subscription.name}`}
+        loading={syncingSubscriptionID === subscription.id}
+        onClick={() => void syncSubscription(subscription)}
+      />
+      <Button size="small" type="text" icon={<EditOutlined />} title="编辑" aria-label={`编辑 ${subscription.name}`} onClick={() => openSubscriptionEdit(subscription)} />
+      <Button size="small" type="text" icon={<DeleteOutlined />} title="删除" aria-label={`删除 ${subscription.name}`} onClick={() => removeSubscription(subscription)} />
+    </span>
+  )
+
+  const subscriptionStatus = (subscription: CustomNodeSubscription) => subscription.last_error
+    ? <span title={subscription.last_error}><Status tone="error">同步失败</Status></span>
+    : !subscription.enabled
+      ? <Status tone="off">已停用</Status>
+      : subscription.last_success_at || subscription.last_sync_at
+        ? <Status tone="ok">正常</Status>
+        : <Status tone="off">待同步</Status>
+
+  const mobileSubscriptionList = (
     <VirtualList
-      className={`virtual-list mobile-admin-list mobile-subscription-list${subscriptions.length > MAX_VISIBLE_SUBSCRIPTIONS ? ' is-scrollable' : ''}`}
+      className={`virtual-list um-vlist${subscriptions.length > MAX_VISIBLE_SUBSCRIPTIONS ? ' is-scrollable' : ''}`}
       items={subscriptions}
       getKey={subscriptionKey}
-      estimatedItemHeight={112}
-      gap={10}
+      estimatedItemHeight={104}
+      gap={8}
       renderItem={(subscription) => (
-        <div className="mobile-subscription-card" key={subscription.id}>
-          <div className="mobile-card-heading">
-            <span className="mobile-subscription-name">{subscription.name}</span>
-            <span className="mobile-subscription-count">{subscription.node_count} 个节点</span>
+        <div className="um-mcard" key={subscription.id}>
+          <div className="um-mcard-top">
+            <span className="um-mcard-name">{subscription.name}</span>
+            {subscriptionActions(subscription)}
           </div>
-          <div className="mobile-card-meta">
-            <span className={subscription.last_error ? 'mobile-card-error' : undefined}>
-              同步：{subscription.last_sync_at ? new Date(subscription.last_sync_at).toLocaleString() : '尚未同步'}
-            </span>
+          <div className="um-mcard-meta">
+            {subscriptionStatus(subscription)}
+            <span><span className="mono">{subscription.node_count}</span> 个节点</span>
+            <span>{syncLabel(subscription)}</span>
           </div>
-          <div className="mobile-card-actions">
-            <Button
-              size="small"
-              type="link"
-              icon={<ReloadOutlined />}
-              loading={syncingSubscriptionID === subscription.id}
-              onClick={() => void syncSubscription(subscription)}
-            >刷新</Button>
-            <Button size="small" type="link" onClick={() => openSubscriptionEdit(subscription)}>编辑</Button>
-            <Button size="small" type="link" danger onClick={() => removeSubscription(subscription)}>删除</Button>
-          </div>
+          {subscription.last_error ? <div className="um-mcard-error">{subscription.last_error}</div> : null}
         </div>
       )}
     />
   )
 
   const mobileNodeList = filteredNodes.length === 0 ? (
-    <Empty
-      image={Empty.PRESENTED_IMAGE_SIMPLE}
-      description={nodeSearch.trim() ? '没有匹配的节点' : selectedGroup ? '当前分组筛选下没有节点' : '暂无节点。'}
-    />
+    <div className="ui-empty">{nodeSearch.trim() || selectedGroup ? '没有匹配的节点' : '暂无节点'}</div>
   ) : (
     <VirtualList
-      className={`virtual-list mobile-admin-list mobile-node-list${filteredNodes.length > MAX_VISIBLE_MOBILE_NODES ? ' is-scrollable' : ''}`}
+      className={`virtual-list um-vlist${filteredNodes.length > MAX_VISIBLE_MOBILE_NODES ? ' is-scrollable' : ''}`}
       items={filteredNodes}
       getKey={customNodeKey}
-      estimatedItemHeight={130}
-      gap={10}
+      estimatedItemHeight={96}
+      gap={8}
       renderItem={(node) => (
         <MobileNodeCard
           key={node.id}
@@ -1500,124 +1509,128 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
     />
   )
 
+  const nodeFilters = (
+    <>
+      {selectedGroup || nodeSearch.trim() ? <span className="um-filter-count mono">{filteredNodes.length} / {nodes.length}</span> : null}
+      <Select
+        allowClear
+        showSearch
+        value={selectedGroup}
+        onChange={setSelectedGroup}
+        options={groupFilterOptions}
+        placeholder="全部分组"
+        aria-label="按分组筛选"
+        optionFilterProp="label"
+        className="um-filter-group"
+      />
+      <Input
+        allowClear
+        prefix={<SearchOutlined />}
+        value={nodeSearch}
+        onChange={(event) => setNodeSearch(event.target.value)}
+        placeholder="搜索节点"
+        aria-label="搜索节点"
+        className="um-filter-search"
+      />
+    </>
+  )
+
+  const addButton = section === 'subscriptions'
+    ? <Button type="primary" icon={<PlusOutlined />} onClick={openSubscriptionCreate}>新增订阅</Button>
+    : <Button type="primary" icon={<PlusOutlined />} onClick={openNodeCreate}>新增节点</Button>
+
   return (
     <>
-      <Card
-        title="订阅"
-        className="users-top-card subscription-overview-card"
-        extra={<Button type="primary" size="small" icon={<PlusOutlined />} onClick={openSubscriptionCreate}>新增订阅</Button>}
-      >
-        <RequestState loading={subscriptionsLoading} error={subscriptionsError} hasData={subscriptions.length > 0} empty={!subscriptionsLoading && !subscriptionsError && subscriptions.length === 0} emptyDescription="暂无保存的订阅" onRetry={loadSubscriptions}>
-        {isMobile ? mobileSubscriptionList : <Table
-          rowKey="id"
-          size="small"
-          className="compact-rows management-fixed-table subscription-table"
-          dataSource={subscriptions}
-          pagination={false}
-          virtual={subscriptions.length > MAX_VISIBLE_SUBSCRIPTIONS}
-          scroll={{
-            x: 520,
-            y: subscriptions.length > MAX_VISIBLE_SUBSCRIPTIONS ? SUBSCRIPTION_TABLE_SCROLL_HEIGHT : undefined,
-          }}
-          columns={[
-            {
-              title: '名称',
-              dataIndex: 'name',
-              ellipsis: true,
-              render: (value: string) => value,
-            },
-            {
-              title: '节点',
-              dataIndex: 'node_count',
-              width: 64,
-              render: (value: number) => `${value} 个`,
-            },
-            {
-              title: '最近同步',
-              width: 150,
-              render: (_: unknown, subscription: CustomNodeSubscription) => (
-                <span
-                  title={subscription.last_error || (subscription.last_sync_at ? new Date(subscription.last_sync_at).toLocaleString('zh-CN') : undefined)}
-                  style={{ color: subscription.last_error ? 'var(--console-error-text)' : undefined, whiteSpace: 'nowrap' }}
-                >
-                  {subscription.last_sync_at
-                    ? new Date(subscription.last_sync_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-                    : '尚未同步'}
-                </span>
-              ),
-            },
-            {
-              title: '操作',
-              width: 176,
-              fixed: 'right' as const,
-              render: (_: unknown, subscription: CustomNodeSubscription) => (
-                <Space size={4} style={{ whiteSpace: 'nowrap' }}>
-                  <Button
-                    size="small"
-                    type="link"
-                    icon={<ReloadOutlined />}
-                    loading={syncingSubscriptionID === subscription.id}
-                    onClick={() => void syncSubscription(subscription)}
-                  >刷新</Button>
-                  <Button size="small" type="link" onClick={() => openSubscriptionEdit(subscription)}>编辑</Button>
-                  <Button size="small" type="link" danger onClick={() => removeSubscription(subscription)}>删除</Button>
-                </Space>
-              ),
-            },
-          ]}
-          locale={{ emptyText: '暂无保存的订阅。新增后会定期同步节点增删和配置变化。' }}
-        />}
+      <Pills
+        label="节点视图"
+        active={section}
+        onChange={(key) => setSection(key as 'subscriptions' | 'nodes')}
+        items={[
+          { key: 'subscriptions', label: '订阅源', count: subscriptions.length },
+          { key: 'nodes', label: '节点', count: nodes.length },
+        ]}
+        actions={section === 'nodes' && nodes.length > 0 ? <>{nodeFilters}{addButton}</> : addButton}
+      />
+      {section === 'subscriptions' ? (
+        <RequestState loading={subscriptionsLoading} error={subscriptionsError} hasData={subscriptions.length > 0} empty={!subscriptionsLoading && !subscriptionsError && subscriptions.length === 0} emptyDescription="暂无订阅源" onRetry={loadSubscriptions}>
+          {isMobile ? mobileSubscriptionList : <Table<CustomNodeSubscription>
+            rowKey="id"
+            className="um-table"
+            dataSource={subscriptions}
+            pagination={false}
+            virtual={subscriptions.length > MAX_VISIBLE_SUBSCRIPTIONS}
+            scroll={{
+              x: 720,
+              y: subscriptions.length > MAX_VISIBLE_SUBSCRIPTIONS ? SUBSCRIPTION_TABLE_SCROLL_HEIGHT : undefined,
+            }}
+            columns={[
+              {
+                title: '名称',
+                dataIndex: 'name',
+                ellipsis: true,
+                render: (value: string, subscription) => <span className="um-strong" title={subscription.url}>{value}</span>,
+              },
+              {
+                title: '分组',
+                dataIndex: 'group',
+                width: 140,
+                ellipsis: true,
+                render: (value: string) => value?.trim() ? <span className="muted">{value}</span> : <span className="faint">—</span>,
+              },
+              {
+                title: '节点',
+                dataIndex: 'node_count',
+                width: 80,
+                render: (value: number) => <span className="mono">{value}</span>,
+              },
+              {
+                title: '状态',
+                width: 110,
+                render: (_: unknown, subscription) => subscriptionStatus(subscription),
+              },
+              {
+                title: '最近同步',
+                width: 130,
+                render: (_: unknown, subscription) => (
+                  <span className="mono muted" title={subscription.last_sync_at ? new Date(subscription.last_sync_at).toLocaleString('zh-CN') : undefined}>
+                    {syncLabel(subscription)}
+                  </span>
+                ),
+              },
+              {
+                title: <span className="sr-only">操作</span>,
+                width: 112,
+                align: 'right',
+                fixed: 'right' as const,
+                render: (_: unknown, subscription) => subscriptionActions(subscription),
+              },
+            ]}
+            locale={{ emptyText: '暂无订阅源' }}
+          />}
         </RequestState>
-      </Card>
-      <Card
-        title="节点"
-        className="nodes-wide-card"
-        extra={<Button type="primary" size="small" icon={<PlusOutlined />} onClick={openNodeCreate}>新增节点</Button>}
-      >
+      ) : (
         <RequestState loading={loading} error={error} hasData={nodes.length > 0} empty={!loading && !error && nodes.length === 0} emptyDescription="暂无节点" onRetry={onNodesChange}>
-        <div className="custom-node-filter-bar">
-          <span className="custom-node-filter-label">分组筛选</span>
-          <Select
-            allowClear
-            showSearch
-            value={selectedGroup}
-            onChange={setSelectedGroup}
-            options={groupFilterOptions}
-            placeholder="全部分组（可搜索）"
-            optionFilterProp="label"
-            className="custom-node-group-filter"
-          />
-          <Input.Search
-            allowClear
-            value={nodeSearch}
-            onChange={(event) => setNodeSearch(event.target.value)}
-            placeholder="搜索节点名称"
-            className="custom-node-name-search"
-          />
-          <span className="custom-node-filter-count">显示 {filteredNodes.length} / {nodes.length} 个节点</span>
-        </div>
-        {isMobile ? mobileNodeList : <Table
-          rowKey="id"
-          size="small"
-          className="compact-rows"
-          dataSource={filteredNodes}
-          pagination={false}
-          virtual={filteredNodes.length > 20}
-          tableLayout="fixed"
-          scroll={{ x: 900, y: 420 }}
-          columns={nodeColumns}
-          onRow={(node) => ({
-            className: 'custom-node-clickable-row',
-            onClick: (event) => {
-              const target = event.target as HTMLElement
-              if (target.closest('.custom-node-row-action, button, input')) return
-              setDetailNode(node)
-            },
-          })}
-          locale={{ emptyText: nodeSearch.trim() ? '没有匹配的节点' : selectedGroup ? '当前分组筛选下没有节点' : '暂无节点。可粘贴朋友分享的链接（vless://、ss://、trojan:// 等），合并进订阅输出。' }}
-        />}
+          {isMobile ? mobileNodeList : <Table<CustomNode>
+            rowKey="id"
+            className="um-table"
+            dataSource={filteredNodes}
+            pagination={false}
+            virtual={filteredNodes.length > 20}
+            tableLayout="fixed"
+            scroll={{ x: 900, y: filteredNodes.length > 20 ? 560 : undefined }}
+            columns={nodeColumns}
+            onRow={(node) => ({
+              className: 'um-clickable-row',
+              onClick: (event) => {
+                const target = event.target as HTMLElement
+                if (target.closest('.custom-node-row-action, button, input')) return
+                setDetailNode(node)
+              },
+            })}
+            locale={{ emptyText: nodeSearch.trim() || selectedGroup ? '没有匹配的节点' : '暂无节点' }}
+          />}
         </RequestState>
-      </Card>
+      )}
 
       <Modal
         title={editingSubscription ? '编辑订阅' : '新增订阅'}
@@ -1626,42 +1639,44 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
         onCancel={() => setSubscriptionOpen(false)}
         okText={editingSubscription ? '保存' : '保存并同步'}
         confirmLoading={subscriptionSaving}
-        width={760}
+        className="um-modal"
+        width={MODAL_LG}
         destroyOnClose
       >
         <Form form={subscriptionForm} layout="vertical">
           <Form.Item name="name" label="名称" rules={[{ required: true, whitespace: true, message: '请输入订阅名称' }]}>
-            <Input placeholder="例如：机场 A" />
+            <Input placeholder="机场 A" />
           </Form.Item>
           <Form.Item name="url" label="订阅链接" rules={[{ required: true, whitespace: true, message: '请输入 HTTP(S) 订阅链接' }]}>
             <Input.TextArea rows={3} placeholder="https://example.com/sub" spellCheck={false} />
           </Form.Item>
-          <Form.Item name="group" label="节点分组" extra="同步出来的节点统一归入这个分组；完整分配给用户的订阅，后续新增节点会自动沿用该用户范围。单独分配节点时不会扩大用户权限。">
+          <Form.Item name="group" label="节点分组">
             <AutoComplete
-              placeholder="选择已有分组，或输入新分组名"
+              placeholder="机场 A"
               options={groupOptions}
               allowClear
               filterOption={(input, option) => (option?.value ?? '').toLowerCase().includes(input.toLowerCase())}
             />
           </Form.Item>
-          <Form.Item label="订阅处理规则" extra="节点重命名默认按普通文本匹配；需要正则时在参数前加 re:，支持 Go/RE2 和 $1 捕获组。去除协议、保留节点和去除节点均支持用逗号分隔多个参数。保留节点和去除节点按列表顺序执行，后面的规则可以覆盖前面的结果；过滤不会删除数据库记录。">
+          <div className="um-form-group">
+            <h4>处理规则</h4>
             <Form.List name="name_rewrite_rules">
               {(fields, { add, remove, move }) => (
                 <div>
                   {fields.length > 0 ? (
-                    <div className="name-rewrite-rule-header">
-                      <span>顺序</span>
-                      <span>规则操作</span>
-                      <span>参数</span>
-                      <span>替换为</span>
+                    <div className="um-rule-head">
+                      <span>#</span>
                       <span>操作</span>
+                      <span>匹配</span>
+                      <span>替换为</span>
+                      <span><span className="sr-only">调整</span></span>
                     </div>
                   ) : null}
                   {fields.map((field, index) => {
                     const action = subscriptionRules?.[field.name]?.action || 'rename'
-                    return <div className="name-rewrite-rule-row" key={field.key}>
-                      <span className="name-rewrite-rule-order">{index + 1}</span>
-                      <Form.Item {...field} name={[field.name, 'action']} className="name-rewrite-rule-action">
+                    return <div className="um-rule-row" key={field.key}>
+                      <span className="um-rule-order mono">{index + 1}</span>
+                      <Form.Item {...field} name={[field.name, 'action']} className="um-rule-action">
                         <Select
                           options={[
                             { value: 'rename', label: '节点重命名' },
@@ -1675,36 +1690,37 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
                         {...field}
                         name={[field.name, 'pattern']}
                         rules={[{ required: true, whitespace: true, message: action === 'exclude_protocol' ? '请输入协议' : '请输入匹配内容' }]}
-                        className="name-rewrite-rule-pattern"
+                        className="um-rule-pattern"
                       >
                         <Input
-                          placeholder={action === 'exclude_protocol' ? '协议，可多个：anytls,tuic' : action === 'include_node' ? '节点名称或地区，可多个：新加坡,HK' : action === 'exclude_node' ? '节点名称或地区，可多个：测试,US' : '名称文本，正则使用 re: 前缀'}
+                          aria-label="匹配"
+                          placeholder={action === 'exclude_protocol' ? 'anytls,tuic' : action === 'include_node' ? '新加坡,HK' : action === 'exclude_node' ? '测试,US' : '香港 或 re:^HK'}
                           maxLength={256}
                           spellCheck={false}
                         />
                       </Form.Item>
                       {action === 'rename' ? (
-                        <Form.Item {...field} name={[field.name, 'replacement']} className="name-rewrite-rule-replacement">
-                          <Input placeholder="替换为，例如：狮城" maxLength={512} spellCheck={false} />
+                        <Form.Item {...field} name={[field.name, 'replacement']} className="um-rule-replacement">
+                          <Input aria-label="替换为" placeholder="HK" maxLength={512} spellCheck={false} />
                         </Form.Item>
                       ) : (
-                        <span className="name-rewrite-rule-no-replacement">无需填写</span>
+                        <span className="um-rule-none faint">—</span>
                       )}
-                      <div className="name-rewrite-rule-actions">
+                      <div className="um-rule-actions ui-row-actions">
                         <Button type="text" size="small" icon={<UpOutlined />} title="上移" aria-label="上移规则" disabled={index === 0} onClick={() => move(index, index - 1)} />
                         <Button type="text" size="small" icon={<DownOutlined />} title="下移" aria-label="下移规则" disabled={index === fields.length - 1} onClick={() => move(index, index + 1)} />
-                        <Button type="text" size="small" danger icon={<DeleteOutlined />} title="删除" aria-label="删除规则" onClick={() => remove(field.name)} />
+                        <Button type="text" size="small" icon={<DeleteOutlined />} title="删除" aria-label="删除规则" onClick={() => remove(field.name)} />
                       </div>
                     </div>
                   })}
-                  <Button type="dashed" size="small" onClick={() => add({ action: 'rename', pattern: '', replacement: '', match_mode: 'text' })} disabled={fields.length >= 50} block>
-                    新增规则{fields.length >= 50 ? '（已达 50 条上限）' : ''}
+                  <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ action: 'rename', pattern: '', replacement: '', match_mode: 'text' })} disabled={fields.length >= 50} block>
+                    {fields.length >= 50 ? '已达 50 条上限' : '添加规则'}
                   </Button>
                 </div>
               )}
             </Form.List>
-          </Form.Item>
-          <div className="subscription-switch-row">
+          </div>
+          <div className="um-form-group um-switch-row">
             <Form.Item name="auto_update" label="自动更新" valuePropName="checked">
               <Switch />
             </Form.Item>
@@ -1717,35 +1733,34 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
 
       <Modal
         title={detailNode ? nodeDisplayName(detailNode) : '节点详情'}
+        className="um-modal"
         open={!!detailNode}
         onCancel={() => setDetailNode(null)}
         footer={<Button onClick={() => setDetailNode(null)}>关闭</Button>}
-        width={680}
+        width={MODAL_MD}
         destroyOnClose
       >
         {detailNode ? (
-          <Descriptions bordered size="small" column={1} labelStyle={{ width: 130 }}>
-              <Descriptions.Item label="来源">
-                {detailNode.subscription_id ? `订阅同步 · ${detailSubscription?.name || `订阅 #${detailNode.subscription_id}`}` : '手动节点'}
-              </Descriptions.Item>
-              <Descriptions.Item label="分组">{detailNode.group?.trim() || '未分组'}</Descriptions.Item>
-              <Descriptions.Item label="协议">{detailNode.detail?.protocol || detailNode.protocol || protocolOf(detailNode.link || '')}</Descriptions.Item>
-              <Descriptions.Item label="服务器">
-                {detailNode.detail?.address || detailNode.address || '—'}{(detailNode.detail?.port || detailNode.port) ? `:${detailNode.detail?.port || detailNode.port}` : ''}
-              </Descriptions.Item>
-              <Descriptions.Item label="URI 链接">
+          <dl className="ui-kv ui-card um-detail">
+            <div><dt>来源</dt><dd>{detailNode.subscription_id ? `订阅 · ${detailSubscription?.name || `#${detailNode.subscription_id}`}` : '手动添加'}</dd></div>
+            <div><dt>分组</dt><dd>{detailNode.group?.trim() || '未分组'}</dd></div>
+            <div><dt>协议</dt><dd>{detailNode.detail?.protocol || detailNode.protocol || protocolOf(detailNode.link || '')}</dd></div>
+            <div><dt>服务器</dt><dd className="mono">{nodeAddress(detailNode) || '—'}</dd></div>
+            <div>
+              <dt>URI</dt>
+              <dd>
                 {detailNode.detail?.uri ? (
-                  <Typography.Text className="custom-node-detail-value" copyable={{ text: detailNode.detail.uri }}>{detailNode.detail.uri}</Typography.Text>
-                ) : (
-                  <Typography.Text type="secondary">该协议无通用 URI</Typography.Text>
-                )}
-              </Descriptions.Item>
-              {detailParams.map(([label, value]) => (
-                <Descriptions.Item label={label} key={label}>
-                  <Typography.Text className="custom-node-detail-value" copyable={{ text: value }}>{value}</Typography.Text>
-                </Descriptions.Item>
-              ))}
-            </Descriptions>
+                  <Typography.Text className="um-detail-value mono" copyable={{ text: detailNode.detail.uri }}>{detailNode.detail.uri}</Typography.Text>
+                ) : <span className="faint">—</span>}
+              </dd>
+            </div>
+            {detailParams.map(([label, value]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd><Typography.Text className="um-detail-value mono" copyable={{ text: value }}>{value}</Typography.Text></dd>
+              </div>
+            ))}
+          </dl>
         ) : null}
       </Modal>
 
@@ -1759,24 +1774,20 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
         okText="保存"
         cancelText="取消"
         destroyOnClose
-        width={560}
+        className="um-modal"
+        width={MODAL_MD}
         style={{ maxWidth: 'calc(100vw - 16px)', top: 24 }}
-        styles={{ body: { maxHeight: 'calc(100vh - 200px)', overflowY: 'auto', paddingInline: 4 } }}
       >
         <Form form={nodeForm} layout="vertical">
-          <Form.Item name="group" label="分组" extra="可选：给节点分组（如机场名），便于列表筛选与批量管理。">
+          <Form.Item name="group" label="分组">
             <AutoComplete
-              placeholder="选择已有分组，或输入新分组名"
+              placeholder="朋友分享"
               options={groupOptions}
               allowClear
               filterOption={(input, option) => (option?.value ?? '').toLowerCase().includes(input.toLowerCase())}
             />
           </Form.Item>
-          <Form.Item
-            name="link"
-            label="URI 链接（可选）"
-            extra={hasNodeURI ? '已使用 URI 链接，保存时将自动解析节点参数。' : '粘贴单个 vless://、ss://、trojan:// 等链接；留空则在下方手动填写。'}
-          >
+          <Form.Item name="link" label="URI 链接">
             <Input.TextArea
               placeholder="vless://..."
               autoSize={{ minRows: 2, maxRows: 4 }}
@@ -1802,14 +1813,16 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
                   ]}
                 />
               </Form.Item>
-              <Space.Compact style={{ width: '100%', marginBottom: 16 }}>
-                <Form.Item name="address" noStyle rules={[{ required: true, message: '请填写地址' }]}>
-                  <Input placeholder="地址（域名或 IP）" style={{ width: '70%' }} />
-                </Form.Item>
-                <Form.Item name="port" noStyle rules={[{ required: true, message: '请填写端口' }]}>
-                  <InputNumber min={1} max={65535} placeholder="端口" style={{ width: '30%' }} />
-                </Form.Item>
-              </Space.Compact>
+              <Form.Item label="地址 / 端口" required>
+                <Space.Compact style={{ width: '100%' }}>
+                  <Form.Item name="address" noStyle rules={[{ required: true, message: '请填写地址' }]}>
+                    <Input aria-label="地址" placeholder="example.com" style={{ width: '70%' }} />
+                  </Form.Item>
+                  <Form.Item name="port" noStyle rules={[{ required: true, message: '请填写端口' }]}>
+                    <InputNumber aria-label="端口" min={1} max={65535} placeholder="443" style={{ width: '30%' }} />
+                  </Form.Item>
+                </Space.Compact>
+              </Form.Item>
 
               {HAS_UUID.includes(nodeProtocol) && (
                 <Form.Item name="uuid" label="UUID" rules={[{ required: true, message: '请填写 UUID' }]}>
@@ -1818,7 +1831,7 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
               )}
               {HAS_PASSWORD.includes(nodeProtocol) && (
                 <Form.Item name="password" label={nodeProtocol === 'shadowsocks' ? '密码 / PSK' : '密码'} rules={[{ required: true, message: '请填写密码' }]}>
-                  <Input.Password placeholder={nodeProtocol === 'shadowsocks' ? 'SS 密码（2022 算法为 Base64 密钥）' : '密码'} />
+                  <Input.Password />
                 </Form.Item>
               )}
               {nodeProtocol === 'shadowsocks' && (
@@ -1867,13 +1880,14 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
                 </Form.Item>
               )}
               {nodeProtocol === 'shadowsocks' && (
-                <Form.Item name="ss_plugin" label="SIP002 Plugin" extra="如 obfs-local;obfs=http;obfs-host=example.com">
+                <Form.Item name="ss_plugin" label="SIP002 Plugin">
                   <Input placeholder="obfs-local;obfs=http" />
                 </Form.Item>
               )}
 
               {HAS_TLS.includes(nodeProtocol) && (
-                <>
+                <div className="um-form-group">
+                  <h4>TLS</h4>
                   <Form.Item name="tls_mode" label="TLS 模式">
                     <Select
                       options={
@@ -1890,11 +1904,11 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
                     />
                   </Form.Item>
                   <Form.Item name="sni" label="SNI">
-                    <Input placeholder="TLS/REALITY 服务器名" />
+                    <Input placeholder="example.com" />
                   </Form.Item>
                   {(nodeProtocol === 'vless' || nodeProtocol === 'vmess' || nodeProtocol === 'trojan') && (
                     <>
-                      <Form.Item name="alpn" label="ALPN" extra="多个用英文逗号分隔，如 h2,http/1.1">
+                      <Form.Item name="alpn" label="ALPN">
                         <Input placeholder="h2, http/1.1" />
                       </Form.Item>
                       <Form.Item name="fingerprint" label="uTLS 指纹">
@@ -1910,21 +1924,22 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
                     </Form.Item>
                   )}
                   {nodeTLSMode === 'reality' && (
-                    <Form.Item name="pbk" label="REALITY 公钥 (pbk)" rules={[{ required: true, message: '请填写公钥' }]}>
-                      <Input placeholder="REALITY public key" />
+                    <Form.Item name="pbk" label="REALITY 公钥" rules={[{ required: true, message: '请填写公钥' }]}>
+                      <Input />
                     </Form.Item>
                   )}
                   {nodeTLSMode === 'reality' && (
-                    <Form.Item name="sid" label="REALITY short id">
-                      <Input placeholder="留空默认 0000000000000000" />
+                    <Form.Item name="sid" label="REALITY Short ID">
+                      <Input placeholder="0000000000000000" />
                     </Form.Item>
                   )}
-                </>
+                </div>
               )}
 
               {HAS_TRANSPORT.includes(nodeProtocol) && (
-                <>
-                  <Form.Item name="transport" label="传输">
+                <div className="um-form-group">
+                  <h4>传输</h4>
+                  <Form.Item name="transport" label="传输协议">
                     <Select
                       options={[
                         { value: 'tcp', label: 'TCP' },
@@ -1943,11 +1958,12 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
                       </Form.Item>
                     </>
                   )}
-                </>
+                </div>
               )}
 
               {HAS_BANDWIDTH.includes(nodeProtocol) && (
-                <>
+                <div className="um-form-group">
+                  <h4>混淆与带宽</h4>
                   <Form.Item name="obfs" label="混淆类型">
                     <Select
                       options={[
@@ -1958,23 +1974,23 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
                     />
                   </Form.Item>
                   <Form.Item name="obfs_password" label="混淆密码">
-                    <Input.Password placeholder={`${nodeObfsType || 'salamander'} 混淆密码`} />
+                    <Input.Password />
                   </Form.Item>
                   {nodeProtocol === 'hysteria2' && nodeObfsType === 'gecko' && (
-                    <Space style={{ display: 'flex' }} align="baseline">
-                      <Form.Item name="gecko_min_packet_size" label="最小包大小" style={{ flex: 1 }}><InputNumber min={512} precision={0} style={{ width: '100%' }} /></Form.Item>
-                      <Form.Item name="gecko_max_packet_size" label="最大包大小" style={{ flex: 1 }}><InputNumber min={512} precision={0} style={{ width: '100%' }} /></Form.Item>
-                    </Space>
+                    <div className="um-form-grid">
+                      <Form.Item name="gecko_min_packet_size" label="最小包大小"><InputNumber min={512} precision={0} style={{ width: '100%' }} /></Form.Item>
+                      <Form.Item name="gecko_max_packet_size" label="最大包大小"><InputNumber min={512} precision={0} style={{ width: '100%' }} /></Form.Item>
+                    </div>
                   )}
-                  <Space size={16}>
+                  <div className="um-form-grid">
                     <Form.Item name="up_mbps" label="上行 Mbps">
-                      <InputNumber min={1} style={{ width: 110 }} placeholder="0" />
+                      <InputNumber min={1} style={{ width: '100%' }} placeholder="100" />
                     </Form.Item>
                     <Form.Item name="down_mbps" label="下行 Mbps">
-                      <InputNumber min={1} style={{ width: 110 }} placeholder="0" />
+                      <InputNumber min={1} style={{ width: '100%' }} placeholder="100" />
                     </Form.Item>
-                  </Space>
-                </>
+                  </div>
+                </div>
               )}
 
               {nodeProtocol === 'snell' && (
@@ -1995,16 +2011,15 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
                       }),
                     ]}
                   >
-                    <Input placeholder="Snell 预共享密钥（v6 需 12-255 字节）" />
+                    <Input />
                   </Form.Item>
-                  <Space size={16}>
+                  <div className="um-form-grid">
                     <Form.Item name="snell_version" label="版本">
-                      <Select style={{ width: 110 }} options={[{ value: 5, label: 'v5' }, { value: 6, label: 'v6' }]} />
+                      <Select options={[{ value: 5, label: 'v5' }, { value: 6, label: 'v6' }]} />
                     </Form.Item>
                     {nodeSnellVersion === 6 ? (
-                      <Form.Item name="snell_mode" label="模式（v6）">
+                      <Form.Item name="snell_mode" label="模式">
                         <Select
-                          style={{ width: 140 }}
                           allowClear
                           options={[
                             { value: '', label: '不指定' },
@@ -2015,34 +2030,34 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
                       </Form.Item>
                     ) : (
                       <>
-                        <Form.Item name="snell_obfs_mode" label="混淆（v5）">
-                          <Select style={{ width: 120 }} options={[{ value: 'none', label: '无' }, { value: 'http', label: 'http' }, { value: 'tls', label: 'tls' }]} />
+                        <Form.Item name="snell_obfs_mode" label="混淆">
+                          <Select options={[{ value: 'none', label: '无' }, { value: 'http', label: 'http' }, { value: 'tls', label: 'tls' }]} />
                         </Form.Item>
                         {(nodeSnellObfsMode === 'http' || nodeSnellObfsMode === 'tls') && (
-                          <Form.Item name="snell_obfs_host" label="obfs_host">
-                            <Input placeholder="默认 bing.com" />
+                          <Form.Item name="snell_obfs_host" label="混淆 Host">
+                            <Input placeholder="bing.com" />
                           </Form.Item>
                         )}
                       </>
                     )}
-                  </Space>
+                  </div>
                 </>
               )}
               {nodeProtocol === 'mixed' && (
                 <>
-                  <Form.Item name="username" label="用户名（可选）">
-                    <Input placeholder="用户名" />
+                  <Form.Item name="username" label="用户名">
+                    <Input />
                   </Form.Item>
-                  <Form.Item name="password" label="密码（可选）">
-                    <Input.Password placeholder="密码" />
+                  <Form.Item name="password" label="密码">
+                    <Input.Password />
                   </Form.Item>
                 </>
               )}
             </>
           )}
           {(!hasNodeURI || editingNode) && (
-            <Form.Item name="name" label="显示名称（留空自动生成）">
-              <Input placeholder="例如：朋友的 HK 节点" />
+            <Form.Item name="name" label="显示名称">
+              <Input placeholder="HK 01" />
             </Form.Item>
           )}
           <Form.Item name="enabled" label="启用" valuePropName="checked">

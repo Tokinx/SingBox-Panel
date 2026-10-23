@@ -1,214 +1,125 @@
-import { useEffect, useRef, useState } from 'react'
-import { Button, Drawer, Grid, Layout, Menu } from 'antd'
-import {
-  ApartmentOutlined,
-  AreaChartOutlined,
-  CloudServerOutlined,
-  FileTextOutlined,
-  LinkOutlined,
-  LogoutOutlined,
-  MenuOutlined,
-  SettingOutlined,
-  TeamOutlined,
-} from '@ant-design/icons'
-import { Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { logoutSession } from '../api'
+import { useEffect, useState } from 'react'
+import { Dropdown } from 'antd'
+import type { MenuProps } from 'antd'
+import { CheckOutlined, DesktopOutlined, DownloadOutlined, DownOutlined, LogoutOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons'
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { listServers, logoutSession } from '../api'
 import { useAuth } from '../store'
-import InstallAppButton from './InstallAppButton'
-import ThemeSelector from './ThemeSelector'
+import { useInstallPrompt } from '../pwa'
+import { getConsolePalette, parseConsoleTheme } from '../theme'
+import { useThemePreference } from '../themePreference'
+import type { Server } from '../types'
+import logoLight from '../assets/logo.svg'
+import logoDark from '../assets/logo-dark.svg'
 
-const { Header, Sider, Content } = Layout
-
-function Brand() {
-  const nav = useNavigate()
-  const { user } = useAuth()
-  const targetPath = user?.role === 'admin' ? '/admin/servers' : '/dashboard'
-  return (
-    <button
-      type="button"
-      onClick={() => nav(targetPath)}
-      className="console-brand"
-      title="返回首页"
-      aria-label="返回首页"
-    >
-      SingBox<span> Panel</span>
-    </button>
-  )
+function BrandMark({ className }: { className: string }) {
+  return <span className={className} aria-hidden="true"><img className="brand-mark-light" src={logoLight} alt="" /><img className="brand-mark-dark" src={logoDark} alt="" /></span>
 }
 
-function UserMenu({ compact, showTheme = false }: { compact?: boolean; showTheme?: boolean }) {
-  const { user, logout } = useAuth()
-  const nav = useNavigate()
-  const username = user?.email || '用户'
-  const roleLabel = user?.role === 'admin' ? '管理员' : '用户'
-  return (
-    <div className={`console-account${compact ? ' is-compact' : ''}`} role="group" aria-label={`当前账号：${username}，${roleLabel}`}>
-      {user?.role === 'admin' && (
-        <Button
-          className="console-subscription-link"
-          icon={<LinkOutlined />}
-          title="我的订阅"
-          aria-label="我的订阅"
-          onClick={() => nav('/dashboard')}
-        >
-          {compact ? '' : '订阅'}
-        </Button>
-      )}
-      <div className="console-account-actions">
-        <div className="console-account-identity" title={`${username} · ${roleLabel}`}>
-          <span className="console-account-avatar" aria-hidden="true">{username.slice(0, 1).toUpperCase()}</span>
-          {!compact && <span className="console-account-name">{username}</span>}
-        </div>
-        <span className="console-account-divider" aria-hidden="true" />
-        <InstallAppButton compact={compact} />
-        {showTheme && <ThemeSelector scope={user?.role === 'admin' ? 'admin' : 'user'} variant="account" compact={compact} />}
-        {showTheme && <span className="console-account-divider" aria-hidden="true" />}
-        <Button
-          type="text"
-          className="console-logout"
-          icon={<LogoutOutlined />}
-          title="退出登录"
-          aria-label="退出登录"
-          onClick={() => {
-            void logoutSession()
-              .catch(() => undefined)
-              .finally(() => {
-                logout()
-                nav('/login')
-              })
-          }}
-        >
-          {compact ? '' : '退出'}
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-function RouteContent() {
-  const { pathname } = useLocation()
-  const ref = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const media = window.matchMedia('(prefers-reduced-motion: reduce)')
-    if (media.matches || !ref.current?.animate) return
-    const animation = ref.current.animate(
-      [{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'translateY(0)' }],
-      { duration: 240, easing: 'cubic-bezier(0.2, 0.7, 0.2, 1)' },
-    )
-    const stop = () => { if (media.matches) animation.cancel() }
-    media.addEventListener('change', stop)
-    return () => {
-      animation.cancel()
-      media.removeEventListener('change', stop)
-    }
-  }, [pathname])
-
-  return <div className="console-route" ref={ref}><Outlet /></div>
-}
-
-const ADMIN_ITEMS = [
-  { key: '/admin/servers', icon: <CloudServerOutlined />, label: '主机' },
-  { key: '/admin/traffic', icon: <AreaChartOutlined />, label: '流量' },
-  { key: '/admin/logs', icon: <FileTextOutlined />, label: '日志' },
-  { key: '/admin/users', icon: <TeamOutlined />, label: '用户' },
-  { key: '/admin/external-nodes', icon: <ApartmentOutlined />, label: '节点' },
-  { key: '/admin/settings', icon: <SettingOutlined />, label: '设置' },
+const ADMIN_NAV = [
+  { to: '/admin/servers', label: '服务器' },
+  { to: '/admin/traffic', label: '流量' },
+  { to: '/admin/logs', label: '日志' },
+  { to: '/admin/users', label: '用户' },
+  { to: '/admin/external-nodes', label: '节点' },
+  { to: '/dashboard', label: '订阅' },
+  { to: '/admin/settings', label: '设置' },
 ]
+
+/** Breadcrumb server switcher shown while viewing one server. */
+function ServerSwitcher({ id }: { id: number }) {
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
+  const [servers, setServers] = useState<Server[]>([])
+  const [failed, setFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
+  // The list only feeds names and online dots, so load it once per visit to the
+  // detail pages and retry when the menu is opened after a failure.
+  useEffect(() => {
+    const controller = new AbortController()
+    setFailed(false)
+    listServers(controller.signal).then(setServers).catch(() => { if (!controller.signal.aborted) setFailed(true) })
+    return () => controller.abort()
+  }, [attempt])
+  const current = servers.find((s) => s.id === id)
+  const section = pathname.split('/')[4]
+  const items: MenuProps['items'] = servers.map((s) => ({
+    key: String(s.id),
+    label: <span className="app-switch-item"><i className={`app-dot${s.online ? '' : ' is-off'}`} />{s.name}{s.id === id && <CheckOutlined className="app-switch-check" />}</span>,
+  }))
+  return <>
+    <span className="app-crumb-sep" aria-hidden="true">/</span>
+    <Dropdown trigger={['click']} onOpenChange={(open) => { if (open && failed) setAttempt((n) => n + 1) }} menu={{ items: items?.length ? items : [{ key: 'empty', disabled: true, label: failed ? '加载失败，请重试' : '加载中…' }], onClick: ({ key }) => { if (key !== 'empty') navigate(`/admin/servers/${key}${section ? `/${section}` : ''}`) } }}>
+      <button type="button" className="app-switch" aria-label="切换服务器">
+        <i className={`app-dot${current && !current.online ? ' is-off' : ''}`} />
+        <span className="app-switch-name">{current?.name ?? (failed ? '服务器' : '…')}</span>
+        <DownOutlined className="app-switch-chev" />
+      </button>
+    </Dropdown>
+  </>
+}
+
+function ThemeButton({ scope }: { scope: 'admin' | 'user' }) {
+  const { themeId, resolvedThemeId, setTheme } = useThemePreference(scope)
+  const icon = themeId === 'auto' ? <DesktopOutlined /> : resolvedThemeId === 'dark' ? <MoonOutlined /> : <SunOutlined />
+  return <Dropdown trigger={['click']} placement="bottomRight" menu={{
+    selectable: true,
+    selectedKeys: [themeId],
+    items: [
+      { key: 'auto', icon: <DesktopOutlined />, label: '跟随系统' },
+      { key: 'blue', icon: <SunOutlined />, label: '浅色' },
+      { key: 'dark', icon: <MoonOutlined />, label: '深色' },
+    ],
+    onClick: ({ key }) => setTheme(parseConsoleTheme(key)),
+  }}>
+    <button type="button" className="app-icon-btn" aria-label={`主题：${themeId === 'auto' ? '跟随系统' : getConsolePalette(resolvedThemeId).name}`}>{icon}</button>
+  </Dropdown>
+}
+
+/** Theme, account name and sign-out share one bordered toolbar. */
+function AccountBar({ scope }: { scope: 'admin' | 'user' }) {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+  const { canInstall, install } = useInstallPrompt()
+  const [leaving, setLeaving] = useState(false)
+  const name = user?.email || '用户'
+  const role = user?.role === 'admin' ? '管理员' : '用户'
+  const signOut = () => {
+    setLeaving(true)
+    void logoutSession().catch(() => undefined).finally(() => { logout(); navigate('/login') })
+  }
+  return <div className="app-account" role="group" aria-label={`当前账号：${name}，${role}`}>
+    <span className="app-account-name" title={`${name} · ${role}`}>{name}</span>
+    <span className="app-account-sep" aria-hidden="true" />
+    <ThemeButton scope={scope} />
+    {canInstall && <button type="button" className="app-icon-btn" aria-label="安装到桌面" title="安装到桌面" onClick={() => void install().catch(() => undefined)}><DownloadOutlined /></button>}
+    <span className="app-account-sep" aria-hidden="true" />
+    <button type="button" className="app-icon-btn" aria-label="退出登录" title="退出登录" onClick={signOut} disabled={leaving}><LogoutOutlined /></button>
+  </div>
+}
 
 export default function AppLayout() {
   const { user } = useAuth()
-  const nav = useNavigate()
-  const loc = useLocation()
-  const screens = Grid.useBreakpoint()
-  const isMobile = !screens.md
-  const [drawerOpen, setDrawerOpen] = useState(false)
+  const { pathname } = useLocation()
+  const admin = user?.role === 'admin'
+  const serverMatch = pathname.match(/^\/admin\/servers\/(\d+)/)
+  const home = admin ? '/admin/servers' : '/dashboard'
+  const pageKey = pathname.split('/').slice(0, 4).join('/')
+  useEffect(() => { window.scrollTo(0, 0) }, [pageKey])
 
-  // ---- regular user: single-page layout, no sidebar ----
-  if (user?.role !== 'admin') {
-    return (
-      <Layout className="console-shell console-user-shell">
-        <Header className="console-header console-user-header">
-          <Brand />
-          <UserMenu compact={isMobile} showTheme />
-        </Header>
-        <Content className="console-content">
-          <div className="console-user-content">
-            <RouteContent />
-          </div>
-        </Content>
-      </Layout>
-    )
-  }
-
-  // ---- admin ----
-  const selected = ADMIN_ITEMS.find((i) => loc.pathname.startsWith(i.key))?.key ?? loc.pathname
-  const pageTitle = loc.pathname === '/dashboard' ? '订阅' : (ADMIN_ITEMS.find((i) => i.key === selected)?.label || '控制台')
-  const menu = (
-    <Menu
-      theme="light"
-      className="console-nav"
-      mode="inline"
-      selectedKeys={[selected]}
-      items={ADMIN_ITEMS}
-      onClick={(e) => {
-        nav(e.key)
-        setDrawerOpen(false)
-      }}
-      style={{ borderInlineEnd: 0 }}
-    />
-  )
-
-  if (isMobile) {
-    return (
-      <Layout className="console-shell console-mobile-shell">
-        <Header className="console-header console-mobile-header">
-          <Button type="text" icon={<MenuOutlined />} onClick={() => setDrawerOpen(true)} title="打开导航菜单" aria-label="打开导航菜单" />
-          <div className="console-mobile-brand">
-            <Brand />
-          </div>
-          <UserMenu compact showTheme />
-        </Header>
-        <Drawer
-          placement="left"
-          rootClassName="console-nav-drawer"
-          open={drawerOpen}
-          onClose={() => setDrawerOpen(false)}
-          width={248}
-          title={<Brand />}
-          styles={{ body: { padding: '12px 10px', display: 'flex', flexDirection: 'column' } }}
-        >
-          {menu}
-        </Drawer>
-        <Content className="console-content">
-          {selected !== '/dashboard' && <h1 className="console-mobile-title">{pageTitle}</h1>}
-          <RouteContent />
-        </Content>
-      </Layout>
-    )
-  }
-
-  return (
-    <Layout className="console-shell">
-      <Sider
-        theme="light"
-        width={232}
-        className="console-sidebar"
-      >
-        <div className="console-sidebar-brand">
-          <Brand />
+  return <div className="app-shell">
+    <header className="app-header">
+      <div className="app-bar">
+        <Link to={home} className="app-brand"><BrandMark className="app-logo" /><span className="app-brand-name">SingBox Panel</span></Link>
+        {serverMatch && <ServerSwitcher id={Number(serverMatch[1])} />}
+        <div className="app-bar-right">
+          <AccountBar scope={admin ? 'admin' : 'user'} />
         </div>
-        {menu}
-      </Sider>
-      <Layout className="console-main">
-        <Header className="console-header">
-          <div className="console-location"><span>管理控制台</span><span aria-hidden="true">/</span><h1>{pageTitle}</h1></div>
-          <UserMenu showTheme />
-        </Header>
-        <Content className="console-content">
-          <RouteContent />
-        </Content>
-      </Layout>
-    </Layout>
-  )
+      </div>
+      {admin && <nav className="app-nav" aria-label="主导航">
+        {ADMIN_NAV.map((item) => <NavLink key={item.to} to={item.to} className={({ isActive }) => `app-nav-link${isActive ? ' is-active' : ''}`}>{item.label}</NavLink>)}
+      </nav>}
+    </header>
+    <main className="app-main"><div className="app-route"><Outlet /></div></main>
+  </div>
 }

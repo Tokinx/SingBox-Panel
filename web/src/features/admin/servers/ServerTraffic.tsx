@@ -1,12 +1,14 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type React from 'react'
-import { Button, Card, Grid, Segmented, Space, Table, Tag, Tooltip, Typography, message } from 'antd'
+import { Button, Grid, Segmented, Table, message } from 'antd'
 import { ReloadOutlined } from '@ant-design/icons'
 import { errMsg, getServerTraffic, isCanceledRequest } from '../../../api'
 import type { TrafficPoint, TrafficPortSeries, TrafficRange, TrafficSeries } from '../../../types'
 import { formatBytes } from '../../../util'
 import { useSSE } from '../../../useSSE'
 import type { SSEMessage } from '../../../useSSE'
+import { PageHeader, Section, Stats } from '../../../ui/Page'
+import '../../../styles/traffic-logs.css'
 
 function rate(n: number): string {
   return `${formatBytes(n)}/s`
@@ -30,39 +32,53 @@ function pointLabel(time: string, range: TrafficRange): string {
   return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
 }
 
+// Axis labels use at most one decimal so they fit the left gutter.
 function axisBytes(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return '0 B'
   if (n < 1024) return `${Math.round(n)} B`
-  return formatBytes(n)
+  const units = ['KB', 'MB', 'GB', 'TB', 'PB']
+  let value = n / 1024
+  let unit = 0
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024
+    unit += 1
+  }
+  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`
 }
 
 const TRAFFIC_SERIES = [
-  { key: 'download' as const, className: 'traffic-line-download', legendClass: 'traffic-legend-download', label: '下载' },
-  { key: 'upload' as const, className: 'traffic-line-upload', legendClass: 'traffic-legend-upload', label: '上传' },
+  { key: 'download' as const, className: 'tr-line-download', legendClass: 'tr-legend-download', label: '下载' },
+  { key: 'upload' as const, className: 'tr-line-upload', legendClass: 'tr-legend-upload', label: '上传' },
 ]
 
-// Keep the traffic table's protocol tags visually aligned with the node
-// assignment and management views.
-const PROTOCOL_TAGS: Record<string, { label: string; color: string }> = {
-  vless: { label: 'VLESS', color: 'blue' },
-  vmess: { label: 'VMess', color: 'purple' },
-  ss: { label: 'SS', color: 'green' },
-  shadowsocks: { label: 'SS', color: 'green' },
-  trojan: { label: 'Trojan', color: 'geekblue' },
-  hysteria2: { label: 'Hysteria2', color: 'cyan' },
-  hysteria: { label: 'Hysteria', color: 'cyan' },
-  tuic: { label: 'TUIC', color: 'orange' },
-  anytls: { label: 'AnyTLS', color: 'magenta' },
-  socks: { label: 'SOCKS', color: 'default' },
-  socks5: { label: 'SOCKS5', color: 'default' },
-  snell: { label: 'Snell', color: 'gold' },
-  mixed: { label: 'Mixed', color: 'volcano' },
+const PROTOCOL_LABELS: Record<string, string> = {
+  vless: 'VLESS',
+  vmess: 'VMess',
+  ss: 'SS',
+  shadowsocks: 'SS',
+  trojan: 'Trojan',
+  hysteria2: 'Hysteria2',
+  hysteria: 'Hysteria',
+  tuic: 'TUIC',
+  anytls: 'AnyTLS',
+  socks: 'SOCKS',
+  socks5: 'SOCKS5',
+  snell: 'Snell',
+  mixed: 'Mixed',
 }
 
+// Neutral protocol pill (design A has no coloured tags).
 export function ProtocolTag({ type }: { type: string }) {
   const protocol = type.trim().toLowerCase()
-  const tag = PROTOCOL_TAGS[protocol]
-  return <Tag color={tag?.color}>{tag?.label || type}</Tag>
+  return <span className="ui-tag">{PROTOCOL_LABELS[protocol] || type}</span>
+}
+
+function TrafficLegend() {
+  return (
+    <div className="tr-legend">
+      {TRAFFIC_SERIES.map((item) => <span key={item.key}><i className={item.legendClass} />{item.label}</span>)}
+    </div>
+  )
 }
 
 type TrafficChartMode = 'rate' | 'usage'
@@ -120,8 +136,8 @@ export const TrafficTrend = memo(function TrafficTrend({
   }, [])
 
   const height = 250
-  const left = width < 260 ? 40 : 52
-  const right = width < 260 ? 8 : 16
+  const left = width < 260 ? 44 : 56
+  const right = width < 260 ? 18 : 26
   const top = 18
   const bottom = 34
   const chartWidth = Math.max(1, width - left - right)
@@ -175,7 +191,7 @@ export const TrafficTrend = memo(function TrafficTrend({
     `${formatBytes(chart.valueFor(point, key))}${mode === 'rate' ? '/s' : ''}`
 
   return (
-    <div className="traffic-chart" ref={containerRef}>
+    <div className="tr-chart" ref={containerRef}>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${width} ${height}`}
@@ -190,38 +206,69 @@ export const TrafficTrend = memo(function TrafficTrend({
       >
         {chart.gridLines.map(({ key, y: gridY, value }) => (
           <g key={key}>
-            <line x1={left} x2={width - right} y1={gridY} y2={gridY} className="traffic-grid-line" />
-            <text x={left - 8} y={gridY + 4} textAnchor="end" className="traffic-axis-label">{axisBytes(value)}</text>
+            <line x1={left} x2={width - right} y1={gridY} y2={gridY} className="tr-grid-line" />
+            <text x={left - 8} y={gridY + 4} textAnchor="end" className="tr-axis-label">{axisBytes(value)}</text>
           </g>
         ))}
+        {points.length > 1 && (
+          <polygon
+            points={`${chart.x(0)},${top + chartHeight} ${chart.line('download')} ${chart.x(points.length - 1)},${top + chartHeight}`}
+            className="tr-area"
+          />
+        )}
         {points.length > 0 && TRAFFIC_SERIES.map((item) => (
-          <polyline key={item.key} points={chart.line(item.key)} className={`traffic-line ${item.className}`} />
+          <polyline key={item.key} points={chart.line(item.key)} className={`tr-line ${item.className}`} />
         ))}
         {chart.labels.map(({ index, text }) => (
-          <text key={index} x={chart.x(index)} y={height - 10} textAnchor="middle" className="traffic-axis-label">{text}</text>
+          <text key={index} x={chart.x(index)} y={height - 10} textAnchor="middle" className="tr-axis-label">{text}</text>
         ))}
         {activeIndex !== null && activePoint && (
-          <g className="traffic-tooltip" pointerEvents="none">
-            <line x1={chart.x(activeIndex)} x2={chart.x(activeIndex)} y1={top} y2={top + chartHeight} className="traffic-crosshair" />
-            <circle cx={chart.x(activeIndex)} cy={chart.y(chart.valueFor(activePoint, TRAFFIC_SERIES[0].key))} r="4" className={`traffic-point ${TRAFFIC_SERIES[0].className}`} />
-            <circle cx={chart.x(activeIndex)} cy={chart.y(chart.valueFor(activePoint, TRAFFIC_SERIES[1].key))} r="4" className={`traffic-point ${TRAFFIC_SERIES[1].className}`} />
-            <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} rx="8" className="traffic-tooltip-box" />
-            <text x={tooltipX + 12} y={tooltipY + 19} className="traffic-tooltip-time">{tooltipTime(activePoint.time, range)}</text>
-            <text x={tooltipX + 12} y={tooltipY + 43} className="traffic-tooltip-value">{TRAFFIC_SERIES[0].label}　{valueLabel(activePoint, TRAFFIC_SERIES[0].key)}</text>
-            <text x={tooltipX + 12} y={tooltipY + 64} className="traffic-tooltip-value">{TRAFFIC_SERIES[1].label}　{valueLabel(activePoint, TRAFFIC_SERIES[1].key)}</text>
+          <g className="tr-tooltip" pointerEvents="none">
+            <line x1={chart.x(activeIndex)} x2={chart.x(activeIndex)} y1={top} y2={top + chartHeight} className="tr-crosshair" />
+            <circle cx={chart.x(activeIndex)} cy={chart.y(chart.valueFor(activePoint, TRAFFIC_SERIES[0].key))} r="4" className={`tr-point ${TRAFFIC_SERIES[0].className}`} />
+            <circle cx={chart.x(activeIndex)} cy={chart.y(chart.valueFor(activePoint, TRAFFIC_SERIES[1].key))} r="4" className={`tr-point ${TRAFFIC_SERIES[1].className}`} />
+            <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} rx="8" className="tr-tooltip-box" />
+            <text x={tooltipX + 12} y={tooltipY + 19} className="tr-tooltip-time">{tooltipTime(activePoint.time, range)}</text>
+            <text x={tooltipX + 12} y={tooltipY + 43} className="tr-tooltip-value">{TRAFFIC_SERIES[0].label}　{valueLabel(activePoint, TRAFFIC_SERIES[0].key)}</text>
+            <text x={tooltipX + 12} y={tooltipY + 64} className="tr-tooltip-value">{TRAFFIC_SERIES[1].label}　{valueLabel(activePoint, TRAFFIC_SERIES[1].key)}</text>
           </g>
         )}
       </svg>
-      <div className="traffic-legend">
-        {TRAFFIC_SERIES.map((item) => <span key={item.key}><i className={item.legendClass} />{item.label}</span>)}
-      </div>
     </div>
   )
 })
 
+type LiveRate = { upload: number; download: number; connected: boolean }
+
+// Tiny external store so the headline rate cell can follow LiveChart's SSE
+// samples without re-rendering the history chart or the port table.
+function createLiveRateStore() {
+  let value: LiveRate = { upload: 0, download: 0, connected: false }
+  const listeners = new Set<() => void>()
+  return {
+    get: () => value,
+    set: (next: LiveRate) => {
+      if (next.upload === value.upload && next.download === value.download && next.connected === value.connected) return
+      value = next
+      listeners.forEach((listener) => listener())
+    },
+    subscribe: (listener: () => void) => {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
+  }
+}
+type LiveRateStore = ReturnType<typeof createLiveRateStore>
+
+function LiveRateValue({ store, part }: { store: LiveRateStore; part: 'download' | 'upload' }) {
+  const live = useSyncExternalStore(store.subscribe, store.get, store.get)
+  if (part === 'upload') return <>{live.connected ? `↑ ${rate(live.upload)}` : '连接中…'}</>
+  return <>↓ {rate(live.download)}</>
+}
+
 // LiveChart owns its own SSE subscription and rolling window so a 3s traffic
 // sample only re-renders this panel, never the historical chart or port table.
-const LiveChart = memo(function LiveChart({ serverId }: { serverId: number }) {
+const LiveChart = memo(function LiveChart({ serverId, rateStore }: { serverId: number; rateStore: LiveRateStore }) {
   const [livePoints, setLivePoints] = useState<TrafficPoint[]>([])
   const liveUrl = useMemo(() => `/api/admin/servers/${serverId}/traffic/live`, [serverId])
 
@@ -244,17 +291,16 @@ const LiveChart = memo(function LiveChart({ serverId }: { serverId: number }) {
   const { connected } = useSSE(liveUrl, true, onSSEMessage)
   const liveRate = livePoints.length > 0 ? livePoints[livePoints.length - 1] : null
 
+  useEffect(() => {
+    rateStore.set({ upload: liveRate?.upload_rate ?? 0, download: liveRate?.download_rate ?? 0, connected })
+  }, [connected, liveRate, rateStore])
+
   return (
-    <section className="traffic-panel-card">
-      <div className="traffic-panel-heading">
-        <Typography.Title level={5}>实时</Typography.Title>
-        <span>
-          ↑ {rate(liveRate?.upload_rate ?? 0)}　
-          ↓ {rate(liveRate?.download_rate ?? 0)}
-          {connected ? '' : ' · 连接中…'}
-        </span>
-      </div>
-      <div className="traffic-panel-label">速度</div>
+    <section className="ui-card tr-panel">
+      <header className="tr-panel-head">
+        <h3>实时速度</h3>
+        <TrafficLegend />
+      </header>
       <TrafficTrend points={livePoints} range="15m" stepSeconds={3} mode="rate" />
     </section>
   )
@@ -273,18 +319,18 @@ type PortRow = Pick<TrafficPortSeries, 'inbound_id' | 'tag' | 'port' | 'type' | 
 const bytesSorter = <T extends { upload: number; download: number }>(key: 'upload' | 'download' | 'total') =>
   (a: T, b: T) => (key === 'total' ? a.upload + a.download - (b.upload + b.download) : a[key] - b[key])
 
-// ServerTraffic is the per-server traffic tab: live rate, history and the
-// per-inbound breakdown for one node.
+// ServerTraffic renders the traffic page for one node: headline totals, live
+// rate, history and the per-inbound breakdown. titleExtra (the host selector)
+// sits in the page header next to the range control.
 export default function ServerTraffic({ serverId, titleExtra }: { serverId: number; titleExtra?: React.ReactNode }) {
   const screens = Grid.useBreakpoint()
-  // Below antd's md breakpoint the controls leave the card header, which is
-  // too narrow for a selector plus a five-way segmented control.
   const compact = !screens.md
   const [data, setData] = useState<TrafficSeries | null>(null)
   const [loading, setLoading] = useState(false)
   const [range, setRange] = useState<TrafficRange>('24h')
   const loadAbortRef = useRef<AbortController | null>(null)
   const loadGenerationRef = useRef(0)
+  const rateStore = useMemo(() => createLiveRateStore(), [])
 
   const load = useCallback(async (quiet = false) => {
     loadAbortRef.current?.abort()
@@ -325,108 +371,101 @@ export default function ServerTraffic({ serverId, titleExtra }: { serverId: numb
   }, [data])
   const unattributedUpload = data?.unattributed_upload ?? 0
   const unattributedDownload = data?.unattributed_download ?? 0
+  const available = !!data?.available
+  const total = (value: number) => (available ? formatBytes(value) : '—')
 
   return (
-    <Card
-      title="流量"
-      extra={
-        <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
-          {!compact && titleExtra}
-          {!compact && <Segmented<TrafficRange> options={RANGE_OPTIONS} value={range} onChange={setRange} style={{ flex: 'none' }} />}
-          <Button
-            size={compact ? 'small' : 'middle'}
-            icon={<ReloadOutlined />}
-            loading={loading}
-            onClick={() => void load()}
-            title="刷新"
-            aria-label="刷新"
-            style={{ flex: 'none' }}
-          />
-        </span>
-      }
-    >
-      {compact && (
-        <div className="traffic-toolbar" style={{ marginBottom: 12 }}>
-          {titleExtra}
-          <Segmented<TrafficRange> block size="small" options={RANGE_OPTIONS} value={range} onChange={setRange} />
-        </div>
-      )}
-      {data?.available && (
-        <div style={{ marginBottom: 16 }}>
-          <Space size="large" wrap>
-            <span>上传 ↑ <b style={{ color: 'var(--console-upload)' }}>{formatBytes(data.upload)}</b></span>
-            <span>下载 ↓ <b style={{ color: 'var(--console-download)' }}>{formatBytes(data.download)}</b></span>
-            <span>合计 <b>{formatBytes(data.upload + data.download)}</b></span>
-          </Space>
-          <div style={{ marginTop: 4 }}>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              所选时段内此主机的 sing-box 总用量，包含共用凭据节点和多用户用量。
-            </Typography.Text>
+    <div className="tr-page">
+      <PageHeader
+        title="流量"
+        actions={
+          <div className="tr-actions">
+            {titleExtra}
+            <Segmented<TrafficRange> className="tr-range" options={RANGE_OPTIONS} value={range} onChange={setRange} />
+            <Button
+              icon={<ReloadOutlined />}
+              loading={loading}
+              onClick={() => void load()}
+              title="刷新"
+              aria-label="刷新"
+            />
           </div>
-        </div>
-      )}
-      <div className="traffic-dual-grid" style={{ marginTop: 0 }}>
-        <LiveChart key={serverId} serverId={serverId} />
-        <section className="traffic-panel-card">
-          <div className="traffic-panel-heading">
-            <Typography.Title level={5}>历史</Typography.Title>
-            {data?.timezone && isDailyRange(range) ? (
-              <span style={{ fontSize: 12 }}>按 {data.timezone} 自然日统计</span>
-            ) : null}
-          </div>
-          <div className="traffic-panel-label">流量使用量</div>
+        }
+      />
+
+      <Stats
+        items={[
+          { label: '下载', value: total(data?.download ?? 0) },
+          { label: '上传', value: total(data?.upload ?? 0) },
+          { label: '合计', value: total((data?.upload ?? 0) + (data?.download ?? 0)) },
+          {
+            label: '实时速率',
+            value: <LiveRateValue store={rateStore} part="download" />,
+            hint: <LiveRateValue store={rateStore} part="upload" />,
+          },
+        ]}
+      />
+
+      <div className="tr-grid">
+        <LiveChart key={serverId} serverId={serverId} rateStore={rateStore} />
+        <section className="ui-card tr-panel">
+          <header className="tr-panel-head">
+            <h3>
+              历史用量
+              {data?.timezone && isDailyRange(range) ? <span className="tr-panel-note mono">{data.timezone}</span> : null}
+            </h3>
+            <TrafficLegend />
+          </header>
           {data ? (
             <TrafficTrend points={data.points} range={range} stepSeconds={data.step_seconds} mode="usage" />
           ) : (
-            <div className="traffic-empty">{loading ? '读取中...' : '暂无历史数据'}</div>
+            <div className="tr-chart-empty">{loading ? '读取中…' : '暂无数据'}</div>
           )}
         </section>
       </div>
 
       {data && data.available ? (
-        <Table<PortRow>
-          className="traffic-port-table"
-          rowKey="inbound_id"
-          size="small"
-          pagination={false}
-          tableLayout="fixed"
-          scroll={{ x: compact ? 620 : 760 }}
-          dataSource={portRows}
-          locale={{ emptyText: '暂无入站端口' }}
-          columns={[
-            { title: '端口', dataIndex: 'port', width: compact ? 68 : 80, sorter: (a, b) => a.port - b.port },
-            { title: '标签', dataIndex: 'tag', width: compact ? 120 : 180, ellipsis: true },
-            { title: '协议', dataIndex: 'type', width: compact ? 92 : 100, render: (value: string) => <ProtocolTag type={value} /> },
-            { title: '下行 ↓', dataIndex: 'download', width: compact ? 104 : 130, sorter: bytesSorter('download'), render: (v: number) => <span style={{ color: 'var(--console-download)' }}>{formatBytes(v)}</span> },
-            { title: '上行 ↑', dataIndex: 'upload', width: compact ? 104 : 130, sorter: bytesSorter('upload'), render: (v: number) => <span style={{ color: 'var(--console-upload)' }}>{formatBytes(v)}</span> },
-            {
-              title: '合计', width: compact ? 110 : 150, sorter: bytesSorter('total'), defaultSortOrder: 'descend',
-              render: (_: unknown, r) => <span style={{ fontWeight: 600 }}>{formatBytes(r.upload + r.download)}</span>,
-            },
-          ]}
-          summary={() => (unattributedUpload + unattributedDownload > 0 ? (
-            <Table.Summary fixed>
-              <Table.Summary.Row>
-                <Table.Summary.Cell index={0}>—</Table.Summary.Cell>
-                <Table.Summary.Cell index={1}>
-                  <Tooltip title="节点总量中无法归属到具体入站的部分：不由面板管理的入站；sing-box 低于 1.14 时还包括采样间隔内建立又关闭的连接">
-                    <span style={{ color: 'var(--console-muted)' }}>未归属 ⓘ</span>
-                  </Tooltip>
-                </Table.Summary.Cell>
-                <Table.Summary.Cell index={2}>—</Table.Summary.Cell>
-                <Table.Summary.Cell index={3}><span style={{ color: 'var(--console-download)' }}>{formatBytes(unattributedDownload)}</span></Table.Summary.Cell>
-                <Table.Summary.Cell index={4}><span style={{ color: 'var(--console-upload)' }}>{formatBytes(unattributedUpload)}</span></Table.Summary.Cell>
-                <Table.Summary.Cell index={5}><span style={{ fontWeight: 600 }}>{formatBytes(unattributedUpload + unattributedDownload)}</span></Table.Summary.Cell>
-              </Table.Summary.Row>
-            </Table.Summary>
-          ) : null)}
-        />
+        <Section title="入站">
+          <Table<PortRow>
+            className="tr-port-table"
+            rowKey="inbound_id"
+            size="middle"
+            pagination={false}
+            tableLayout="fixed"
+            scroll={{ x: compact ? 600 : undefined }}
+            dataSource={portRows}
+            locale={{ emptyText: '暂无入站' }}
+            columns={[
+              { title: '标签', dataIndex: 'tag', width: compact ? 130 : undefined, ellipsis: true, render: (v: string) => <span className="tr-tag-name">{v}</span> },
+              { title: '协议', dataIndex: 'type', width: compact ? 100 : 130, render: (value: string) => <ProtocolTag type={value} /> },
+              { title: '端口', dataIndex: 'port', width: compact ? 76 : 100, sorter: (a, b) => a.port - b.port, render: (v: number) => <span className="mono">{v}</span> },
+              { title: '下载', dataIndex: 'download', align: 'right', width: compact ? 104 : 140, sorter: bytesSorter('download'), render: (v: number) => <span className="mono">{formatBytes(v)}</span> },
+              { title: '上传', dataIndex: 'upload', align: 'right', width: compact ? 104 : 140, sorter: bytesSorter('upload'), render: (v: number) => <span className="mono muted">{formatBytes(v)}</span> },
+              {
+                title: '合计', align: 'right', width: compact ? 110 : 150, sorter: bytesSorter('total'), defaultSortOrder: 'descend',
+                render: (_: unknown, r) => <span className="mono tr-strong">{formatBytes(r.upload + r.download)}</span>,
+              },
+            ]}
+            summary={() => (unattributedUpload + unattributedDownload > 0 ? (
+              <Table.Summary fixed>
+                <Table.Summary.Row className="tr-summary-row">
+                  <Table.Summary.Cell index={0}><span className="muted">未归属</span></Table.Summary.Cell>
+                  <Table.Summary.Cell index={1}><span className="faint">—</span></Table.Summary.Cell>
+                  <Table.Summary.Cell index={2}><span className="faint">—</span></Table.Summary.Cell>
+                  <Table.Summary.Cell index={3} align="right"><span className="mono">{formatBytes(unattributedDownload)}</span></Table.Summary.Cell>
+                  <Table.Summary.Cell index={4} align="right"><span className="mono muted">{formatBytes(unattributedUpload)}</span></Table.Summary.Cell>
+                  <Table.Summary.Cell index={5} align="right"><span className="mono tr-strong">{formatBytes(unattributedUpload + unattributedDownload)}</span></Table.Summary.Cell>
+                </Table.Summary.Row>
+              </Table.Summary>
+            ) : null)}
+          />
+        </Section>
       ) : data && !data.available ? (
-        <div className="traffic-unavailable">
+        <div className="ui-card ui-empty tr-unavailable">
           <strong>暂未采集到流量</strong>
-          <span>请让节点重新连接 Agent，或重新下发一次面板配置以启用统计接口。</span>
+          <span>重连 Agent 或重新下发配置后开始统计</span>
         </div>
       ) : null}
-    </Card>
+    </div>
   )
 }

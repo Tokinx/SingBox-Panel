@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Card, Descriptions, Empty, Form, Grid, Input, List, Modal, Segmented, Space, Tag, Typography, message } from 'antd'
+import { Button, Form, Grid, Input, Modal, Typography, message } from 'antd'
+import { CopyOutlined, RightOutlined } from '@ant-design/icons'
 import { QRCodeSVG } from 'qrcode.react'
 import { changePassword, errMsg, getMe, getUserNodes, resetSub } from '../../api'
 import type { UserNode } from '../../api'
@@ -10,16 +11,14 @@ import { CONTINENT_ORDER, continentOf, type Continent } from '../../continents'
 import regionData from '../../assets/regions.json'
 import { VirtualList } from '../../components/VirtualList'
 import { RequestState } from '../../components/RequestState'
+import { RegionFlag } from '../../components/RegionFlag'
+import { PageHeader, Pills, Section } from '../../ui/Page'
+import '../../styles/settings-user.css'
+import { MODAL_MD, MODAL_SM } from '../../ui/modal'
 
 type RegionInfo = { geo: string; coord: [number, number]; label: string }
 const REGIONS = regionData as unknown as Record<string, RegionInfo>
 const userNodeKey = (node: UserNode) => `${node.type}:${node.name}:${node.server}:${node.port}`
-
-const TYPE_COLORS: Record<string, string> = {
-  vless: 'blue', vmess: 'purple', trojan: 'geekblue', shadowsocks: 'green',
-  hysteria2: 'cyan', hysteria: 'cyan', tuic: 'orange', anytls: 'magenta',
-  snell: 'gold', socks: 'default', mixed: 'volcano',
-}
 
 const LOGO_VERSION = '20260906-2'
 type ClientKind = 'surge' | 'clash' | 'shadowrocket'
@@ -134,8 +133,11 @@ export default function Dashboard() {
     }
   }
   const doReset = () => Modal.confirm({
-    title: '重置订阅链接?',
-    content: '旧链接将立即失效，需要在客户端重新导入。',
+    title: '重置订阅链接？',
+    content: '旧链接将立即失效。',
+    okText: '重置',
+    okButtonProps: { danger: true },
+    cancelText: '取消',
     onOk: async () => {
       try {
         const result = await resetSub()
@@ -165,11 +167,11 @@ export default function Dashboard() {
   const segOptions = CONTINENT_ORDER
     .map((c) => ({ value: c, count: continentNodes[c]?.length ?? 0 }))
     .filter((o) => o.count > 0)
-    .map((o) => ({ label: `${o.value} ${o.count}`, value: o.value }))
-  const activeSeg = segOptions.some((o) => o.value === seg) ? seg : (segOptions[0]?.value ?? '其他')
+    .map((o) => ({ key: o.value, label: o.value, count: o.count }))
+  const activeSeg = segOptions.some((o) => o.key === seg) ? seg : (segOptions[0]?.key ?? '其他')
   const activeNodes = continentNodes[activeSeg] ?? []
-  const renderNode = (n: UserNode) => (
-    <List.Item
+  const renderNode = (n: UserNode, index = 0) => (
+    <div
       onClick={() => setSelectedNode(n)}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
@@ -179,96 +181,113 @@ export default function Dashboard() {
       }}
       role="button"
       tabIndex={0}
-      className="dashboard-node-row"
+      className={`sub-node${index === 0 ? ' is-first' : ''}`}
     >
-      <List.Item.Meta
-        title={<span style={{ fontWeight: 600 }}>{n.name}</span>}
-        description={
-          <Space size={[4, 4]} wrap>
-            <Tag color={TYPE_COLORS[n.type]}>{n.type}</Tag>
-            {labelOf(n.region || '') && <span style={{ color: 'var(--console-muted)', fontSize: 12 }}>{labelOf(n.region || '')}</span>}
-            <span style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--console-muted)' }}>{n.server}:{n.port}</span>
-          </Space>
-        }
-      />
-    </List.Item>
+      <RegionFlag code={n.region} size={15} fallback={false} />
+      <div className="sub-node-main">
+        <span className="sub-node-name">{n.name}</span>
+        <span className="sub-node-meta">
+          {labelOf(n.region || '') && <span>{labelOf(n.region || '')}</span>}
+          <span className="mono">{n.server}:{n.port}</span>
+        </span>
+      </div>
+      <span className="ui-tag sub-node-type">{n.type}</span>
+      <RightOutlined className="sub-node-chev" aria-hidden="true" />
+    </div>
   )
 
   return (
     <RequestState loading={loading} error={loadError} hasData onRetry={load}>
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
-      <Card title="订阅链接">
-        <p className="subscription-hint">选择客户端，复制对应的订阅链接</p>
-        <div className="client-subscriptions">
-          {CLIENTS.map((spec) => (
-            <Button key={spec.kind} className="client-subscription-button" icon={<ClientLogo spec={spec} />} onClick={() => void copySub(spec)}>
-              {spec.label}
-            </Button>
-          ))}
-        </div>
-        <div className="subscription-actions">
-            <Button onClick={doReset}>重置订阅链接</Button>
+      <div className="sub-page">
+        <PageHeader
+          title="订阅"
+          meta={<>
+            <span>{user.email}</span>
+            <span>{nodes.length} 个节点</span>
+          </>}
+          actions={<>
+            <Button onClick={doReset}>重置链接</Button>
             <Button onClick={() => setPwdOpen(true)}>修改密码</Button>
-        </div>
-      </Card>
+          </>}
+        />
 
-      <Card title={`可用节点（${nodes.length}）`}>
-        <RequestState loading={nodesLoading} error={nodesError} hasData={nodes.length > 0} empty={!nodesLoading && !nodesError && nodes.length === 0} emptyDescription="暂无节点，请联系管理员开通" onRetry={load}>
-          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-            <Segmented block options={segOptions} value={activeSeg} onChange={(v) => setSeg(v as Continent)} />
-            {activeNodes.length > 0 ? (
-              isMobile || activeNodes.length > 50 ? (
-                <VirtualList
-                  className="dashboard-node-virtual-list"
-                  style={{ height: Math.min(activeNodes.length, isMobile ? 5 : 8) * 72, maxHeight: isMobile ? 360 : 576 }}
-                  items={activeNodes}
-                  getKey={userNodeKey}
-                  estimatedItemHeight={72}
-                  overscan={5}
-                  renderItem={renderNode}
-                />
+        <Section title="订阅链接">
+          <div className="sub-clients">
+            {CLIENTS.map((spec) => (
+              <button key={spec.kind} type="button" className="sub-client" onClick={() => void copySub(spec)} aria-label={`复制 ${spec.label} 订阅链接`}>
+                <ClientLogo spec={spec} />
+                <span className="sub-client-name">{spec.label}</span>
+                <span className="sub-client-copy"><CopyOutlined /> 复制</span>
+              </button>
+            ))}
+          </div>
+        </Section>
+
+        <Section title="节点">
+          <RequestState loading={nodesLoading} error={nodesError} hasData={nodes.length > 0} empty={!nodesLoading && !nodesError && nodes.length === 0} emptyDescription="暂无节点" onRetry={load}>
+            {segOptions.length > 1 && (
+              <Pills label="地区" items={segOptions} active={activeSeg} onChange={(key) => setSeg(key as Continent)} />
+            )}
+            <div className="ui-card sub-nodes">
+              {activeNodes.length > 0 ? (
+                isMobile || activeNodes.length > 50 ? (
+                  <VirtualList
+                    className="sub-node-virtual"
+                    style={{ height: Math.min(activeNodes.length, isMobile ? 6 : 9) * 64, maxHeight: isMobile ? 384 : 576 }}
+                    items={activeNodes}
+                    getKey={userNodeKey}
+                    estimatedItemHeight={64}
+                    overscan={5}
+                    renderItem={renderNode}
+                  />
+                ) : (
+                  activeNodes.map((n, i) => <div key={userNodeKey(n)}>{renderNode(n, i)}</div>)
+                )
               ) : (
-                <List itemLayout="horizontal" dataSource={activeNodes} renderItem={renderNode} />
-              )
-            ) : (
-              <Empty description="该大区暂无节点" style={{ padding: '24px 0' }} />
-            )}
-          </Space>
-        </RequestState>
-      </Card>
+                <div className="ui-empty">该地区暂无节点</div>
+              )}
+            </div>
+          </RequestState>
+        </Section>
 
-      <Modal title={selectedNode?.name} open={!!selectedNode} onCancel={() => setSelectedNode(null)} footer={<Button onClick={() => setSelectedNode(null)}>关闭</Button>} width={560} styles={{ body: { maxHeight: '70vh', overflowY: 'auto' } }}>
-        {selectedNode && (
-          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-            {selectedNode.link ? (
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ display: 'inline-block', padding: 12, background: '#fff', borderRadius: 8, border: '1px solid #eee' }}>
-                  <QRCodeSVG value={selectedNode.link} size={196} />
+        <Modal title={selectedNode?.name} open={!!selectedNode} onCancel={() => setSelectedNode(null)} footer={<Button onClick={() => setSelectedNode(null)}>关闭</Button>} width={MODAL_MD}>
+          {selectedNode && (
+            <div className="sub-detail">
+              {selectedNode.link && (
+                <div className="sub-qr">
+                  <div className="sub-qr-box">
+                    <QRCodeSVG value={selectedNode.link} size={184} />
+                  </div>
+                  <span className="ui-tag">{selectedNode.type}</span>
                 </div>
-                <div style={{ marginTop: 8, color: 'var(--console-muted)' }}>扫码导入（{selectedNode.type}）</div>
+              )}
+              <div className="ui-card">
+                <dl className="ui-kv sub-params">
+                  {Object.entries(selectedNode.params).map(([k, v]) => (
+                    <div key={k}>
+                      <dt>{k}</dt>
+                      <dd><Typography.Text className="mono" copyable={{ text: v }}>{v}</Typography.Text></dd>
+                    </div>
+                  ))}
+                </dl>
               </div>
-            ) : (
-              <Alert type="info" showIcon message={`${selectedNode.type} 没有通用的分享链接格式`} description="请用下面的参数在客户端手动添加，或直接使用上方的订阅链接导入。" />
-            )}
-            <Descriptions bordered size="small" column={1}>
-              {Object.entries(selectedNode.params).map(([k, v]) => (
-                <Descriptions.Item key={k} label={k}><Typography.Text copyable style={{ wordBreak: 'break-all' }}>{v}</Typography.Text></Descriptions.Item>
-              ))}
-            </Descriptions>
-            {selectedNode.link && (
-              <Typography.Paragraph copyable={{ text: selectedNode.link }} code style={{ wordBreak: 'break-all', margin: 0 }}>{selectedNode.link}</Typography.Paragraph>
-            )}
-          </Space>
-        )}
-      </Modal>
+              {selectedNode.link && (
+                <div className="sub-link">
+                  <span className="sub-link-text mono">{selectedNode.link}</span>
+                  <Typography.Text copyable={{ text: selectedNode.link, tooltips: ['复制链接', '已复制'] }} />
+                </div>
+              )}
+            </div>
+          )}
+        </Modal>
 
-      <Modal title="修改密码" open={pwdOpen} onOk={doChangePwd} onCancel={() => setPwdOpen(false)} destroyOnClose>
-        <Form form={pwdForm} layout="vertical">
-          <Form.Item name="old_password" label="当前密码" rules={[{ required: true }]}><Input.Password /></Form.Item>
-          <Form.Item name="new_password" label="新密码" rules={[{ required: true, message: '请输入新密码' }, { max: 72 }]}><Input.Password /></Form.Item>
-        </Form>
-      </Modal>
-      </Space>
+        <Modal title="修改密码" open={pwdOpen} onOk={doChangePwd} onCancel={() => setPwdOpen(false)} destroyOnClose width={MODAL_SM}>
+          <Form form={pwdForm} layout="vertical">
+            <Form.Item name="old_password" label="当前密码" rules={[{ required: true }]}><Input.Password /></Form.Item>
+            <Form.Item name="new_password" label="新密码" rules={[{ required: true, message: '请输入新密码' }, { max: 72 }]}><Input.Password /></Form.Item>
+          </Form>
+        </Modal>
+      </div>
     </RequestState>
   )
 }

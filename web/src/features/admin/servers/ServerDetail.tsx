@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { PointerEvent as ReactPointerEvent } from 'react'
+import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import {
   Alert,
   Button,
@@ -17,14 +17,14 @@ import {
   message,
 } from 'antd'
 import {
-  ControlOutlined,
   CopyOutlined,
+  DeleteOutlined,
   EditOutlined,
-  MenuOutlined,
+  HolderOutlined,
   PlusOutlined,
   ReloadOutlined,
 } from '@ant-design/icons'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import {
   applyRawConfig,
   deleteInbound,
@@ -58,35 +58,29 @@ import { OutboundForm, RuleForm } from './RoutingForms'
 import { RuleSetsTab } from './RuleSetsTab'
 import { ConfigEditorModal, ImportPreviewModal, InstallSingboxModal, NodeFormatsExportModal } from './ServerDialogs'
 import { ServerOverviewCard } from './ServerOverviewCard'
-import { copyToClipboard } from '../../../util'
+import { copyToClipboard, formatBytes } from '../../../util'
+import { Pills, Stats, Status } from '../../../ui/Page'
+import '../../../styles/server-detail.css'
 import { RequestState } from '../../../components/RequestState'
+import { MODAL_MD } from '../../../ui/modal'
 
-// Matches the colored protocol labels used by node assignment and traffic.
-const PROTOCOL_TAGS: Record<string, { label: string; color: string }> = {
-  vless: { label: 'VLESS', color: 'blue' },
-  vmess: { label: 'VMess', color: 'purple' },
-  ss: { label: 'SS', color: 'green' },
-  shadowsocks: { label: 'SS', color: 'green' },
-  trojan: { label: 'Trojan', color: 'geekblue' },
-  hysteria2: { label: 'Hysteria2', color: 'cyan' },
-  hysteria: { label: 'Hysteria', color: 'cyan' },
-  tuic: { label: 'TUIC', color: 'orange' },
-  anytls: { label: 'AnyTLS', color: 'magenta' },
-  socks: { label: 'SOCKS', color: 'default' },
-  socks5: { label: 'SOCKS5', color: 'default' },
-  snell: { label: 'Snell', color: 'gold' },
-  mixed: { label: 'Mixed', color: 'volcano' },
-  direct: { label: 'DIRECT', color: 'geekblue' },
+const PROTOCOL_LABELS: Record<string, string> = {
+  vless: 'VLESS', vmess: 'VMess', ss: 'Shadowsocks', shadowsocks: 'Shadowsocks', trojan: 'Trojan',
+  hysteria2: 'Hysteria2', hysteria: 'Hysteria', tuic: 'TUIC', anytls: 'AnyTLS', socks: 'SOCKS',
+  socks5: 'SOCKS5', snell: 'Snell', mixed: 'Mixed', direct: 'Direct',
 }
 
 function ProtocolTag({ type }: { type: string }) {
-  const protocol = type.trim().toLowerCase()
-  const tag = PROTOCOL_TAGS[protocol]
-  return <Tag color={tag?.color}>{tag?.label || type}</Tag>
+  return <span className="ui-tag">{PROTOCOL_LABELS[type.trim().toLowerCase()] || type}</span>
 }
 
+const DETAIL_SECTIONS = ['inbounds', 'outbounds', 'rules', 'rulesets'] as const
+type DetailSection = typeof DETAIL_SECTIONS[number]
+
 export default function ServerDetail() {
-  const { id } = useParams()
+  const { id, section: sectionParam } = useParams()
+  const navigate = useNavigate()
+  const section: DetailSection = (DETAIL_SECTIONS as readonly string[]).includes(sectionParam || '') ? sectionParam as DetailSection : 'inbounds'
   const sid = Number(id)
   const [server, setServer] = useState<Server | null>(null)
   const [pageLoading, setPageLoading] = useState(true)
@@ -118,7 +112,7 @@ export default function ServerDetail() {
   const [obEditing, setObEditing] = useState<Outbound | null>(null)
   const [ruleOpen, setRuleOpen] = useState(false)
   const [ruleEditing, setRuleEditing] = useState<RouteRule | null>(null)
-  const [rsModalOpen, setRsModalOpen] = useState(false)
+  const [ruleSetCreate, setRuleSetCreate] = useState(0)
   const [importOpen, setImportOpen] = useState(false)
   const [importSum, setImportSum] = useState<ImportSummary | null>(null)
   const [importing, setImporting] = useState(false)
@@ -331,7 +325,6 @@ export default function ServerDetail() {
     setObEditing(null)
     setRuleOpen(false)
     setRuleEditing(null)
-    setRsModalOpen(false)
     setBusy('')
     setTesting(new Set())
     setObTests({})
@@ -382,7 +375,7 @@ export default function ServerDetail() {
   const switchToManaged = () =>
     Modal.confirm({
       title: '切换到面板管理配置?',
-      content: '切换后会立即用面板中的入站、出站和路由记录覆盖服务器原始配置；面板无法识别的字段将不再生效。',
+      content: '面板无法识别的字段将被舍弃。',
       okText: '确认切换并下发',
       okType: 'danger',
       onOk: () => run('mode', () => setConfigMode(sid, 'managed'), '已切换到面板管理'),
@@ -459,13 +452,11 @@ export default function ServerDetail() {
   const showInstallCmd = (command = install) =>
     Modal.info({
       title: '安装 / 升级 Agent',
-      width: 600,
+      width: MODAL_MD,
       icon: null,
       content: (
         <div>
-          <div style={{ fontSize: 13, color: 'var(--console-muted)', marginBottom: 12 }}>
-            以 root 在该服务器上执行。首次执行为安装，已安装时重复执行即为升级。
-          </div>
+          
           <div style={{ position: 'relative' }}>
             <pre
               style={{
@@ -510,7 +501,6 @@ export default function ServerDetail() {
     Modal.confirm({
       title: '同步 Agent?',
       okText: '开始同步',
-      content: '面板将向在线节点下发当前提供的 Agent。程序会先完成校验，重启后若无法重新连接将自动恢复原版本。',
       onOk: async () => {
         const targetSID = sid
         if (currentSIDRef.current !== targetSID) return
@@ -529,7 +519,7 @@ export default function ServerDetail() {
           const text = errMsg(e)
           Modal.error({
             title: 'Agent 同步失败',
-            width: 680,
+            width: MODAL_MD,
             content: (
               <Typography.Paragraph copyable={{ text }} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
                 {text}
@@ -548,14 +538,7 @@ export default function ServerDetail() {
       title: '卸载被控端 Agent?',
       okText: '确认卸载 Agent',
       okType: 'danger',
-      content: (
-        <Alert
-          type="warning"
-          showIcon
-          message="将删除 Agent 二进制及开机自启服务。"
-          description="面板节点配置均会保留，之后仍可使用 Agent 安装命令重新接入。"
-        />
-      ),
+      content: '面板中的配置会保留。',
       onOk: async () => {
         const targetSID = sid
         if (currentSIDRef.current !== targetSID) return
@@ -577,14 +560,7 @@ export default function ServerDetail() {
       title: '卸载 Sing-box?',
       okText: '确认卸载 Sing-box',
       okType: 'danger',
-      content: (
-        <Alert
-          type="warning"
-          showIcon
-          message="将停止服务并删除 Sing-box 程序。"
-          description="Agent、/etc/sing-box 配置目录和面板节点数据都会保留，之后可直接重新安装。"
-        />
-      ),
+      content: '配置目录和面板数据会保留。',
       onOk: async () => {
         const targetSID = sid
         if (currentSIDRef.current !== targetSID) return
@@ -680,16 +656,6 @@ export default function ServerDetail() {
     })
   }
 
-  const onResetFinal = () =>
-    Modal.confirm({
-      title: '确认要重置兜底规则出站为 direct 吗？',
-      okType: 'danger',
-      okText: '确定',
-      cancelText: '取消',
-      centered: true,
-      onOk: () => onSetFinal('direct'),
-    })
-
   const run = async (label: string, fn: () => Promise<unknown>, ok = '操作完成') => {
     const targetSID = sid
     if (currentSIDRef.current !== targetSID) return
@@ -712,7 +678,7 @@ export default function ServerDetail() {
     setInstallOpen(false)
     run('install', async () => {
       const r = await installSingbox(sid, v)
-      Modal.info({ title: '安装输出', width: 640, content: <pre style={{ whiteSpace: 'pre-wrap' }}>{r.output || 'ok'}</pre> })
+      Modal.info({ title: '安装输出', width: MODAL_MD, content: <pre style={{ whiteSpace: 'pre-wrap' }}>{r.output || 'ok'}</pre> })
     }, '安装完成')
   }
 
@@ -787,9 +753,195 @@ export default function ServerDetail() {
     return <RequestState loading={pageLoading} error={loadError} hasData={false} onRetry={loadCurrentServer}><span /></RequestState>
   }
   const rawMode = server.config_mode === 'raw'
+  const finalOutbound = server.final_outbound || 'direct'
+  const memPct = server.mem_total ? Math.round((server.mem_used / server.mem_total) * 100) : null
+  const goSection = (key: string) => navigate(key === 'inbounds' ? `/admin/servers/${sid}` : `/admin/servers/${sid}/${key}`)
+  const addButton: Record<DetailSection, ReactNode> = {
+    inbounds: <Button type="primary" icon={<PlusOutlined />} disabled={rawMode} onClick={() => { setEditing(null); setFormOpen(true) }}>新增入站</Button>,
+    outbounds: <Button type="primary" icon={<PlusOutlined />} disabled={rawMode} onClick={() => { setObEditing(null); setObOpen(true) }}>新增出站</Button>,
+    rules: <Button type="primary" icon={<PlusOutlined />} disabled={rawMode} onClick={() => { setRuleEditing(null); setRuleOpen(true) }}>新增规则</Button>,
+    rulesets: <Button type="primary" icon={<PlusOutlined />} disabled={rawMode} onClick={() => setRuleSetCreate((n) => n + 1)}>新增规则集</Button>,
+  }
+  const rowActions = (onEdit: () => void, onDelete: () => void, label: string) => (
+    <span className="ui-row-actions">
+      <Button size="small" type="text" icon={<EditOutlined />} aria-label={`编辑 ${label}`} disabled={rawMode} onClick={onEdit} />
+      <Button size="small" type="text" icon={<DeleteOutlined />} aria-label={`删除 ${label}`} disabled={rawMode} onClick={onDelete} />
+    </span>
+  )
+
+  const inboundTable = (
+    <Table
+      rowKey="id"
+      pagination={false}
+      scroll={{ x: 560 }}
+      dataSource={server.inbounds || []}
+      locale={{ emptyText: '暂无入站' }}
+      rowClassName={(ib: Inbound) => (ib.enabled === false ? 'is-disabled' : '')}
+      columns={[
+        { title: '标签', dataIndex: 'tag', render: (v: string) => <span className="sd-strong">{v}</span> },
+        { title: '协议', dataIndex: 'type', render: (v: string) => <ProtocolTag type={v} /> },
+        { title: '端口', dataIndex: 'listen_port', render: (v: number) => <span className="mono">{v}</span> },
+        { title: '用户', render: (_, ib: Inbound) => <span className="muted">{ib.settings?.multi_user ? '多用户' : '单用户'}</span> },
+        { title: '', width: 88, align: 'right', render: (_, ib: Inbound) => rowActions(() => { setEditing(ib); setFormOpen(true) }, () => onDeleteInbound(ib), `入站 ${ib.tag}`) },
+      ]}
+    />
+  )
+
+  const outboundTable = (
+    <Table
+      rowKey="id"
+      pagination={false}
+      tableLayout="fixed"
+      scroll={{ x: 720 }}
+      dataSource={outbounds}
+      locale={{ emptyText: '暂无出站' }}
+      columns={[
+        { title: '标签', dataIndex: 'tag', width: 160, ellipsis: true, render: (v: string) => <span className="sd-strong">{v}</span> },
+        { title: '类型', dataIndex: 'type', width: 120, render: (v: string) => <ProtocolTag type={v} /> },
+        { title: '地址', width: 240, ellipsis: true, render: (_, o: Outbound) => <span className="mono">{`${o.settings?.server || '—'}:${o.settings?.server_port || ''}`}</span> },
+        {
+          title: '连通性',
+          width: 150,
+          render: (_, o: Outbound) => {
+            const t = obTests[o.id]
+            const isTesting = testing.has(o.id)
+            return (
+              <span className="sd-test">
+                <span className="sd-test-result">
+                  {isTesting
+                    ? <span className="faint">测试中…</span>
+                    : !t
+                      ? <span className="faint">—</span>
+                      : t.ok
+                        ? <Status tone="ok">{t.latency_ms} ms</Status>
+                        : t.inconclusive
+                          ? <span title={t.note}><Status tone="warn">仅解析</Status></span>
+                          : <span title={t.error}><Status tone="error">不通</Status></span>}
+                </span>
+                <Button size="small" type="text" icon={<ReloadOutlined />} loading={isTesting} onClick={() => void runTest(o)} aria-label={`测试 ${o.tag} 连通性`} />
+              </span>
+            )
+          },
+        },
+        { title: '', width: 88, align: 'right', render: (_, o: Outbound) => rowActions(() => { setObEditing(o); setObOpen(true) }, () => onDeleteOutbound(o), `出站 ${o.tag}`) },
+      ]}
+    />
+  )
+
+  const matchChips = (r: RouteRule) => {
+    const m = r.match || {}
+    const groups: [string, (string | number)[] | undefined][] = [
+      ['规则集', m.rule_set], ['入站', m.inbound], ['域名', m.domain], ['后缀', m.domain_suffix],
+      ['关键词', m.domain_keyword], ['目标 IP', m.ip_cidr], ['来源 IP', m.source_ip_cidr],
+      ['端口', m.port], ['协议', m.protocol], ['网络', m.network ? [m.network.toUpperCase()] : undefined],
+    ]
+    const chips = groups.flatMap(([label, values]) => (values || []).map((value) => (
+      <span key={`${label}-${value}`} className="sd-chip"><span>{label}</span>{String(value)}</span>
+    )))
+    return chips.length ? chips : [<span key="all" className="faint">全部流量</span>]
+  }
+  const ruleTarget = (r: RouteRule) => {
+    const v = r.outbound
+    const act = (r.match?.action as string) || (v === 'block' ? 'reject' : v)
+    if (act === 'reject' || v === 'block' || v === 'reject') return 'reject'
+    if (act === 'sniff' || v === 'sniff') return 'sniff'
+    if (act === 'hijack-dns' || v === 'hijack-dns') return 'hijack-dns'
+    return v
+  }
+
+  const rulesTable = (
+    <>
+      <Table
+        rowKey="id"
+        pagination={false}
+        scroll={{ x: 640 }}
+        dataSource={rules}
+        locale={{ emptyText: '暂无规则' }}
+        rowClassName={(r: RouteRule) => (r.enabled ? '' : 'is-disabled')}
+        onRow={(_, index) => ({
+          draggable: !rawMode,
+          onDragStart: (e) => {
+            draggedRuleIndexRef.current = index!
+            setDraggedRuleIndex(index!)
+            e.dataTransfer.effectAllowed = 'move'
+            e.dataTransfer.setData('text/plain', String(index))
+          },
+          onDragOver: (e) => e.preventDefault(),
+          onDragEnd: () => {
+            draggedRuleIndexRef.current = null
+            setDraggedRuleIndex(null)
+          },
+          onDrop: () => handleRuleDrop(index!),
+          style: {
+            outline: ruleDropIndex === index ? '2px solid var(--console-focus)' : undefined,
+            outlineOffset: -2,
+          },
+        })}
+        columns={[
+          {
+            title: '',
+            width: 44,
+            align: 'center',
+            render: (_, __, index) => (
+              <button
+                type="button"
+                className="rule-drag-handle sd-drag"
+                aria-label={`调整第 ${index + 1} 条规则顺序`}
+                aria-describedby="rule-sort-help"
+                disabled={rawMode}
+                onKeyDown={(event) => {
+                  if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+                    event.preventDefault()
+                    commitRuleMove(index, index + (event.key === 'ArrowUp' ? -1 : 1))
+                  }
+                }}
+                onPointerDown={(event) => startRulePointerDrag(event, index)}
+                onPointerMove={moveRulePointerDrag}
+                onPointerUp={finishRulePointerDrag}
+                onPointerCancel={cancelRulePointerDrag}
+              >
+                <HolderOutlined />
+              </button>
+            ),
+          },
+          { title: '匹配', render: (_, r: RouteRule) => <span className="sd-chips">{matchChips(r)}</span> },
+          { title: '出站', width: 160, render: (_, r: RouteRule) => <span className="mono">{ruleTarget(r)}</span> },
+          { title: '状态', dataIndex: 'enabled', width: 90, render: (v: boolean) => <Status tone={v ? 'ok' : 'off'}>{v ? '启用' : '停用'}</Status> },
+          { title: '', width: 88, align: 'right', render: (_, r: RouteRule) => rowActions(() => { setRuleEditing(r); setRuleOpen(true) }, () => onDeleteRule(r), `规则 ${r.id}`) },
+        ]}
+      />
+      <div className="sd-final">
+        <span>其余流量</span>
+        <Select
+          size="small"
+          aria-label="兜底出站"
+          value={finalOutbound}
+          disabled={rawMode || busy === 'final'}
+          loading={busy === 'final'}
+          popupMatchSelectWidth={false}
+          onChange={(v) => { if (v !== finalOutbound) void onSetFinal(v) }}
+          options={[...new Set(['direct', finalOutbound, ...outboundTags])].map((tag) => ({ value: tag, label: tag }))}
+        />
+      </div>
+    </>
+  )
+
+  const ruleSetView = (
+    <RuleSetsTab
+      key={sid}
+      serverId={sid}
+      ruleSets={ruleSets}
+      outbounds={outbounds}
+      onRefresh={loadCurrentServer}
+      rawMode={rawMode}
+      createSignal={ruleSetCreate}
+    />
+  )
+  const views: Record<DetailSection, ReactNode> = { inbounds: inboundTable, outbounds: outboundTable, rules: rulesTable, rulesets: ruleSetView }
+
   return (
     <RequestState loading={pageLoading} error={loadError || sectionError} hasData onRetry={loadCurrentServer}>
-    <Space direction="vertical" size="large" style={{ width: '100%' }}>
+    <div className="sd-page">
       <ServerOverviewCard
         server={server}
         publicURL={publicURL}
@@ -797,374 +949,46 @@ export default function ServerDetail() {
         refreshing={refreshing}
         exportLoading={fmtLoading}
         onRefresh={refresh}
-                  onInstallSingbox={() => setInstallOpen(true)}
-                  onUninstallSingbox={confirmUninstallSingbox}
-                  onInstallAgent={installOrUpgradeAgent}
-                  onUninstallAgent={confirmUninstallAgent}
-                  onImport={openImport}
-                  onEditConfig={openConfigEditor}
-                  onRestart={() => run('restart', () => serviceAction(sid, 'restart'), 'sing-box 已重启')}
-                  onExport={openNodeFormats}
-                />
+        onInstallSingbox={() => setInstallOpen(true)}
+        onUninstallSingbox={confirmUninstallSingbox}
+        onInstallAgent={installOrUpgradeAgent}
+        onUninstallAgent={confirmUninstallAgent}
+        onImport={openImport}
+        onEditConfig={openConfigEditor}
+        onRestart={() => run('restart', () => serviceAction(sid, 'restart'), 'sing-box 已重启')}
+        onExport={openNodeFormats}
+      />
+
+      <Stats items={[
+        { label: '下行速率', value: server.online && server.traffic_available ? `${formatBytes(server.traffic_download_rate ?? 0)}/s` : '—' },
+        { label: '上行速率', value: server.online && server.traffic_available ? `${formatBytes(server.traffic_upload_rate ?? 0)}/s` : '—' },
+        { label: '负载', value: server.online ? server.load1?.toFixed(2) : '—' },
+        { label: '内存', value: server.online && memPct !== null ? `${memPct}%` : '—', hint: server.online && server.mem_total ? `${formatBytes(server.mem_used)} / ${formatBytes(server.mem_total)}` : undefined },
+      ]} />
 
       {rawMode && (
         <Alert
           type="warning"
           showIcon
-          message="该节点当前使用原始配置模式"
-          description="配置中存在面板无法无损转换的内容，完整 config.json 仍是当前生效配置。可识别的节点已同步；强制切换会舍弃扩展字段。"
-          action={<Button danger loading={busy === 'mode'} onClick={switchToManaged}>舍弃扩展字段并切换</Button>}
+          className="sd-raw"
+          message="原始配置模式，面板编辑已锁定"
+          action={<Button size="small" danger loading={busy === 'mode'} onClick={switchToManaged}>切换到面板管理</Button>}
         />
       )}
 
-      <Card
-        title="入站"
-        extra={
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            disabled={rawMode}
-            onClick={() => {
-              setEditing(null)
-              setFormOpen(true)
-            }}
-          >
-            新增协议
-          </Button>
-        }
-      >
-        <div style={{ fontSize: 13, color: 'var(--console-muted)', marginBottom: 12 }}>
-          配置节点接收客户端连接的入站协议。生成的节点信息将自动提供给订阅与客户端使用。
-        </div>
-        <Table
-          rowKey="id"
-          pagination={false}
-          scroll={{ x: 560 }}
-          dataSource={server.inbounds || []}
-          columns={[
-            { title: '标签', dataIndex: 'tag' },
-            { title: '协议', dataIndex: 'type', render: (v: string) => <ProtocolTag type={v} /> },
-            { title: '端口', dataIndex: 'listen_port' },
-            {
-              title: '用户模式',
-              render: (_, ib: Inbound) => ib.settings?.multi_user
-                ? <Tag color="blue">多用户</Tag>
-                : <Tag>单用户</Tag>,
-            },
-            {
-              title: '启用',
-              dataIndex: 'enabled',
-              render: (v: boolean) => (v ? <Tag color="green">是</Tag> : <Tag>否</Tag>),
-            },
-            {
-              title: '操作',
-              render: (_, ib: Inbound) => (
-                <Space>
-                  <Button size="small" type="link" disabled={rawMode} onClick={() => { setEditing(ib); setFormOpen(true) }}>编辑</Button>
-                  <Button size="small" type="link" danger disabled={rawMode} onClick={() => onDeleteInbound(ib)}>删除</Button>
-                </Space>
-              ),
-            },
-          ]}
-        />
-      </Card>
-
-      <Card
-        title="出站"
-        extra={
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            disabled={rawMode}
-            onClick={() => { setObEditing(null); setObOpen(true) }}
-          >
-            新增出站
-          </Button>
-        }
-      >
-        <div style={{ fontSize: 13, color: 'var(--console-muted)', marginBottom: 12 }}>
-          配置流量路由的目标出站。direct 为内置直连出站，无需重复添加；在「规则」中可将指定流量指向对应出站。
-        </div>
-        <Table
-          rowKey="id"
-          pagination={false}
-          tableLayout="fixed"
-          scroll={{ x: 780 }}
-          dataSource={outbounds}
-          columns={[
-            { title: '标签', dataIndex: 'tag', width: 150, ellipsis: true },
-            { title: '类型', dataIndex: 'type', width: 130, render: (v: string) => <ProtocolTag type={v} /> },
-            { title: '目标地址', width: 240, ellipsis: true, render: (_, o: Outbound) => `${o.settings?.server || '—'}:${o.settings?.server_port || ''}` },
-            {
-              title: '连通性',
-              width: 170,
-              render: (_, o: Outbound) => {
-                const t = obTests[o.id]
-                const isTesting = testing.has(o.id)
-                return (
-                  <Space size={4} style={{ whiteSpace: 'nowrap' }}>
-                    <span style={{ display: 'inline-flex', minWidth: 88 }}>
-                      {isTesting
-                        ? <span style={{ color: 'var(--console-link)' }}>测试中…</span>
-                        : !t
-                          ? <span style={{ color: 'var(--console-faint)' }}>未测试</span>
-                          : t.ok
-                            ? <Tag color="green">通 · {t.latency_ms}ms</Tag>
-                            : t.inconclusive
-                              ? <Tag color="gold" title={t.note}>仅解析</Tag>
-                              : <Tag color="red" title={t.error}>不通</Tag>}
-                    </span>
-                    <Button
-                      size="small"
-                      type="text"
-                      icon={<ReloadOutlined />}
-                      loading={isTesting}
-                      onClick={() => void runTest(o)}
-                      title="测试连通性"
-                      aria-label={`测试 ${o.tag} 连通性`}
-                      style={{ width: 28, minWidth: 28, paddingInline: 0 }}
-                    />
-                  </Space>
-                )
-              },
-            },
-            {
-              title: '操作',
-              width: 110,
-              render: (_, o: Outbound) => (
-                <Space>
-                  <Button size="small" type="link" disabled={rawMode} onClick={() => { setObEditing(o); setObOpen(true) }}>编辑</Button>
-                  <Button size="small" type="link" danger disabled={rawMode} onClick={() => onDeleteOutbound(o)}>删除</Button>
-                </Space>
-              ),
-            },
-          ]}
-        />
-      </Card>
-
-      <Card
-        title="规则"
-        extra={
-          <Space>
-            <Button icon={<ControlOutlined />} disabled={rawMode} onClick={() => setRsModalOpen(true)}>
-              规则集
-            </Button>
-            <Button
-              type="primary"
-              icon={<PlusOutlined />}
-              disabled={rawMode}
-              onClick={() => { setRuleEditing(null); setRuleOpen(true) }}
-            >
-              新增规则
-            </Button>
-          </Space>
-        }
-      >
-        <div style={{ fontSize: 13, color: 'var(--console-muted)', marginBottom: 12 }}>
-          按条件匹配入站流量并路由至指定出站。规则从上至下依次顺序匹配，未命中的流量走兜底出站。
-        </div>
-
-        <Table
-          rowKey="id"
-          pagination={false}
-          scroll={{ x: 640 }}
-          dataSource={rules}
-          onRow={(_, index) => ({
-            draggable: !rawMode,
-            onDragStart: (e) => {
-              draggedRuleIndexRef.current = index!
-              setDraggedRuleIndex(index!)
-              e.dataTransfer.effectAllowed = 'move'
-              e.dataTransfer.setData('text/plain', String(index))
-            },
-            onDragOver: (e) => e.preventDefault(),
-            onDragEnd: () => {
-              draggedRuleIndexRef.current = null
-              setDraggedRuleIndex(null)
-            },
-            onDrop: () => handleRuleDrop(index!),
-            style: {
-              cursor: 'grab',
-              outline: ruleDropIndex === index ? '2px solid var(--console-focus)' : undefined,
-              outlineOffset: -2,
-            },
-          })}
-          columns={[
-            {
-              title: '排序',
-              width: 70,
-              align: 'center',
-              render: (_, __, index) => (
-                <button
-                  type="button"
-                  className="rule-drag-handle"
-                  aria-label={`调整第 ${index + 1} 条规则顺序`}
-                  aria-describedby="rule-sort-help"
-                  title="按住拖拽以调整规则顺序"
-                  disabled={rawMode}
-                  onKeyDown={(event) => {
-                    if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-                      event.preventDefault()
-                      commitRuleMove(index, index + (event.key === 'ArrowUp' ? -1 : 1))
-                    }
-                  }}
-                  onPointerDown={(event) => startRulePointerDrag(event, index)}
-                  onPointerMove={moveRulePointerDrag}
-                  onPointerUp={finishRulePointerDrag}
-                  onPointerCancel={cancelRulePointerDrag}
-                >
-                  <MenuOutlined style={{ color: 'var(--console-faint)', fontSize: 14, cursor: 'grab' }} />
-                </button>
-              ),
-            },
-            {
-              title: '匹配条件',
-              render: (_, r: RouteRule) => {
-                const m = r.match || {}
-                return (
-                  <Space wrap size={[4, 4]}>
-                    {m.rule_set?.map((tag) => (
-                      <Tag key={tag} color="geekblue">
-                        规则集: {tag}
-                      </Tag>
-                    ))}
-                    {m.inbound?.map((ib) => (
-                      <Tag key={ib} color="green">
-                        入站: {ib}
-                      </Tag>
-                    ))}
-                    {m.domain?.map((domain) => (
-                      <Tag key={`domain-${domain}`} color="orange">
-                        域名: {domain}
-                      </Tag>
-                    ))}
-                    {m.domain_suffix?.map((ds) => (
-                      <Tag key={`suffix-${ds}`} color="orange">
-                        域名: {ds}
-                      </Tag>
-                    ))}
-                    {m.domain_keyword?.map((keyword) => (
-                      <Tag key={`keyword-${keyword}`} color="orange">
-                        关键词: {keyword}
-                      </Tag>
-                    ))}
-                    {m.ip_cidr?.map((ip) => (
-                      <Tag key={`ip-${ip}`} color="magenta">
-                        目标 IP: {ip}
-                      </Tag>
-                    ))}
-                    {m.source_ip_cidr?.map((ip) => (
-                      <Tag key={`source-ip-${ip}`} color="magenta">
-                        来源 IP: {ip}
-                      </Tag>
-                    ))}
-                    {m.port?.map((port) => (
-                      <Tag key={`port-${port}`} color="cyan">
-                        端口: {port}
-                      </Tag>
-                    ))}
-                    {m.protocol?.map((p) => (
-                      <Tag key={`protocol-${p}`} color="purple">
-                        协议: {p}
-                      </Tag>
-                    ))}
-                    {m.network ? (
-                      <Tag color="geekblue">
-                        网络: {m.network.toUpperCase()}
-                      </Tag>
-                    ) : null}
-                    {!m.rule_set?.length && !m.inbound?.length && !m.domain?.length && !m.domain_suffix?.length && !m.domain_keyword?.length && !m.ip_cidr?.length && !m.source_ip_cidr?.length && !m.port?.length && !m.protocol?.length && !m.network && (
-                      <Tag style={{ color: 'var(--console-muted)' }}>
-                        匹配全部流量
-                      </Tag>
-                    )}
-                  </Space>
-                )
-              },
-            },
-            {
-              title: '动作 / 目标出站',
-              dataIndex: 'outbound',
-              width: 170,
-              render: (v, r: RouteRule) => {
-                const act = (r.match?.action as string) || (v === 'block' ? 'reject' : v)
-                if (act === 'sniff' || v === 'sniff') return <Tag color="purple">sniff (协议嗅探)</Tag>
-                if (act === 'reject' || v === 'block' || v === 'reject') return <Tag color="red">reject (拒绝访问)</Tag>
-                if (act === 'hijack-dns' || v === 'hijack-dns') return <Tag color="orange">hijack-dns (DNS劫持)</Tag>
-                return <Tag color="blue">{v}</Tag>
-              },
-            },
-            {
-              title: '启用',
-              dataIndex: 'enabled',
-              width: 80,
-              render: (v: boolean) => (v ? <Tag color="green">是</Tag> : <Tag>否</Tag>),
-            },
-            {
-              title: '操作',
-              width: 110,
-              render: (_, r: RouteRule) => (
-                <Space size="small">
-                  <Button size="small" type="link" disabled={rawMode} onClick={() => { setRuleEditing(r); setRuleOpen(true) }}>编辑</Button>
-                  <Button size="small" type="link" danger disabled={rawMode} onClick={() => onDeleteRule(r)}>删除</Button>
-                </Space>
-              ),
-            },
-          ]}
-          summary={() => {
-            const finalOut = (server.final_outbound || 'direct').toUpperCase()
-            return (
-              <Table.Summary.Row style={{ background: 'var(--console-surface)' }}>
-                <Table.Summary.Cell index={0} align="center">
-                  <span style={{ color: 'var(--console-faint)' }}>-</span>
-                </Table.Summary.Cell>
-                <Table.Summary.Cell index={1}>
-                  <Tag color="purple" style={{ margin: 0, fontWeight: 600 }}>
-                    final
-                  </Tag>
-                </Table.Summary.Cell>
-                <Table.Summary.Cell index={2}>
-                  <Tag color={finalOut === 'DIRECT' ? 'geekblue' : 'blue'} style={{ margin: 0, fontWeight: 600 }}>
-                    {finalOut}
-                  </Tag>
-                </Table.Summary.Cell>
-                <Table.Summary.Cell index={3}>
-                  <Tag color="green">是</Tag>
-                </Table.Summary.Cell>
-                <Table.Summary.Cell index={4}>
-                  <Space size="small">
-                    <Button size="small" type="link" disabled>
-                      编辑
-                    </Button>
-                    <Button size="small" type="link" danger disabled={rawMode} onClick={onResetFinal}>
-                      删除
-                    </Button>
-                  </Space>
-                </Table.Summary.Cell>
-              </Table.Summary.Row>
-            )
-          }}
-        />
-      </Card>
-
-      <Modal
-        title="规则集管理"
-        open={rsModalOpen}
-        onCancel={() => setRsModalOpen(false)}
-        footer={null}
-        width={580}
-        centered
-        destroyOnClose
-      >
-        <RuleSetsTab
-          key={sid}
-          serverId={sid}
-          ruleSets={ruleSets}
-          outbounds={outbounds}
-          onRefresh={loadCurrentServer}
-          rawMode={rawMode}
-        />
-      </Modal>
+      <Pills
+        label="服务器配置"
+        active={section}
+        onChange={goSection}
+        actions={addButton[section]}
+        items={[
+          { key: 'inbounds', label: '入站', count: server.inbounds?.length || 0 },
+          { key: 'outbounds', label: '出站', count: outbounds.length },
+          { key: 'rules', label: '路由', count: rules.length },
+          { key: 'rulesets', label: '规则集', count: ruleSets.length },
+        ]}
+      />
+      {views[section]}
 
       <InboundForm
         key={`inbound-${sid}`}
@@ -1228,8 +1052,7 @@ export default function ServerDetail() {
 
       <span id="rule-sort-help" className="sr-only">使用上方向键或下方向键调整规则顺序</span>
       <div className="sr-only" aria-live="polite" aria-atomic="true">{sortAnnouncement}</div>
-
-    </Space>
+    </div>
     </RequestState>
   )
 }

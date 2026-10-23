@@ -1,6 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
-import { Button, Result, Space } from 'antd'
-import { HomeOutlined, ReloadOutlined } from '@ant-design/icons'
+import { Button } from 'antd'
+import '../styles/settings-user.css'
 
 interface Props {
   children: ReactNode
@@ -31,18 +31,16 @@ export class RouteErrorBoundary extends Component<Props, State> {
   render() {
     if (!this.state.error) return this.props.children
     return (
-      <Result
-        status="error"
-        title="页面加载失败"
-        subTitle={this.state.error.message || '页面资源或运行状态异常'}
-        extra={(
-          <Space wrap>
-            <Button icon={<ReloadOutlined />} onClick={() => this.setState({ error: null })}>重试</Button>
-            <Button icon={<ReloadOutlined />} onClick={() => window.location.reload()}>重新加载</Button>
-            <Button type="primary" icon={<HomeOutlined />} onClick={() => window.location.assign('/')}>返回首页</Button>
-          </Space>
-        )}
-      />
+      <div className="route-error" role="alert">
+        <span className="route-error-mark" aria-hidden="true">!</span>
+        <h1>页面加载失败</h1>
+        <p className="mono">{this.state.error.message || '页面资源或运行状态异常'}</p>
+        <div className="route-error-actions">
+          <Button onClick={() => this.setState({ error: null })}>重试</Button>
+          <Button onClick={() => window.location.reload()}>重新加载</Button>
+          <Button type="primary" onClick={() => window.location.assign('/')}>返回首页</Button>
+        </div>
+      </div>
     )
   }
 }

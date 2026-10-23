@@ -1,0 +1,179 @@
+/* Users, external nodes, node assignment — Design A. */
+
+/* ---------- Page ---------- */
+.um-page { min-width: 0; }
+.um-search { width: 220px; }
+.um-strong { font-weight: 500; color: var(--console-ink); }
+.um-user { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.um-user-name { font-weight: 500; color: var(--console-ink); overflow-wrap: anywhere; }
+.um-ellipsis { display: block; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.um-stack { display: inline-flex; flex-direction: column; min-width: 0; max-width: 100%; line-height: 1.4; white-space: nowrap; }
+.um-stack small { color: var(--console-faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.um-stack.mono small { font-size: 11.5px; }
+.um-action-gap { visibility: hidden; pointer-events: none; }
+
+.um-table .ant-table-tbody > tr > td { padding-top: 12px; padding-bottom: 12px; }
+.um-table .ant-table-tbody > tr.ant-table-row:hover > td { background: var(--console-surface); }
+.um-clickable-row { cursor: pointer; }
+
+/* ---------- External nodes ---------- */
+
+.um-filter-group { width: 180px; }
+.um-filter-search { width: 200px; }
+.um-filter-count { color: var(--console-faint); }
+.um-node-title { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
+.um-node-title .custom-node-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-weight: 500; }
+.um-node-title .custom-node-name > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.um-group-label { color: var(--console-muted); }
+.um-group-button { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 26px; padding: 0 8px; margin-left: -8px; border: 0; border-radius: 6px; background: transparent; color: var(--console-ink); font: inherit; font-size: 13px; cursor: pointer; }
+.um-group-button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.um-group-button .anticon { font-size: 9px; color: var(--console-faint); }
+.um-group-button.is-empty { color: var(--console-faint); }
+.um-group-button:hover { background: var(--console-hover); }
+.um-group-button:focus-visible { outline: 2px solid var(--console-focus); outline-offset: 1px; }
+.um-quick-group { width: 240px; }
+.um-quick-group-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+
+/* Mobile cards (virtualised lists) */
+.um-vlist.is-scrollable { max-height: 560px; overflow-y: auto; overscroll-behavior: contain; }
+.um-mcard { box-sizing: border-box; min-width: 0; padding: 12px 14px; border: 1px solid var(--console-border); border-radius: var(--app-radius); background: var(--console-container); }
+.um-mcard.is-clickable { cursor: pointer; }
+.um-mcard-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.um-mcard-name { min-width: 0; font-weight: 500; color: var(--console-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.um-mcard-name .custom-node-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.um-mcard-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-top: 6px; color: var(--console-muted); font-size: 12.5px; }
+.um-mcard-addr { margin-top: 4px; color: var(--console-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.um-mcard-error { margin-top: 6px; color: var(--console-error-text); font-size: 12px; overflow-wrap: anywhere; }
+
+/* ---------- Modals ---------- */
+.um-group { padding: 16px 0 4px; }
+.um-group + .um-group { margin-top: 12px; border-top: 1px solid var(--console-border); }
+.um-modal .ant-modal-body > .um-group:first-child { padding-top: 4px; }
+.um-group-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; font-size: 12.5px; }
+.um-group-head h4, .um-form-group > h4 { margin: 0; font-size: 13px; font-weight: 600; color: var(--console-ink); }
+.um-form-group { margin-top: 4px; padding-top: 16px; border-top: 1px solid var(--console-border); }
+.um-form-group > h4 { margin-bottom: 12px; }
+.um-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; }
+.um-switch-row { display: flex; gap: 32px; }
+.um-switch-row .ant-form-item { margin-bottom: 4px; }
+
+.um-mini-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 12px; border: 1px solid var(--console-border); border-radius: var(--app-radius); overflow: hidden; }
+.um-mini-stats.is-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.um-mini-stats > div { min-width: 0; padding: 10px 14px; }
+.um-mini-stats > div + div { border-left: 1px solid var(--console-border); }
+.um-mini-stats span { display: block; color: var(--console-muted); font-size: 12px; }
+.um-mini-stats b { display: block; margin-top: 2px; font-size: 15px; font-weight: 600; color: var(--console-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.um-detail { overflow: hidden; }
+.um-detail dt { font-size: 13px; }
+.um-detail-value { font-size: 12.5px; overflow-wrap: anywhere; word-break: break-all; }
+
+/* Subscription rules */
+.um-rule-head, .um-rule-row { display: grid; grid-template-columns: 24px 132px minmax(0, 1fr) minmax(0, 1fr) 84px; gap: 8px; align-items: start; }
+.um-rule-head { padding: 0 0 6px; color: var(--console-faint); font-size: 12px; }
+.um-rule-row { margin-bottom: 8px; }
+.um-rule-row .ant-form-item { margin: 0; min-width: 0; }
+.um-rule-order { display: grid; place-items: center; height: 32px; color: var(--console-faint); }
+.um-rule-none { display: flex; align-items: center; height: 32px; padding-left: 4px; }
+.um-rule-actions { height: 32px; }
+
+/* ---------- Assign modal ---------- */
+.um-access-assign-modal .ant-modal-body > .request-state-loading { min-height: min(360px, 50dvh); }
+.um-access-assign-modal .ant-modal-body { padding-top: 8px; }
+.um-access-note { margin: 0 0 12px; color: var(--console-muted); font-size: 12.5px; }
+.um-access-modal-body { display: flex; flex-direction: column; border: 1px solid var(--console-border); border-radius: var(--app-radius); overflow: hidden; }
+.um-access-modal-group { flex: none; }
+.um-access-modal-group + .um-access-modal-group { border-top: 1px solid var(--console-border); }
+.um-access-modal-group-head { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 14px 6px 8px; }
+.um-access-modal-group-head:hover { background: var(--console-surface); }
+.um-access-modal-group-head strong { min-width: 0; font-weight: 500; color: var(--console-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.um-access-modal-group-head small { min-width: 0; color: var(--console-faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.um-access-group-unnamed { color: var(--console-muted); }
+.um-access-group-count { margin-left: auto; flex: none; color: var(--console-faint); font-family: var(--app-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+.um-access-group-toggle { flex: none; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--console-faint); font-size: 10px; cursor: pointer; }
+.um-access-group-toggle:hover { color: var(--console-ink); background: var(--console-hover); }
+.um-access-group-toggle:focus-visible, .um-access-order-handle:focus-visible { outline: 2px solid var(--console-focus); outline-offset: 1px; }
+.um-access-modal-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; padding: 4px 14px 14px 42px; }
+.um-access-chip { display: flex; align-items: center; gap: 8px; min-width: 0; height: 32px; padding: 0 10px; border: 1px solid var(--console-border); border-radius: 6px; background: var(--console-container); cursor: pointer; transition: border-color .15s, background .15s; }
+.um-access-chip:hover { border-color: var(--console-border-hover); }
+.um-access-chip.checked { border-color: var(--console-border-strong); background: var(--console-selected); }
+.um-access-chip.disabled { cursor: not-allowed; opacity: .6; }
+.um-access-chip-name { flex: 1; min-width: 0; font-size: 13px; color: var(--console-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.um-access-chip-proto, .um-access-chip-off { flex: none; color: var(--console-faint); font-size: 11.5px; }
+.um-access-chip-off { color: var(--console-warning-text); }
+
+.um-access-order-list { display: flex; flex-direction: column; max-height: min(56dvh, 520px); overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--console-border); border-radius: var(--app-radius); }
+.um-access-order-item { position: relative; flex: none; display: grid; grid-template-columns: 28px 24px minmax(0, 1fr) 200px 44px 92px; align-items: center; gap: 8px; min-height: 52px; padding: 6px 14px 6px 6px; background: var(--console-container); }
+.um-access-order-item + .um-access-order-item { border-top: 1px solid var(--console-border); }
+.um-access-order-item:hover { background: var(--console-surface); }
+.um-access-order-item.dragging { opacity: .45; }
+.um-access-order-item.touch-drop-before { box-shadow: inset 0 2px 0 var(--console-ink); }
+.um-access-order-item.touch-drop-after { box-shadow: inset 0 -2px 0 var(--console-ink); }
+.um-access-order-handle { display: grid; place-items: center; width: 28px; height: 32px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--console-faint); cursor: grab; touch-action: none; }
+.um-access-order-handle:hover { color: var(--console-ink); background: var(--console-hover); }
+.um-access-order-handle:disabled { cursor: not-allowed; opacity: .5; }
+.um-access-order-number { color: var(--console-faint); font-family: var(--app-mono); font-size: 12px; text-align: center; font-variant-numeric: tabular-nums; }
+.um-access-order-content { display: flex; flex-direction: column; min-width: 0; }
+.um-access-order-content strong, .um-access-order-content small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.um-access-order-content strong { font-weight: 500; font-size: 13px; color: var(--console-ink); }
+.um-access-order-content small { color: var(--console-faint); font-size: 12px; }
+.um-access-order-kind { color: var(--console-muted); font-size: 12px; text-align: center; }
+.um-access-order-protocol { justify-self: end; }
+
+.um-access-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.um-access-footer > span { color: var(--console-faint); font-size: 12.5px; }
+.um-access-footer > span.is-dirty { color: var(--console-warning-text); }
+.um-access-footer-actions { display: flex; gap: 8px; margin-left: auto; }
+
+/* ---------- Server access picker ---------- */
+.um-picker { display: flex; flex-direction: column; max-height: 340px; overflow-y: auto; border: 1px solid var(--console-border); border-radius: var(--app-radius); }
+.um-picker-empty { padding: 16px; color: var(--console-faint); font-size: 13px; text-align: center; }
+.um-picker-server { padding: 10px 14px; }
+.um-picker-server + .um-picker-server { border-top: 1px solid var(--console-border); }
+.um-picker-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.um-picker-name { display: inline-flex; align-items: center; gap: 8px; min-width: 0; font-weight: 500; cursor: pointer; user-select: none; overflow-wrap: anywhere; }
+.um-picker-inbounds { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0 2px 24px; }
+.um-picker-inbound { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border: 1px solid var(--console-border); border-radius: 6px; background: transparent; color: var(--console-muted); font: inherit; font-size: 12px; cursor: pointer; }
+.um-picker-inbound:hover { border-color: var(--console-border-hover); color: var(--console-ink); }
+.um-picker-inbound.is-on { border-color: var(--console-border-strong); background: var(--console-selected); color: var(--console-ink); }
+
+/* ---------- Mobile ---------- */
+.um-xs-status { display: none; }
+@media (max-width: 575px) {
+  .um-xs-status { display: block; margin-top: 2px; }
+  .um-xs-status .ui-status { font-size: 12px; }
+  .um-user { flex-wrap: wrap; }
+}
+@media (max-width: 767px) {
+  .um-page .ui-pills-row { align-items: stretch; }
+  .um-page .ui-pills-actions:has(.ant-input-affix-wrapper, .ant-select) { flex: 1 1 100%; }
+  .um-search, .um-filter-search, .um-filter-group { flex: 1 1 0; width: auto; min-width: 0; }
+  .um-page .ui-pills-actions > .ant-btn { flex: none; }
+  .um-mini-stats, .um-mini-stats.is-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .um-mini-stats > div:nth-child(odd) { border-left: 0; }
+  .um-mini-stats > div:nth-child(n + 3) { border-top: 1px solid var(--console-border); }
+  .um-mini-stats.is-3 > div:last-child { grid-column: 1 / -1; }
+  .um-switch-row { gap: 24px; }
+  .um-form-grid { grid-template-columns: minmax(0, 1fr); }
+  .um-rule-head { display: none; }
+  .um-rule-row { grid-template-columns: 24px minmax(0, 1fr) auto; padding: 10px 0; margin: 0; border-top: 1px solid var(--console-border); }
+  .um-rule-head + .um-rule-row { border-top: 0; }
+  .um-rule-pattern, .um-rule-replacement, .um-rule-none { grid-column: 2 / -1; }
+  .um-rule-none { display: none; }
+  .um-rule-actions { grid-column: 3; grid-row: 1; }
+  .um-access-modal-items { grid-template-columns: minmax(0, 1fr); padding-left: 14px; }
+  .um-access-order-item { grid-template-columns: 28px minmax(0, 1fr) auto; grid-template-areas: 'handle content kind' 'handle input input'; row-gap: 6px; padding: 8px 12px 10px 6px; }
+  .um-access-order-handle { grid-area: handle; align-self: start; }
+  .um-access-order-number, .um-access-order-protocol { display: none; }
+  .um-access-order-content { grid-area: content; }
+  .um-access-order-kind { grid-area: kind; }
+  .um-access-order-name-input { grid-area: input; }
+  .um-access-footer > span { display: none; }
+  .um-access-footer-actions { flex: 1; justify-content: flex-end; }
+}
+.um-detail .ant-typography-copy, .um-detail .ant-typography-copy:hover { color: var(--console-faint); }
+
+/* Node column: server / external-group chips. */
+.um-chips { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; max-width: 360px; }
+.um-chips .ui-tag { max-width: 150px; overflow: hidden; text-overflow: ellipsis; color: var(--console-ink); }
+.um-chips .um-chip-ext { border-style: dashed; color: var(--console-muted); }

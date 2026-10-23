@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode, UIEvent } from 'react'
-import { Button, Card, Empty, Input, Select, Switch, Tag, message } from 'antd'
+import { Button, Input, Select, Switch, message } from 'antd'
 import {
   CopyOutlined,
   DownloadOutlined,
@@ -14,6 +14,8 @@ import { useSSE } from '../../../useSSE'
 import type { SSEMessage } from '../../../useSSE'
 import { copyToClipboard } from '../../../util'
 import { VirtualList } from '../../../components/VirtualList'
+import { PageHeader } from '../../../ui/Page'
+import '../../../styles/traffic-logs.css'
 
 
 const NOISE_PATTERNS = [
@@ -163,7 +165,7 @@ function highlightText(value: string, keyword: string): ReactNode {
   while (matchIndex !== -1) {
     if (matchIndex > cursor) parts.push(value.slice(cursor, matchIndex))
     parts.push(
-      <mark className="logs-highlight" key={`${matchIndex}-${parts.length}`}>
+      <mark className="lg-highlight" key={`${matchIndex}-${parts.length}`}>
         {value.slice(matchIndex, matchIndex + needle.length)}
       </mark>,
     )
@@ -188,17 +190,17 @@ function renderSemanticText(value: string, keyword: string): ReactNode {
 
     const lowerToken = token.toLowerCase()
     const tokenClass = token.startsWith('[')
-      ? 'logs-token-label'
+      ? 'lg-token-label'
       : lowerToken === 'failed' || lowerToken === 'failure' || lowerToken === 'error' || lowerToken === 'timeout'
-        ? 'logs-token-danger'
+        ? 'lg-token-danger'
         : lowerToken === 'inbound' || lowerToken === 'outbound' || lowerToken === 'direct'
-          ? 'logs-token-route'
+          ? 'lg-token-route'
           : token.includes('.')
-            ? 'logs-token-endpoint'
-            : 'logs-token-action'
+            ? 'lg-token-endpoint'
+            : 'lg-token-action'
 
     parts.push(
-      <span className={`logs-token ${tokenClass}`} key={`${index}-${parts.length}`}>
+      <span className={`lg-token ${tokenClass}`} key={`${index}-${parts.length}`}>
         {highlightText(token, keyword)}
       </span>,
     )
@@ -213,13 +215,13 @@ function renderSemanticText(value: string, keyword: string): ReactNode {
 function renderContext(value: string, keyword: string): ReactNode {
   if (!value) return ''
   const splitAt = value.lastIndexOf(' ')
-  if (splitAt === -1) return <span className="logs-context-id">#{highlightText(value, keyword)}</span>
+  if (splitAt === -1) return <span className="lg-context-id">#{highlightText(value, keyword)}</span>
 
   return (
     <>
-      <span className="logs-context-id">#{highlightText(value.slice(0, splitAt), keyword)}</span>
-      <span className="logs-context-separator">·</span>
-      <span className="logs-context-duration">{highlightText(value.slice(splitAt + 1), keyword)}</span>
+      <span className="lg-context-id">#{highlightText(value.slice(0, splitAt), keyword)}</span>
+      <span className="lg-context-separator">·</span>
+      <span className="lg-context-duration">{highlightText(value.slice(splitAt + 1), keyword)}</span>
     </>
   )
 }
@@ -245,7 +247,7 @@ function compactMessage(value: string, direction: LogDirection) {
 }
 
 function formatUpdatedAt(value: number | null) {
-  if (!value) return '尚未更新'
+  if (!value) return '--:--:--'
   return new Date(value).toLocaleTimeString('zh-CN', { hour12: false })
 }
 
@@ -409,7 +411,7 @@ export default function Logs({ serverId }: { serverId?: number } = {}) {
     // lets a delayed cleanup from an earlier StrictMode/effect generation stop
     // the newly-started stream for the same browser tab.
     const sessionID = globalThis.crypto?.randomUUID?.()
-      ?? `logs-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      ?? `lg-${Date.now()}-${Math.random().toString(36).slice(2)}`
     let disposed = false
     let renewTimer: ReturnType<typeof setInterval> | null = null
 
@@ -503,175 +505,179 @@ export default function Logs({ serverId }: { serverId?: number } = {}) {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
-  const liveStatus = !live ? '实时已暂停' : sseConnected ? '实时' : '连接中'
+  const liveStatus = !live ? '已暂停' : sseConnected ? '实时' : '连接中'
+  const liveTone = !live ? 'is-paused' : sseConnected ? 'is-live' : 'is-connecting'
   const emptyDescription = loading
     ? '读取中…'
       : logEntries.length
-      ? '没有符合当前筛选条件的日志'
+      ? '没有匹配的日志'
       : '暂无日志'
 
   return (
-    <Card
-      className="logs-card"
-      title="sing-box 日志"
-      extra={
-        <Button icon={<ReloadOutlined />} loading={loading} onClick={() => load()} title="刷新" aria-label="刷新" />
-      }
-    >
-      <div className="logs-toolbar">
+    <div className="lg-page">
+      <PageHeader
+        title="日志"
+        actions={
+          <Button icon={<ReloadOutlined />} loading={loading} onClick={() => load()}>刷新</Button>
+        }
+      />
+
+      <div className="lg-toolbar">
         {serverId === undefined && <Select
-          className="logs-server-select"
+          className="lg-server-select"
           value={sid ?? undefined}
           onChange={(next) => {
             setLive(false)
             setSid(next)
           }}
           placeholder="选择主机"
+          aria-label="选择主机"
           popupMatchSelectWidth={false}
           options={servers.map((s) => ({
             value: s.id,
-            label: `${s.name}${s.online ? '' : '（离线）'}`,
+            label: (
+              <span className="lg-server-option">
+                <i className={`app-dot${s.online ? '' : ' is-off'}`} />
+                {s.name}
+                {s.online ? null : <span className="faint">离线</span>}
+              </span>
+            ),
             disabled: !s.online,
           }))}
         />}
         <Select
-          className="logs-filter-select"
+          className="lg-filter-select"
           value={levelFilter}
           onChange={(value: LevelFilter) => setLevelFilter(value)}
           options={LEVEL_OPTIONS}
+          aria-label="日志级别"
         />
         <Select
-          className="logs-filter-select"
+          className="lg-filter-select"
           value={directionFilter}
           onChange={(value: DirectionFilter) => setDirectionFilter(value)}
           options={DIRECTION_OPTIONS}
+          aria-label="方向"
         />
         <Input
-          className="logs-search"
+          className="lg-search"
           prefix={<SearchOutlined />}
-          placeholder="搜索日志"
+          placeholder="搜索"
+          aria-label="搜索日志"
           value={keyword}
           onChange={(event) => setKeyword(event.target.value)}
           allowClear
         />
-        <label className="logs-toggle">
+        <label className="lg-toggle">
           <Switch size="small" checked={hideNoise} onChange={setHideNoise} />
           <span>过滤噪音</span>
         </label>
       </div>
 
-      <div className="logs-subtoolbar">
-        <div className="logs-status-group">
-          <span
-            className={`logs-live-status ${live ? (sseConnected ? 'is-connected' : 'is-connecting') : ''}`}
-          >
-            <i />
-            {liveStatus}
-          </span>
-          {keyword.trim() ? <span className="logs-match-count">{filteredLines.length} 条匹配</span> : null}
-          {current && !current.online ? <Tag color="orange">该节点离线，无法读取</Tag> : null}
-        </div>
-
-        <div className="logs-view-options">
-          {!live && current?.online ? (
-            <Button size="small" onClick={() => handleLiveChange(true)}>恢复实时</Button>
-          ) : null}
-          <Button
-            size="small"
-            icon={<DownloadOutlined />}
-            disabled={!filteredLines.length}
-            onClick={downloadLogs}
-          >
-            下载
-          </Button>
-        </div>
-      </div>
-
-      {filteredLines.length ? (
-        <div className="logs-viewer-shell">
-          <VirtualList
-            ref={boxRef}
-            items={filteredLines}
-            getKey={logEntryKey}
-            estimatedItemHeight={32}
-            overscan={12}
-            className={`logs-viewer ${wrapLines ? 'is-wrap' : 'is-nowrap'}`}
-            onScroll={handleScroll}
-            role="log"
-            ariaLabel="sing-box 日志内容"
-            renderItem={(line, index) => {
-              const compact = displayMode === 'compact' && line.parsed
-              const componentText = compactComponent(line.component || 'sing-box', line.direction)
-              const messageText = compactMessage(line.message, line.direction)
-              return (
-                <div
-                  className={`logs-line ${index % 2 ? 'is-even' : ''} ${compact ? 'logs-line-compact' : 'logs-line-raw'} logs-line-${levelClass(line.level)}`}
-                  title={compact ? line.raw : undefined}
-                >
-                  {compact ? (
-                    <>
-                      <span className="logs-time">{line.time || '--:--:--'}</span>
-                      <span className={`logs-level logs-level-${levelClass(line.level)}`}>
-                        {line.level || 'LOG'}
-                      </span>
-                      <span className={`logs-direction logs-direction-${line.direction || 'none'}`}>
-                        {line.direction === 'inbound' ? 'INBOUND' : line.direction === 'outbound' ? 'OUTBOUND' : '—'}
-                      </span>
-                      <span className={`logs-user ${line.user ? '' : 'is-empty'}`} title={line.user || undefined}>
-                        {line.user ? highlightText(line.user, keyword) : null}
-                      </span>
-                      <span
-                        className={`logs-component logs-component-${line.direction || 'neutral'}`}
-                        title={line.component}
-                      >
-                        {highlightText(componentText, keyword)}
-                      </span>
-                      <span className="logs-context" title={line.context}>
-                        {renderContext(line.context, keyword)}
-                      </span>
-                      <span className="logs-message">{renderSemanticText(messageText, keyword)}</span>
-                    </>
-                  ) : (
-                    <span className="logs-raw-text">{renderSemanticText(line.raw, keyword)}</span>
-                  )}
-                  <button
-                    type="button"
-                    className="logs-copy-button"
-                    onClick={() => copyLine(line.raw)}
-                    title="复制该行"
-                    aria-label="复制该行日志"
-                  >
-                    <CopyOutlined />
-                  </button>
-                </div>
-              )
-            }}
-          />
-
-          {!following ? (
+      <div className="lg-box">
+        <div className="lg-statusbar">
+          <div className="lg-status-group">
+            <span className={`lg-live ${liveTone}`}><i />{liveStatus}</span>
+            {keyword.trim() ? <span className="lg-match mono">{filteredLines.length} 条匹配</span> : null}
+            {current && !current.online ? <span className="lg-offline">节点离线</span> : null}
+          </div>
+          <div className="lg-status-group lg-status-right">
+            <span className="lg-count mono" title={`最后更新 ${formatUpdatedAt(lastUpdatedAt)}`}>
+              {filteredLines.length} / {logEntries.length} 行 · {formatUpdatedAt(lastUpdatedAt)}
+            </span>
+            {!live && current?.online ? (
+              <Button size="small" type="text" onClick={() => handleLiveChange(true)}>恢复实时</Button>
+            ) : null}
             <Button
-              className="logs-jump-latest"
-              type="primary"
               size="small"
-              icon={<VerticalAlignBottomOutlined />}
-              onClick={() => scrollToLatest(true)}
+              type="text"
+              icon={<DownloadOutlined />}
+              disabled={!filteredLines.length}
+              onClick={downloadLogs}
+              aria-label="下载日志"
             >
-              回到最新
+              下载
             </Button>
-          ) : null}
+          </div>
         </div>
-      ) : (
-        <div className="logs-empty">
-          <Empty description={emptyDescription} />
-        </div>
-      )}
 
-      <div className="logs-footer">
-        <span>
-          已显示 {filteredLines.length} / {logEntries.length} 行
-        </span>
-        <span>最后更新：{formatUpdatedAt(lastUpdatedAt)}</span>
+        {filteredLines.length ? (
+          <div className="lg-viewer-shell">
+            <VirtualList
+              ref={boxRef}
+              items={filteredLines}
+              getKey={logEntryKey}
+              estimatedItemHeight={28}
+              overscan={12}
+              className={`lg-viewer ${wrapLines ? 'is-wrap' : 'is-nowrap'}`}
+              onScroll={handleScroll}
+              role="log"
+              ariaLabel="sing-box 日志内容"
+              renderItem={(line) => {
+                const compact = displayMode === 'compact' && line.parsed
+                const componentText = compactComponent(line.component || 'sing-box', line.direction)
+                const messageText = compactMessage(line.message, line.direction)
+                return (
+                  <div
+                    className={`lg-line ${compact ? 'lg-line-compact' : 'lg-line-raw'} lg-line-${levelClass(line.level)}`}
+                    title={compact ? line.raw : undefined}
+                  >
+                    {compact ? (
+                      <>
+                        <span className="lg-time">{line.time || '--:--:--'}</span>
+                        <span className={`lg-level lg-level-${levelClass(line.level)}`}>
+                          {line.level || 'LOG'}
+                        </span>
+                        <span className={`lg-direction lg-direction-${line.direction || 'none'}`}>
+                          {line.direction === 'inbound' ? 'INBOUND' : line.direction === 'outbound' ? 'OUTBOUND' : '—'}
+                        </span>
+                        <span className={`lg-user ${line.user ? '' : 'is-empty'}`} title={line.user || undefined}>
+                          {line.user ? highlightText(line.user, keyword) : null}
+                        </span>
+                        <span
+                          className={`lg-component lg-component-${line.direction || 'neutral'}`}
+                          title={line.component}
+                        >
+                          {highlightText(componentText, keyword)}
+                        </span>
+                        <span className="lg-context" title={line.context}>
+                          {renderContext(line.context, keyword)}
+                        </span>
+                        <span className="lg-message">{renderSemanticText(messageText, keyword)}</span>
+                      </>
+                    ) : (
+                      <span className="lg-raw-text">{renderSemanticText(line.raw, keyword)}</span>
+                    )}
+                    <button
+                      type="button"
+                      className="lg-copy-button"
+                      onClick={() => copyLine(line.raw)}
+                      title="复制该行"
+                      aria-label="复制该行日志"
+                    >
+                      <CopyOutlined />
+                    </button>
+                  </div>
+                )
+              }}
+            />
+
+            {!following ? (
+              <Button
+                className="lg-jump-latest"
+                type="primary"
+                size="small"
+                icon={<VerticalAlignBottomOutlined />}
+                onClick={() => scrollToLatest(true)}
+              >
+                回到最新
+              </Button>
+            ) : null}
+          </div>
+        ) : (
+          <div className="lg-empty">{emptyDescription}</div>
+        )}
       </div>
-    </Card>
+    </div>
   )
 }

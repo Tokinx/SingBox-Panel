@@ -1,18 +1,20 @@
 import { theme, type ThemeConfig } from 'antd'
 
+// Design "A": neutral, high-contrast, black primary actions.
 const dayColors = {
-  ink: '#1f1f1f', muted: '#595959', faint: '#666666', placeholder: '#737373',
-  primary: '#3a5bff', onPrimary: '#ffffff', link: '#1677ff', brand: '#3a5bff',
-  border: '#f0f0f0', borderStrong: '#d9d9d9', borderHover: '#d9d9d9',
-  layout: '#f5f5f5', container: '#ffffff', elevated: '#ffffff',
-  surface: '#fafafa', chrome: '#ffffff', chromeTint: '#ffffff', spotlight: '#1f1f1f',
-  selected: '#f0f5ff', selectedBorder: '#dee8ff', selectedText: '#3a5bff',
-  hover: '#f5f5f5', focus: '#3a5bff',
-  success: '#52c41a', warning: '#faad14', error: '#ff4d4f',
-  warningText: '#ad6800', errorText: '#a61d24',
-  download: '#4096ff', upload: '#36cfc9',
+  ink: '#111111', muted: '#666666', faint: '#8f8f8f', placeholder: '#a3a3a3',
+  primary: '#111111', onPrimary: '#ffffff', link: '#0b63ce', brand: '#111111',
+  border: '#eaeaea', borderStrong: '#d6d6d6', borderHover: '#b5b5b5',
+  layout: '#ffffff', container: '#ffffff', elevated: '#ffffff',
+  surface: '#fafafa', chrome: '#ffffff', chromeTint: '#fafafa', spotlight: '#111111',
+  selected: '#f2f2f2', selectedBorder: '#e6e6e6', selectedText: '#111111',
+  hover: '#f4f4f4', focus: '#0b63ce',
+  success: '#16a34a', warning: '#d97706', error: '#dc2626',
+  warningText: '#a35a00', errorText: '#b91c1c',
+  download: '#111111', upload: '#9a9a9a',
   shadow: '0 0 0',
 }
+export const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif'
 
 export type ConsoleThemeId = 'blue' | 'dark'
 export type ConsoleThemePreference = ConsoleThemeId | 'auto'
@@ -24,13 +26,15 @@ export type ConsoleThemePreference = ConsoleThemeId | 'auto'
 export const loginTheme: ThemeConfig = {
   token: {
     colorPrimary: dayColors.primary,
-    colorText: '#302f2d',
-    colorTextPlaceholder: '#96938e',
-    colorBorder: '#e6e4e1',
+    colorText: dayColors.ink,
+    colorTextPlaceholder: dayColors.placeholder,
+    colorBorder: dayColors.borderStrong,
     borderRadius: 8,
-    controlHeightLG: 46,
+    controlHeightLG: 42,
     fontSize: 14,
+    fontFamily: FONT,
   },
+  components: { Button: { primaryShadow: 'none', fontWeight: 500 } },
 }
 
 export type ConsolePalette = {
@@ -45,17 +49,17 @@ export const consolePalettes: ConsolePalette[] = [
   {
     id: 'dark', name: '夜间',
     colors: {
-      // Neutral surfaces sampled from the browser toolbar and address bar.
-      ink: '#f1f1f1', muted: '#c2c2c2', faint: '#aaaaaa', placeholder: '#979797',
-      primary: '#8ab4f8', onPrimary: '#1b1b1b', link: '#9fc6ff', brand: '#adcfff',
-      border: '#3b3b3b', borderStrong: '#515151', borderHover: '#747474',
-      layout: '#1b1b1b', container: '#262626', elevated: '#303030',
-      surface: '#2d2d2d', chrome: '#262626', chromeTint: '#262626', spotlight: '#454545',
-      selected: '#3a3f47', selectedBorder: '#505965', selectedText: '#c2dcff',
-      hover: '#363636', focus: '#a8c7fa',
-      success: '#9fd4ac', warning: '#edc985', error: '#f2aaa6',
-      warningText: '#edc985', errorText: '#f2aaa6',
-      download: '#9fc6ff', upload: '#8ed1c6', shadow: '0 0 0',
+      // Neutral greys (not pure black), close to the browser's own dark chrome.
+      ink: '#ececec', muted: '#a8a8a8', faint: '#868686', placeholder: '#7a7a7a',
+      primary: '#ececec', onPrimary: '#1e1e1e', link: '#7cb0ff', brand: '#ececec',
+      border: '#353535', borderStrong: '#474747', borderHover: '#5e5e5e',
+      layout: '#1e1e1e', container: '#1e1e1e', elevated: '#2a2a2a',
+      surface: '#252525', chrome: '#1e1e1e', chromeTint: '#252525', spotlight: '#3a3a3a',
+      selected: '#333333', selectedBorder: '#3d3d3d', selectedText: '#ececec',
+      hover: '#2a2a2a', focus: '#7cb0ff',
+      success: '#4cc46a', warning: '#e8a94a', error: '#f27a7c',
+      warningText: '#e8a94a', errorText: '#f27a7c',
+      download: '#ececec', upload: '#868686', shadow: '0 0 0',
     },
   },
 ]
@@ -99,35 +103,37 @@ export function getConsoleTheme(palette: ConsolePalette): ThemeConfig {
       colorBgLayout: c.layout, colorBgContainer: c.container, colorBgElevated: c.elevated,
       colorBorder: c.borderStrong, colorBorderSecondary: c.border,
       colorFillAlter: c.surface, colorFillSecondary: c.selected,
-      borderRadius: 8, borderRadiusLG: 12, controlHeight: 36, fontSize: 14,
+      borderRadius: 6, borderRadiusLG: 12, borderRadiusSM: 4, controlHeight: 32, controlHeightSM: 26, fontSize: 14, fontFamily: FONT,
+      colorPrimaryHover: palette.id === 'dark' ? '#d4d4d4' : '#333333', colorPrimaryActive: c.primary,
       boxShadow: `0 8px 28px rgb(${c.shadow} / 8%)`,
       boxShadowSecondary: `0 12px 40px rgb(${c.shadow} / 12%)`,
       motionDurationFast: '0.12s', motionDurationMid: '0.2s', motionDurationSlow: '0.28s',
     },
     components: {
       Layout: { bodyBg: c.layout, headerBg: c.chrome, lightSiderBg: c.chrome },
-      Menu: {
-        itemBg: c.chrome, subMenuItemBg: c.chrome, itemColor: c.ink,
-        itemHoverColor: c.selectedText, itemHoverBg: c.hover,
-        itemSelectedBg: c.selected, itemSelectedColor: c.selectedText,
-        itemHeight: 44, itemBorderRadius: 8,
-      },
       Button: {
-        primaryShadow: 'none', defaultShadow: 'none', fontWeight: 500,
-        primaryColor: c.onPrimary, dangerColor: c.onPrimary,
+        primaryShadow: 'none', defaultShadow: 'none', dangerShadow: 'none', fontWeight: 500,
+        primaryColor: c.onPrimary, defaultBorderColor: c.border,
+        defaultHoverBorderColor: c.borderHover, defaultHoverColor: c.ink, defaultHoverBg: c.container,
       },
-      Card: { headerFontSize: 15, headerHeight: 54 },
+      Card: { headerFontSize: 14, headerHeight: 48 },
       Table: {
-        headerBg: c.surface, headerColor: c.ink, headerSplitColor: c.border,
+        headerBg: c.surface, headerColor: c.muted, headerSplitColor: 'transparent',
         rowHoverBg: c.surface, rowSelectedBg: c.selected, rowSelectedHoverBg: c.hover,
-        borderColor: c.border,
+        borderColor: c.border, cellPaddingBlock: 13, cellPaddingInline: 16, headerBorderRadius: 12,
       },
-      Tabs: { inkBarColor: c.primary, itemSelectedColor: c.primary, itemHoverColor: c.link },
-      Segmented: { trackBg: c.selected, itemSelectedBg: c.container, itemSelectedColor: c.selectedText },
-      Select: { optionSelectedBg: c.selected, optionActiveBg: c.hover },
-      Progress: { defaultColor: c.success, remainingColor: c.border },
-      Statistic: { contentFontSize: 28, titleFontSize: 13 },
+      Tabs: { inkBarColor: c.ink, itemSelectedColor: c.ink, itemHoverColor: c.ink, itemColor: c.muted },
+      Segmented: { trackPadding: 2, trackBg: c.surface, itemSelectedBg: palette.id === 'dark' ? '#3a3a3a' : '#ffffff', itemSelectedColor: c.ink, itemColor: c.muted },
+      Select: { optionSelectedBg: c.selected, optionActiveBg: c.hover, activeBorderColor: c.borderHover, hoverBorderColor: c.borderHover, activeOutlineColor: 'transparent' },
+      Modal: { titleFontSize: 16 },
+      Input: { activeShadow: 'none', activeBorderColor: c.borderHover, hoverBorderColor: c.borderHover },
+      InputNumber: { activeShadow: 'none', activeBorderColor: c.borderHover, hoverBorderColor: c.borderHover },
+      DatePicker: { activeShadow: 'none', activeBorderColor: c.borderHover, hoverBorderColor: c.borderHover },
+      Switch: { colorPrimary: c.ink, colorPrimaryHover: palette.id === 'dark' ? '#d4d4d4' : '#333333' },
+      Progress: { defaultColor: c.ink, remainingColor: c.border },
+      Statistic: { contentFontSize: 24, titleFontSize: 13 },
       Tooltip: { colorBgSpotlight: c.spotlight },
+      Tag: { defaultBg: 'transparent', defaultColor: c.muted },
     },
   }
 }

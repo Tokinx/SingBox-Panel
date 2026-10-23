@@ -10,8 +10,12 @@ export function updateFailureMessage(fresh: MaintenanceInfo, operationID?: strin
 }
 
 export function updateRestartCompleted(before: MaintenanceInfo, fresh: MaintenanceInfo, target: string, operationID?: string): boolean {
-  if (operationID && (fresh.update_operation?.id !== operationID || fresh.update_operation.status !== 'succeeded')) return false
   if (versionOf(fresh.current_version) !== versionOf(target)) return false
+  // A rollback target may predate operation reporting and process identity; a
+  // different version then proves its own process is serving.
+  const versionChanged = versionOf(before.current_version) !== versionOf(fresh.current_version)
+  if (versionChanged && !fresh.update_operation && !fresh.instance_id) return true
+  if (operationID && (fresh.update_operation?.id !== operationID || fresh.update_operation.status !== 'succeeded')) return false
   if (before.instance_id) return !!fresh.instance_id && before.instance_id !== fresh.instance_id
   // Older panel versions do not report a process identity. Only a changed
   // version can establish that their normal upgrade has actually completed.

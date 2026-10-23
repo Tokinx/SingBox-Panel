@@ -1,8 +1,9 @@
-import { Button, Card, Descriptions, Space, Tag, Typography } from 'antd'
-import { ArrowUpOutlined, DeleteOutlined, ReloadOutlined } from '@ant-design/icons'
+import { Button, Dropdown } from 'antd'
+import { DownOutlined, ReloadOutlined } from '@ant-design/icons'
 import type { Server } from '../../../types'
-import { formatBytes } from '../../../util'
+import { PageHeader, Status } from '../../../ui/Page'
 
+/** Server detail heading: name, one meta line and the server-level actions. */
 export function ServerOverviewCard({
   server, publicURL, busy, refreshing, exportLoading,
   onRefresh, onInstallSingbox, onUninstallSingbox, onInstallAgent, onUninstallAgent,
@@ -23,55 +24,35 @@ export function ServerOverviewCard({
   onRestart: () => void
   onExport: () => void
 }) {
-  return (
-    <Card
-      title={(
-        <Space wrap style={{ rowGap: 4 }}>
-          {server.name}
-          {server.online ? <Tag color="green">在线</Tag> : <Tag>离线</Tag>}
-          {server.singbox_installed ? (
-            server.singbox_has_update ? (
-              <Tag
-                color="orange"
-                icon={<ArrowUpOutlined />}
-                title={`发现新版本 (${server.singbox_latest_version})`}
-              >
-                {server.singbox_version} (可升级)
-              </Tag>
-            ) : (
-              <Tag color="blue">{server.singbox_version}</Tag>
-            )
-          ) : (
-            <Tag color="orange">未装 sing-box</Tag>
-          )}
-        </Space>
-      )}
-      extra={<Button icon={<ReloadOutlined />} loading={refreshing} onClick={onRefresh} title="刷新节点状态" aria-label="刷新节点状态" />}
-    >
-      <Descriptions column={{ xs: 1, sm: 2, lg: 3 }} size="small" bordered>
-        <Descriptions.Item label="节点地址">
-          <Space size={6} wrap>
-            <span>{server.address || '—'}</span>
-            {server.public_ip && server.public_ip !== server.address && <Typography.Text type="secondary">({server.public_ip})</Typography.Text>}
-          </Space>
-        </Descriptions.Item>
-		<Descriptions.Item label="通信地址">{server.agent_url || publicURL || '旧版 Agent 未上报'}</Descriptions.Item>
-		<Descriptions.Item label="Agent">{server.agent_version || '旧版未上报'}</Descriptions.Item>
-		<Descriptions.Item label="系统">{server.os || '—'}</Descriptions.Item>
-        <Descriptions.Item label="负载">{server.load1?.toFixed(2) ?? '—'}</Descriptions.Item>
-        <Descriptions.Item label="内存">{formatBytes(server.mem_used)}/{formatBytes(server.mem_total)}</Descriptions.Item>
-      </Descriptions>
-
-      <Space wrap style={{ marginTop: 16 }}>
-        <Button type="primary" loading={busy === 'install'} onClick={onInstallSingbox}>安装 / 升级 Sing-box</Button>
-        <Button danger icon={<DeleteOutlined />} loading={busy === 'uninstall-singbox'} disabled={!server.online || !server.singbox_installed} onClick={onUninstallSingbox}>卸载 Sing-box</Button>
-        <Button type="primary" loading={busy === 'agent'} onClick={onInstallAgent}>安装 / 升级 Agent</Button>
-        <Button danger icon={<DeleteOutlined />} disabled={!server.online} onClick={onUninstallAgent}>卸载 Agent</Button>
-        <Button loading={busy === 'import'} onClick={onImport}>识别配置</Button>
-        <Button onClick={onEditConfig}>编辑配置</Button>
-        <Button loading={busy === 'restart'} onClick={onRestart}>重启服务</Button>
-        <Button loading={exportLoading} onClick={onExport}>导出节点</Button>
-      </Space>
-    </Card>
-  )
+  const address = server.address || server.public_ip
+  return <PageHeader
+    title={server.name}
+    meta={<>
+      <Status tone={server.online ? 'ok' : 'off'}>{server.online ? '在线' : '离线'}</Status>
+      {address && <span className="mono" title={server.agent_url || publicURL || undefined}>{address}{server.public_ip && server.public_ip !== server.address ? ` · ${server.public_ip}` : ''}</span>}
+      <span>
+        {server.singbox_installed ? `sing-box ${server.singbox_version || ''}` : '未安装 sing-box'}
+        {server.singbox_has_update && <span className="sd-up" title={`可升级至 ${server.singbox_latest_version || ''}`}> ↑</span>}
+      </span>
+      <span>Agent {server.agent_version || '—'}{server.agent_has_update && <span className="sd-up"> ↑</span>}</span>
+      {server.os && <span>{server.os}</span>}
+    </>}
+    actions={<>
+      <Button icon={<ReloadOutlined />} loading={refreshing} onClick={onRefresh} aria-label="刷新状态" title="刷新状态" />
+      <Button loading={exportLoading} onClick={onExport}>导出订阅</Button>
+      <Button onClick={onEditConfig}>配置文件</Button>
+      <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: [
+        { key: 'restart', label: '重启 sing-box', disabled: !server.online || !!busy, onClick: onRestart },
+        { key: 'import', label: '识别现有配置', disabled: !!busy, onClick: onImport },
+        { type: 'divider' },
+        { key: 'singbox', label: '安装 / 升级 sing-box', disabled: !!busy, onClick: onInstallSingbox },
+        { key: 'agent', label: '安装 / 升级 Agent', disabled: !!busy, onClick: onInstallAgent },
+        { type: 'divider' },
+        { key: 'uninstall-singbox', label: '卸载 sing-box', danger: true, disabled: !server.online || !server.singbox_installed || !!busy, onClick: onUninstallSingbox },
+        { key: 'uninstall-agent', label: '卸载 Agent', danger: true, disabled: !server.online || !!busy, onClick: onUninstallAgent },
+      ] }}>
+        <Button loading={!!busy}>维护 <DownOutlined style={{ fontSize: 10 }} /></Button>
+      </Dropdown>
+    </>}
+  />
 }

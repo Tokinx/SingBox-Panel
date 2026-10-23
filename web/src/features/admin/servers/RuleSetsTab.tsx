@@ -1,9 +1,10 @@
-import React, { useRef, useState } from 'react'
-import { Button, Form, Input, Modal, Radio, Select, Space, Table, Tag, message } from 'antd'
-import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons'
+import React, { useEffect, useRef, useState } from 'react'
+import { Button, Form, Input, Modal, Segmented, Select, Table, message } from 'antd'
+import { DeleteOutlined, EditOutlined } from '@ant-design/icons'
 import { createRuleSet, deleteRuleSet, updateRuleSet } from '../../../api'
 import { showConfigApplyResult } from '../../../configApply'
 import type { Outbound, RuleSet } from '../../../types'
+import { MODAL_SM } from '../../../ui/modal'
 
 interface RuleSetsTabProps {
   serverId: number
@@ -11,9 +12,11 @@ interface RuleSetsTabProps {
   outbounds: Outbound[]
   onRefresh: () => void
   rawMode?: boolean
+  /** Incrementing this opens the create dialog (the add button lives in the page toolbar). */
+  createSignal?: number
 }
 
-export const RuleSetsTab: React.FC<RuleSetsTabProps> = ({ serverId, ruleSets, outbounds, onRefresh, rawMode }) => {
+export const RuleSetsTab: React.FC<RuleSetsTabProps> = ({ serverId, ruleSets, outbounds, onRefresh, rawMode, createSignal = 0 }) => {
   const [modalOpen, setModalOpen] = useState(false)
   const [editingRS, setEditingRS] = useState<RuleSet | null>(null)
   const [loading, setLoading] = useState(false)
@@ -98,70 +101,64 @@ export const RuleSetsTab: React.FC<RuleSetsTabProps> = ({ serverId, ruleSets, ou
     })
   }
 
+  const lastCreateSignal = useRef(createSignal)
+  useEffect(() => {
+    if (createSignal !== lastCreateSignal.current) {
+      lastCreateSignal.current = createSignal
+      openCreateModal()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createSignal])
+
   const columns = [
     {
-      title: '标签 (Tag)',
+      title: '标签',
       dataIndex: 'tag',
       key: 'tag',
-      render: (tag: string) => <Tag color="cyan">{tag}</Tag>,
+      render: (tag: string) => <span className="sd-strong">{tag}</span>,
     },
     {
       title: '类型',
       dataIndex: 'type',
       key: 'type',
       width: 100,
-      render: (type: string) => (
-        <Tag color={type === 'local' ? 'purple' : 'blue'}>{type === 'local' ? '本地' : '远程'}</Tag>
-      ),
+      render: (type: string) => <span className="ui-tag">{type === 'local' ? '本地' : '远程'}</span>,
     },
     {
       title: '格式',
       dataIndex: 'format',
       key: 'format',
       width: 110,
-      render: (format: string) => (
-        <Tag color={format === 'source' ? 'orange' : 'green'}>{format === 'source' ? 'JSON' : 'SRS 二进制'}</Tag>
-      ),
+      render: (format: string) => <span className="mono">{format === 'source' ? 'JSON' : 'SRS'}</span>,
     },
     {
       title: '更新间隔',
       dataIndex: 'update_interval',
       key: 'update_interval',
       width: 100,
-      render: (val: string, record: RuleSet) => (record.type === 'local' ? '-' : val || '1d'),
+      render: (val: string, record: RuleSet) => <span className="mono">{record.type === 'local' ? '—' : val || '1d'}</span>,
     },
     {
-      title: '操作',
+      title: '',
       key: 'actions',
-      width: 110,
+      width: 88,
+      align: 'right' as const,
       render: (_: any, record: RuleSet) => (
-        <Space size={0}>
-          <Button type="link" size="small" disabled={rawMode} icon={<EditOutlined />} onClick={() => openEditModal(record)}>
-            编辑
-          </Button>
-          <Button type="link" size="small" danger disabled={rawMode} icon={<DeleteOutlined />} onClick={() => confirmDeleteRS(record)}>
-            删除
-          </Button>
-        </Space>
+        <span className="ui-row-actions">
+          <Button type="text" size="small" disabled={rawMode} icon={<EditOutlined />} aria-label={`编辑规则集 ${record.tag}`} onClick={() => openEditModal(record)} />
+          <Button type="text" size="small" disabled={rawMode} icon={<DeleteOutlined />} aria-label={`删除规则集 ${record.tag}`} onClick={() => confirmDeleteRS(record)} />
+        </span>
       ),
     },
   ]
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <span style={{ fontSize: 13, color: 'var(--console-muted)' }}>
-          配置规则集 (Rule Sets)，用于规则精确匹配域名或 IP 资源。
-        </span>
-        <Button type="primary" size="small" icon={<PlusOutlined />} disabled={rawMode} onClick={openCreateModal}>
-          新增规则集
-        </Button>
-      </div>
-
-      <Table dataSource={ruleSets} columns={columns} rowKey="id" pagination={false} size="small" />
+      <Table dataSource={ruleSets} columns={columns} rowKey="id" pagination={false} locale={{ emptyText: '暂无规则集' }} />
 
       <Modal
         title={editingRS ? '编辑规则集' : '新增规则集'}
+        width={MODAL_SM}
         open={modalOpen}
         onOk={handleSubmit}
         onCancel={() => setModalOpen(false)}
@@ -172,47 +169,41 @@ export const RuleSetsTab: React.FC<RuleSetsTabProps> = ({ serverId, ruleSets, ou
         <Form form={form} layout="vertical" initialValues={{ type: 'remote', format: 'binary', update_interval: '1d' }}>
           <Form.Item
             name="tag"
-            label="规则集标签 (Tag)"
+            label="标签"
             rules={[
               { required: true, message: '请输入规则集标签' },
               { pattern: /^[a-zA-Z0-9_-]+$/, message: '标签只能包含字母、数字、下划线与连字符' },
             ]}
           >
-            <Input placeholder="请输入规则集标签" />
+            <Input placeholder="geosite-cn" />
           </Form.Item>
 
           <Form.Item name="type" label="类型">
-            <Radio.Group onChange={(e) => setRsType(e.target.value)}>
-              <Radio.Button value="remote">远程规则集 (Remote)</Radio.Button>
-              <Radio.Button value="local">本地规则集 (Local)</Radio.Button>
-            </Radio.Group>
+            <Segmented<'remote' | 'local'> onChange={(v) => setRsType(v)} options={[{ value: 'remote', label: '远程' }, { value: 'local', label: '本地' }]} />
           </Form.Item>
 
           <Form.Item name="format" label="格式">
-            <Radio.Group>
-              <Radio.Button value="binary">SRS 二进制 (.srs)</Radio.Button>
-              <Radio.Button value="source">JSON 源码 (.json)</Radio.Button>
-            </Radio.Group>
+            <Segmented options={[{ value: 'binary', label: 'SRS' }, { value: 'source', label: 'JSON' }]} />
           </Form.Item>
 
           {rsType === 'remote' ? (
             <>
               <Form.Item
                 name="url"
-                label="远程下载 URL"
+                label="URL"
                 rules={[{ required: true, message: '请输入远程规则集下载 URL' }]}
               >
-                <Input placeholder="请输入远程规则集下载 URL" />
+                <Input placeholder="https://" />
               </Form.Item>
 
               <Form.Item name="update_interval" label="更新间隔">
-                <Input placeholder="请输入更新间隔 (如 1d / 12h)" />
+                <Input placeholder="1d" />
               </Form.Item>
 
-              <Form.Item name="download_detour" label="下载出站" extra="规则集文件将通过该出站下载。">
+              <Form.Item name="download_detour" label="下载出站">
                 <Select
                   options={[
-                    { value: 'direct', label: 'direct · 内置直连' },
+                    { value: 'direct', label: 'direct' },
                     ...outbounds.filter((outbound) => outbound.tag !== 'direct').map((outbound) => ({
                       value: outbound.tag,
                       label: outbound.tag,
@@ -224,10 +215,10 @@ export const RuleSetsTab: React.FC<RuleSetsTabProps> = ({ serverId, ruleSets, ou
           ) : (
             <Form.Item
               name="path"
-              label="本地文件路径 (Path)"
+              label="路径"
               rules={[{ required: true, message: '请输入服务器上的本地文件路径' }]}
             >
-              <Input placeholder="请输入绝对路径" />
+              <Input placeholder="/etc/sing-box/rules.json" />
             </Form.Item>
           )}
         </Form>

@@ -10,7 +10,7 @@
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
   "orientation": "any",
-  "theme_color": "#0f172a",
+  "theme_color": "#ffffff",
   "background_color": "#ffffff",
   "categories": ["utilities", "productivity"],
   "icons": [
@@ -20,7 +20,7 @@
     { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "主机", "short_name": "主机", "url": "/admin/servers" },
+    { "name": "服务器", "short_name": "服务器", "url": "/admin/servers" },
     { "name": "流量", "short_name": "流量", "url": "/admin/traffic" },
     { "name": "日志", "short_name": "日志", "url": "/admin/logs" }
   ]

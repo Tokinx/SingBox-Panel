@@ -22,6 +22,7 @@ describe('RequestState', () => {
       </RequestState>,
     )
     expect(screen.getByText('last good data')).toBeTruthy()
-    expect(screen.getByText('刷新失败，当前显示的是上次成功获取的数据')).toBeTruthy()
+    expect(screen.getByText('刷新失败')).toBeTruthy()
+    expect(screen.getByText('timeout')).toBeTruthy()
   })
 })

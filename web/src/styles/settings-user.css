@@ -1,0 +1,120 @@
+/* Design A — settings, user subscription page, request / route states. */
+
+/* ---------- Request state ---------- */
+.request-state { width: 100%; padding: 0; animation: none; }
+.request-state-loading { min-height: 160px; display: flex; align-items: center; justify-content: center; gap: 0; color: var(--console-faint); }
+.request-state-loading .ant-spin-dot-item { background: var(--console-faint); }
+.request-state-alert { margin-bottom: 16px; padding: 8px 12px; align-items: center; }
+.request-state-alert .ant-alert-icon { margin-inline-end: 10px; }
+.request-state-alert .ant-alert-action { margin-inline-start: 12px; }
+.request-state-msg { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; font-size: 13px; }
+.request-state-msg > b { font-weight: 600; color: var(--console-ink); }
+.request-state-msg > span { color: var(--console-muted); overflow-wrap: anywhere; }
+.request-state-refreshing { position: relative; height: 2px; margin: -2px 0 0; overflow: hidden; border-radius: 2px; margin-bottom: 0; gap: 0; }
+.request-state-refreshing > i { position: absolute; inset: 0 auto 0 0; width: 30%; background: var(--console-border-strong); border-radius: 2px; animation: request-state-slide 1.1s ease-in-out infinite; }
+@keyframes request-state-slide { from { transform: translateX(-100%); } to { transform: translateX(340%); } }
+.request-state-empty { border: 1px dashed var(--console-border); border-radius: var(--app-radius); }
+
+/* ---------- Route error ---------- */
+.route-error { max-width: 440px; margin: 64px auto; padding: 0 16px; text-align: center; }
+.route-error-mark { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--console-border); color: var(--console-error); font-weight: 700; font-size: 18px; }
+.route-error h1 { margin: 16px 0 6px; font-size: 20px; font-weight: 600; letter-spacing: -.3px; color: var(--console-ink); }
+.route-error p { margin: 0 0 20px; color: var(--console-muted); overflow-wrap: anywhere; }
+.route-error-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+
+/* ---------- Settings ---------- */
+.settings-view { margin-top: 4px; }
+.settings-card { overflow: hidden; }
+.settings-card .ui-kv dd.mono { font-size: 13px; }
+.settings-version-latest { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
+.settings-card-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; border-top: 1px solid var(--console-border); background: var(--console-surface); }
+.settings-note { min-width: 0; color: var(--console-muted); font-size: 13px; overflow-wrap: anywhere; }
+.settings-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
+.settings-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; padding: 16px 20px; }
+.settings-row + .settings-row { border-top: 1px solid var(--console-border); }
+.settings-row-main { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; min-width: 0; }
+.settings-row-main > b { font-weight: 500; color: var(--console-ink); }
+.settings-row-meta { color: var(--console-faint); font-size: 12.5px; overflow-wrap: anywhere; }
+.settings-auth { background: var(--console-surface); }
+.settings-auth-code { font-size: 15px; font-weight: 600; letter-spacing: 1.5px; color: var(--console-ink); }
+.settings-alert { margin-top: 12px; }
+.settings-cloud { margin-top: 32px; }
+.settings-count { margin-left: 8px; color: var(--console-faint); font-weight: 400; font-size: 13px; font-variant-numeric: tabular-nums; }
+.settings-files { max-height: 420px; overflow-y: auto; }
+.settings-file { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 12px 12px 20px; }
+.settings-file + .settings-file { border-top: 1px solid var(--console-border); }
+.settings-file:hover { background: var(--console-surface); }
+.settings-file-main { display: flex; flex-direction: column; min-width: 0; }
+.settings-file-name { color: var(--console-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.settings-file .ui-row-actions { flex: none; }
+.settings-restore { padding: 0; }
+.settings-restore .settings-dragger { display: block; padding: 20px 20px 16px; }
+.settings-restore .ant-upload-wrapper .ant-upload-drag { border: 1px dashed var(--console-border-strong); border-radius: var(--app-radius); background: var(--console-surface); }
+.settings-restore .ant-upload-wrapper .ant-upload-drag:not(.ant-upload-disabled):hover { border-color: var(--console-ink); }
+.settings-restore .ant-upload-wrapper .ant-upload-drag .ant-upload-btn { padding: 28px 16px; }
+.settings-restore .ant-upload-drag-icon { margin-bottom: 8px !important; }
+.settings-restore .ant-upload-wrapper .ant-upload-drag p.ant-upload-drag-icon .anticon { color: var(--console-faint); font-size: 32px; }
+.settings-restore .ant-upload-wrapper .ant-upload-drag p.ant-upload-text { margin-bottom: 2px; font-size: 14px; color: var(--console-ink); }
+.settings-restore .ant-upload-wrapper .ant-upload-drag p.ant-upload-hint { color: var(--console-faint); }
+.settings-restore .ant-upload-list { margin-top: 4px; }
+.settings-restore .settings-card-foot .settings-note { color: var(--console-muted); }
+
+/* ---------- User subscription page ---------- */
+.sub-page { min-width: 0; }
+.sub-clients { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.sub-client { display: flex; align-items: center; gap: 12px; min-width: 0; height: 64px; padding: 0 16px; border: 1px solid var(--console-border); border-radius: var(--app-radius); background: var(--console-container); color: var(--console-ink); font: inherit; text-align: left; cursor: pointer; transition: border-color .15s ease, background-color .15s ease; }
+.sub-client:hover { border-color: var(--console-border-strong); background: var(--console-surface); }
+.sub-client:focus-visible { outline: 2px solid var(--console-focus); outline-offset: 2px; }
+.sub-client-name { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub-client-copy { display: inline-flex; align-items: center; gap: 4px; flex: none; color: var(--console-faint); font-size: 12.5px; }
+.sub-client:hover .sub-client-copy { color: var(--console-ink); }
+.sub-page .client-logo { display: inline-flex; flex: 0 0 28px; width: 28px; height: 28px; align-items: center; justify-content: center; }
+.sub-page .client-logo img { display: block; width: 26px; height: 26px; object-fit: contain; }
+.sub-page .client-logo-shadowrocket img { width: 28px; height: 28px; }
+.sub-nodes { overflow: hidden; }
+.sub-node-virtual { overflow-y: auto; }
+.sub-node { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 10px 16px 10px 20px; border-top: 1px solid var(--console-border); cursor: pointer; outline: none; }
+.sub-node.is-first { border-top: 0; }
+.sub-node:hover { background: var(--console-surface); }
+.sub-node:focus-visible { box-shadow: inset 0 0 0 2px var(--console-focus); }
+.sub-node-main { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.sub-node-name { font-weight: 500; color: var(--console-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub-node-meta { display: flex; flex-wrap: wrap; gap: 0 12px; color: var(--console-muted); font-size: 12.5px; min-width: 0; }
+.sub-node-meta .mono { color: var(--console-faint); overflow-wrap: anywhere; }
+.sub-node-type { flex: none; }
+.sub-node-chev { flex: none; color: var(--console-faint); font-size: 11px; }
+.sub-detail { display: flex; flex-direction: column; gap: 16px; padding-top: 4px; }
+.sub-qr { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+/* QR codes stay black-on-white in both themes so scanners can read them. */
+.sub-qr-box { padding: 12px; border: 1px solid var(--console-border); border-radius: var(--app-radius); background: #fff; line-height: 0; }
+.sub-params { grid-template-columns: 120px minmax(0, 1fr); }
+.sub-params dt, .sub-params dd { padding: 9px 16px; font-size: 13px; }
+.sub-params .ant-typography { color: var(--console-ink); word-break: break-all; }
+.sub-detail .ant-typography-copy, .settings-page .ant-typography-copy { color: var(--console-faint) !important; }
+.sub-detail .ant-typography-copy:hover, .settings-page .ant-typography-copy:hover { color: var(--console-ink) !important; }
+.sub-detail .ant-typography-copy-success { color: var(--console-success) !important; }
+.sub-link { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border: 1px solid var(--console-border); border-radius: var(--app-radius); background: var(--console-surface); }
+.sub-link-text { flex: 1; min-width: 0; color: var(--console-muted); word-break: break-all; max-height: 88px; overflow-y: auto; }
+
+@media (max-width: 767px) {
+  .settings-row { padding: 14px 16px; }
+  .settings-card-foot { padding: 12px 16px; }
+  .settings-actions { margin-left: 0; }
+  .settings-file { padding: 10px 8px 10px 16px; }
+  .settings-restore .settings-dragger { padding: 16px 16px 12px; }
+  .sub-clients { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .sub-client { height: 56px; }
+  .sub-node { padding: 10px 12px 10px 16px; }
+  .sub-params { grid-template-columns: 96px minmax(0, 1fr); }
+  .sub-params dt, .sub-params dd { padding: 8px 12px; }
+}
+
+/* Install a specific release (update / reinstall / rollback). */
+.settings-release-label { font-size: 13px; color: var(--console-muted); }
+.settings-release-select.ant-select { min-width: 220px; }
+.settings-release-option { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.settings-release-option .ui-tag { height: 18px; padding: 0 6px; font-size: 11px; }
+@media (max-width: 767px) {
+  .settings-release-picker .settings-actions { width: 100%; }
+  .settings-release-select.ant-select { flex: 1; min-width: 0; }
+}

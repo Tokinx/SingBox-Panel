@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { errMsg, listCustomNodes } from '../../../api'
 import type { CustomNode } from '../../../api'
 import { CustomNodesPanel } from '../access/Access'
+import { PageHeader } from '../../../ui/Page'
+import '../../../styles/users.css'
 
 // ExternalNodes manages third-party subscriptions and hand-added nodes that
 // are merged into user subscriptions but not hosted on panel servers.
@@ -41,7 +43,8 @@ export default function ExternalNodes() {
   }, [])
 
   return (
-    <div className="users-page external-nodes-page">
+    <div className="um-page">
+      <PageHeader title="节点" />
       <CustomNodesPanel nodes={nodes} loading={loading} error={error} onNodesChange={load} />
     </div>
   )

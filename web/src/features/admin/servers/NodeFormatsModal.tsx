@@ -1,14 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Descriptions, List, Modal, Space, Tag, Tooltip, Typography, message } from 'antd'
+import { Button, Modal, Tooltip, Typography, message } from 'antd'
 import { CheckOutlined, CopyOutlined, EyeOutlined } from '@ant-design/icons'
 import type { NodeFormats } from '../../../api'
 import { copyToClipboard } from '../../../util'
-
-const PROTOCOL_COLORS: Record<string, string> = {
-  vless: 'blue', vmess: 'geekblue', trojan: 'purple', shadowsocks: 'cyan',
-  hysteria2: 'orange', hysteria: 'volcano', tuic: 'gold', anytls: 'magenta',
-  snell: 'green', naive: 'lime', socks: 'default',
-}
+import '../../../styles/forms.css'
+import { MODAL_MD } from '../../../ui/modal'
 
 export function NodeFormatsModalContent({ data }: { data: NodeFormats }) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
@@ -41,19 +37,14 @@ export function NodeFormatsModalContent({ data }: { data: NodeFormats }) {
   }
 
   const items = data.items || []
+  const detailParams = Object.entries(detailItem?.params || {}).filter(([key]) => !['服务器', '端口', '协议'].includes(key))
   return (
-    <div style={{ paddingTop: 4 }}>
-      <div style={{ fontSize: 13, color: 'var(--console-muted)', marginBottom: 12 }}>
-        点击“详情”查看节点参数；多用户协议请使用具体用户的订阅。
-      </div>
+    <>
       {!items.length ? (
-        <div style={{ padding: '36px 0', textAlign: 'center', color: 'var(--console-faint)' }}>暂无可导出的单凭证入站</div>
+        <div className="ui-empty">暂无可导出的单凭证入站</div>
       ) : (
-        <List
-          size="small"
-          bordered
-          dataSource={items}
-          renderItem={(item, index) => {
+        <ul className="fm-nodes">
+          {items.map((item, index) => {
             const displayTag = item.tag || item.name || ''
             const buttons = [
               { key: `uri-${index}`, label: 'URI', value: item.uri },
@@ -61,16 +52,21 @@ export function NodeFormatsModalContent({ data }: { data: NodeFormats }) {
               { key: `surge-${index}`, label: 'Surge', value: item.surge },
             ]
             return (
-              <List.Item style={{ padding: '12px 16px', display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-                <span style={{ fontWeight: 500, color: 'var(--console-ink)', wordBreak: 'break-all' }}>{displayTag}</span>
-                <Space size={8} wrap>
-                  <Button size="small" icon={<EyeOutlined />} onClick={() => setDetailItem(item)}>详情</Button>
+              <li className="fm-node" key={`${displayTag}-${index}`}>
+                <div className="fm-node-main">
+                  <span className="fm-node-name">{displayTag}</span>
+                  {item.type && <span className="ui-tag">{item.type}</span>}
+                  {item.server ? <span className="fm-node-addr mono">{item.server}:{item.port}</span> : null}
+                </div>
+                <div className="fm-node-actions">
+                  <Button size="small" type="text" icon={<EyeOutlined />} aria-label={`查看 ${displayTag} 详情`} onClick={() => setDetailItem(item)}>详情</Button>
                   {buttons.map((button) => button.value ? (
                     <Button
                       key={button.key}
                       size="small"
-                      type={copiedKey === button.key ? 'primary' : 'default'}
+                      className={copiedKey === button.key ? 'is-copied' : undefined}
                       icon={copiedKey === button.key ? <CheckOutlined /> : <CopyOutlined />}
+                      aria-label={`复制 ${displayTag} ${button.label}`}
                       onClick={() => copy(button.value, button.key, `${displayTag} ${button.label}`)}
                     >
                       {button.label}
@@ -80,36 +76,38 @@ export function NodeFormatsModalContent({ data }: { data: NodeFormats }) {
                       <Button size="small" disabled icon={<CopyOutlined />}>{button.label}</Button>
                     </Tooltip>
                   ))}
-                </Space>
-              </List.Item>
+                </div>
+              </li>
             )
-          }}
-        />
+          })}
+        </ul>
       )}
 
       <Modal
-        title={`${detailItem?.tag || detailItem?.name || ''} 节点详情`}
+        className="fm-modal"
+        title={detailItem?.tag || detailItem?.name || '节点详情'}
         open={!!detailItem}
         onCancel={() => setDetailItem(null)}
         footer={<Button onClick={() => setDetailItem(null)}>关闭</Button>}
-        width={620}
-        destroyOnClose
+        width={MODAL_MD}
+        destroyOnHidden
       >
         {detailItem && (
-          <Descriptions bordered size="small" column={1}>
-            <Descriptions.Item label="节点地址 / IP"><Typography.Text copyable>{detailItem.server || '—'}</Typography.Text></Descriptions.Item>
-            <Descriptions.Item label="端口"><Typography.Text copyable>{String(detailItem.port)}</Typography.Text></Descriptions.Item>
-            <Descriptions.Item label="协议"><Tag color={PROTOCOL_COLORS[detailItem.type] || 'default'}>{detailItem.type}</Tag></Descriptions.Item>
-            {Object.entries(detailItem.params || {})
-              .filter(([key]) => !['服务器', '端口', '协议'].includes(key))
-              .map(([key, value]) => (
-                <Descriptions.Item key={key} label={key}>
-                  <Typography.Text copyable={{ text: value }}>{value || '—'}</Typography.Text>
-                </Descriptions.Item>
+          <div className="fm-kv">
+            <dl className="ui-kv">
+              <div><dt>地址</dt><dd><Typography.Text copyable>{detailItem.server || '—'}</Typography.Text></dd></div>
+              <div><dt>端口</dt><dd><Typography.Text copyable>{String(detailItem.port)}</Typography.Text></dd></div>
+              <div><dt>协议</dt><dd><span className="ui-tag">{detailItem.type}</span></dd></div>
+              {detailParams.map(([key, value]) => (
+                <div key={key}>
+                  <dt>{key}</dt>
+                  <dd><Typography.Text copyable={{ text: value }}>{value || '—'}</Typography.Text></dd>
+                </div>
               ))}
-          </Descriptions>
+            </dl>
+          </div>
         )}
       </Modal>
-    </div>
+    </>
   )
 }

@@ -1,6 +1,18 @@
-import { Form, Input, Modal, Select, Space, Table, Tag, type FormInstance } from 'antd'
+import type { ReactNode } from 'react'
+import { Form, Input, Modal, Select, Table, type FormInstance } from 'antd'
 import type { ImportSummary, NodeFormats } from '../../../api'
 import { NodeFormatsModalContent } from './NodeFormatsModal'
+import '../../../styles/forms.css'
+import { MODAL_LG, MODAL_SM } from '../../../ui/modal'
+
+function PreviewGroup({ title, count, children }: { title: string; count: ReactNode; children: ReactNode }) {
+  return (
+    <section className="fm-group">
+      <h3 className="fm-group-title">{title}<small>{count}</small></h3>
+      {children}
+    </section>
+  )
+}
 
 export function ImportPreviewModal({
   open, loading, summary, onCancel, onConfirm,
@@ -13,22 +25,19 @@ export function ImportPreviewModal({
 }) {
   return (
     <Modal
-      title="识别服务器配置"
+      className="fm-modal"
+      title="导入服务器配置"
       open={open}
       onCancel={onCancel}
       onOk={onConfirm}
-      okText="确认导入面板"
+      okText="确认导入"
       confirmLoading={loading}
-      width={720}
-      destroyOnClose
+      width={MODAL_LG}
+      destroyOnHidden
     >
-      <div style={{ fontSize: 13, color: 'var(--console-muted)', marginBottom: 12 }}>
-        已识别当前运行配置。导入后完整原始配置将同步保存至面板。
-      </div>
       {summary && (
-        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-          <div>
-            <b>入站协议 {summary.inbounds?.length || 0} 个</b>
+        <div className="fm-preview">
+          <PreviewGroup title="入站" count={summary.inbounds?.length || 0}>
             <Table
               size="small"
               rowKey="tag"
@@ -36,19 +45,18 @@ export function ImportPreviewModal({
               dataSource={summary.inbounds || []}
               columns={[
                 { title: '标签', dataIndex: 'tag' },
-                { title: '协议', dataIndex: 'type', render: (value) => <Tag>{value}</Tag> },
-                { title: '端口', dataIndex: 'listen_port' },
+                { title: '协议', dataIndex: 'type', render: (value) => <span className="ui-tag">{value}</span> },
+                { title: '端口', dataIndex: 'listen_port', render: (value) => <span className="mono">{value}</span> },
                 {
                   title: '模式',
                   render: (_, row: { single_user: boolean; users: number }) => row.single_user
-                    ? <Tag color="green">单用户</Tag>
-                    : <Tag color="orange">多用户 {row.users}</Tag>,
+                    ? <span className="muted">单用户</span>
+                    : <span>多用户 <span className="mono">{row.users}</span></span>,
                 },
               ]}
             />
-          </div>
-          <div>
-            <b>出站 {summary.outbounds?.length || 0} 个</b>
+          </PreviewGroup>
+          <PreviewGroup title="出站" count={summary.outbounds?.length || 0}>
             <Table
               size="small"
               rowKey="tag"
@@ -56,33 +64,32 @@ export function ImportPreviewModal({
               dataSource={summary.outbounds || []}
               columns={[
                 { title: '标签', dataIndex: 'tag' },
-                { title: '类型', dataIndex: 'type', render: (value) => <Tag>{value}</Tag> },
-                { title: '目标地址', dataIndex: 'info' },
+                { title: '类型', dataIndex: 'type', render: (value) => <span className="ui-tag">{value}</span> },
+                { title: '目标地址', dataIndex: 'info', render: (value) => <span className="mono">{value}</span> },
               ]}
             />
-          </div>
-          <div>
-            <b>分流规则 {summary.rules?.length || 0} 条</b>
+          </PreviewGroup>
+          <PreviewGroup title="分流规则" count={summary.rules?.length || 0}>
             <Table
               size="small"
               rowKey={(_, index) => String(index)}
               pagination={false}
               dataSource={summary.rules || []}
               columns={[
-                { title: '匹配入站', render: (_, row: { inbound: string[] | null }) => row.inbound?.length ? row.inbound.join(', ') : '不限' },
-                { title: '其它匹配', dataIndex: 'info', render: (value) => value || '—' },
-                { title: '→ 出站', dataIndex: 'outbound', render: (value) => <Tag color="blue">{value}</Tag> },
+                { title: '匹配入站', render: (_, row: { inbound: string[] | null }) => row.inbound?.length ? row.inbound.join(', ') : <span className="faint">不限</span> },
+                { title: '其它匹配', dataIndex: 'info', render: (value) => value || <span className="faint">—</span> },
+                { title: '出站', dataIndex: 'outbound', render: (value) => <span className="mono">{value}</span> },
               ]}
             />
-          </div>
-          <div style={{ color: 'var(--console-muted)' }}>默认出站 final：<Tag>{summary.final}</Tag></div>
+          </PreviewGroup>
+          <div className="fm-preview-final">默认出站<span className="ui-tag mono">{summary.final}</span></div>
           {!!summary.skipped?.length && (
-            <div style={{ color: 'var(--console-warning-text)' }}>
-              以下内容不会转换成结构化表单，但会保存在完整原始配置中：
-              <ul style={{ margin: '4px 0 0 18px' }}>{summary.skipped.map((item) => <li key={item}>{item}</li>)}</ul>
+            <div className="fm-preview-skipped">
+              以下内容不会转为表单，仅保存在原始配置中：
+              <ul>{summary.skipped.map((item) => <li key={item}>{item}</li>)}</ul>
             </div>
           )}
-        </Space>
+        </div>
       )}
     </Modal>
   )
@@ -100,19 +107,18 @@ export function ConfigEditorModal({
   onSave: () => void
 }) {
   return (
-    <Modal title="编辑服务器配置" open={open} onCancel={onCancel} onOk={onSave} okText="校验并下发" confirmLoading={saving} width={780} destroyOnClose>
-      <div style={{ fontSize: 13, color: 'var(--console-muted)', marginBottom: 12 }}>
-        直接编辑该服务器运行的核心配置。下发后会自动同步；能够无损转换时将直接进入面板管理。
-      </div>
+    <Modal className="fm-modal" title="编辑配置" open={open} onCancel={onCancel} onOk={onSave} okText="校验并下发" confirmLoading={saving} width={MODAL_LG} destroyOnHidden>
       {loading ? (
-        <div style={{ padding: 24, textAlign: 'center', color: 'var(--console-faint)' }}>读取中…</div>
+        <div className="fm-loading">读取中…</div>
       ) : (
         <Input.TextArea
+          className="fm-code"
+          aria-label="config.json"
+          spellCheck={false}
           value={text}
           onChange={(event) => onText(event.target.value)}
-          autoSize={{ minRows: 18, maxRows: 30 }}
-          style={{ fontFamily: 'monospace', fontSize: 12 }}
-          placeholder="该服务器暂无配置，可在此粘贴或编写完整 config.json"
+          autoSize={false} rows={18}
+          placeholder="粘贴完整 config.json"
         />
       )}
     </Modal>
@@ -128,20 +134,19 @@ export function InstallSingboxModal({
   onConfirm: () => void
 }) {
   return (
-    <Modal title="安装 / 升级 Sing-box" open={open} onOk={onConfirm} onCancel={onCancel} destroyOnClose>
-      <div style={{ fontSize: 13, color: 'var(--console-muted)', marginBottom: 12 }}>
-        默认安装官方最新稳定版 sing-box；已安装时再次执行即升级到目标版本。
-      </div>
-      <Form form={form} layout="vertical" initialValues={{ channel: 'stable', method: 'script' }}>
-        <Form.Item name="channel" label="渠道"><Select options={[{ value: 'stable', label: 'stable' }, { value: 'beta', label: 'beta' }]} /></Form.Item>
-        <Form.Item name="method" label="安装方式">
-          <Select options={[
-            { value: 'script', label: '官方安装脚本' },
-            { value: 'apt', label: '官方 APT 源' },
-            { value: 'dnf', label: '官方 DNF 源' },
-          ]} />
-        </Form.Item>
-        <Form.Item name="version" label="指定版本"><Input placeholder="如 1.14.2，可留空" /></Form.Item>
+    <Modal className="fm-modal" title="安装 / 升级 sing-box" open={open} onOk={onConfirm} onCancel={onCancel} okText="开始安装" width={MODAL_SM} destroyOnHidden>
+      <Form form={form} layout="vertical" className="fm-form" initialValues={{ channel: 'stable', method: 'script' }}>
+        <div className="fm-grid" style={{ paddingTop: 6 }}>
+          <Form.Item name="channel" label="渠道"><Select options={[{ value: 'stable', label: 'stable' }, { value: 'beta', label: 'beta' }]} /></Form.Item>
+          <Form.Item name="method" label="安装方式">
+            <Select options={[
+              { value: 'script', label: '官方脚本' },
+              { value: 'apt', label: 'APT 源' },
+              { value: 'dnf', label: 'DNF 源' },
+            ]} />
+          </Form.Item>
+          <Form.Item name="version" label="版本" className="fm-full"><Input placeholder="最新" className="mono" /></Form.Item>
+        </div>
       </Form>
     </Modal>
   )
@@ -156,8 +161,8 @@ export function NodeFormatsExportModal({
   onCancel: () => void
 }) {
   return (
-    <Modal title="导出节点配置" open={open} onCancel={onCancel} footer={null} width={860} destroyOnClose>
-      {loading ? <div style={{ padding: 48, textAlign: 'center', color: 'var(--console-faint)' }}>加载中…</div> : data ? <NodeFormatsModalContent data={data} /> : null}
+    <Modal className="fm-modal" title="导出节点" open={open} onCancel={onCancel} footer={null} width={MODAL_LG} destroyOnHidden>
+      {loading ? <div className="fm-loading">加载中…</div> : data ? <NodeFormatsModalContent data={data} /> : null}
     </Modal>
   )
 }

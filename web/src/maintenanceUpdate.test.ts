@@ -32,6 +32,12 @@ describe('updateRestartCompleted', () => {
     expect(updateRestartCompleted(before, { ...restarted, update_operation: { id: 'ours', status: 'succeeded' } }, 'v1.0.0', 'ours')).toBe(true)
   })
 
+  it('recognizes a rollback to a release that reports neither operation nor identity', () => {
+    const older = { current_version: 'v0.9.0', update_supported: true, db_driver: 'sqlite', uptime_seconds: 1 }
+    expect(updateRestartCompleted(before, older, 'v0.9.0', 'ours')).toBe(true)
+    expect(updateRestartCompleted(before, { ...older, current_version: 'v1.0.0' }, 'v0.9.0', 'ours')).toBe(false)
+  })
+
   it('surfaces rollback and failure only for the active update', () => {
     expect(updateFailureMessage({ ...before, update_operation: { id: 'ours', status: 'rolled_back' } }, 'ours')).toContain('已恢复')
     expect(updateFailureMessage({ ...before, update_operation: { id: 'ours', status: 'failed' } }, 'ours')).toContain('失败')

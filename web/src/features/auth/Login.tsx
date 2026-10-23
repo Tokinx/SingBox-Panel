@@ -4,8 +4,8 @@ import { EyeInvisibleOutlined, EyeOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import { errMsg, login } from '../../api'
 import { useAuth } from '../../store'
-import logo from '../../assets/singbox-panel-logo.png'
 import './Login.css'
+import logo from '../../assets/logo.svg'
 
 export default function Login() {
   const setAuth = useAuth((s) => s.setAuth)
@@ -27,34 +27,32 @@ export default function Login() {
 
   return (
     <main className="login-page" aria-labelledby="login-title">
-      <div className="login-stack">
-        <div className="login-card">
-          <header className="login-card-header">
-            <img className="login-card-logo" src={logo} width={80} height={80} alt="" />
-            <h1 id="login-title">SingBox <span>Panel</span></h1>
-          </header>
+      <div className="login-card">
+        <header className="login-head">
+          <img className="login-logo" src={logo} alt="" aria-hidden="true" />
+          <h1 id="login-title">登录 SingBox Panel</h1>
+        </header>
 
-          <Form name="login" layout="vertical" onFinish={doLogin} requiredMark={false}>
-            <Form.Item name="username" label="用户名" rules={[{ required: true, whitespace: true, message: '请输入用户名' }]}>
-              <Input placeholder="请输入用户名" size="large" autoComplete="username" autoCapitalize="none" spellCheck={false} />
-            </Form.Item>
-            <Form.Item name="password" label="密码" rules={[{ required: true, message: '请输入密码' }]}>
-              <Input.Password
-                placeholder="请输入密码"
-                size="large"
-                autoComplete="current-password"
-                iconRender={(visible) => (
-                  <button type="button" aria-label={visible ? '隐藏密码' : '显示密码'}>
-                    {visible ? <EyeOutlined /> : <EyeInvisibleOutlined />}
-                  </button>
-                )}
-              />
-            </Form.Item>
-            <Button className="login-submit" type="primary" htmlType="submit" block size="large" loading={loading}>
-              {loading ? '正在登录' : '登录'}
-            </Button>
-          </Form>
-        </div>
+        <Form name="login" layout="vertical" onFinish={doLogin} requiredMark={false}>
+          <Form.Item name="username" label="用户名" rules={[{ required: true, whitespace: true, message: '请输入用户名' }]}>
+            <Input placeholder="请输入用户名" size="large" autoComplete="username" autoCapitalize="none" spellCheck={false} />
+          </Form.Item>
+          <Form.Item name="password" label="密码" rules={[{ required: true, message: '请输入密码' }]}>
+            <Input.Password
+              placeholder="请输入密码"
+              size="large"
+              autoComplete="current-password"
+              iconRender={(visible) => (
+                <button type="button" aria-label={visible ? '隐藏密码' : '显示密码'}>
+                  {visible ? <EyeOutlined /> : <EyeInvisibleOutlined />}
+                </button>
+              )}
+            />
+          </Form.Item>
+          <Button className="login-submit" type="primary" htmlType="submit" block size="large" loading={loading}>
+            {loading ? '正在登录' : '登录'}
+          </Button>
+        </Form>
       </div>
     </main>
   )

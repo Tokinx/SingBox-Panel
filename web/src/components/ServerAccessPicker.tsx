@@ -1,5 +1,6 @@
-import { Checkbox, Tag } from 'antd'
+import { Checkbox } from 'antd'
 import type { Server } from '../types'
+import '../styles/users.css'
 
 interface ServerAccessPickerProps {
   servers: Server[]
@@ -19,11 +20,11 @@ export default function ServerAccessPicker({ servers, value = [], onChange }: Se
   }
 
   if (!servers.length) {
-    return <div style={{ fontSize: 13, color: 'var(--console-muted)', padding: '12px 0' }}>暂无可用节点</div>
+    return <div className="um-picker-empty">暂无可用节点</div>
   }
 
   return (
-    <div style={{ maxHeight: 340, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, paddingRight: 4 }}>
+    <div className="um-picker">
       {servers.map((s) => {
         const ibs = s.inbounds ?? []
         const serverKey = sKey(s.id)
@@ -65,77 +66,37 @@ export default function ServerAccessPicker({ servers, value = [], onChange }: Se
         }
 
         return (
-          <div
-            key={s.id}
-            style={{
-              background: 'var(--console-container)',
-              border: '1px solid var(--console-border)',
-              borderRadius: 8,
-              padding: '12px 14px',
-              boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.03)',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '6px 8px', marginBottom: ibs.length ? 10 : 0 }}>
-              <div
-                style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, userSelect: 'none', minWidth: 0, flex: '1 1 auto' }}
-                onClick={() => handleServerToggle(!isChecked)}
-              >
+          <div key={s.id} className="um-picker-server">
+            <div className="um-picker-head">
+              <label className="um-picker-name">
                 <Checkbox
                   checked={isChecked}
                   indeterminate={isIndeterminate}
                   onChange={(e) => handleServerToggle(e.target.checked)}
                 />
-                <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--console-ink)', wordBreak: 'break-all' }}>
-                  {s.name}
-                </span>
-              </div>
-
-              {isChecked ? (
-                <Tag color="green" style={{ margin: 0, fontSize: 11, borderRadius: 10, padding: '0 8px', border: 'none', flexShrink: 0 }}>全节点授权（新协议自动同步）</Tag>
-              ) : isIndeterminate ? (
-                <Tag color="orange" style={{ margin: 0, fontSize: 11, borderRadius: 10, padding: '0 8px', border: 'none', flexShrink: 0 }}>部分授权 ({selectedIbKeys.length}/{ibs.length})</Tag>
-              ) : (
-                <Tag style={{ margin: 0, fontSize: 11, color: 'var(--console-faint)', borderRadius: 10, padding: '0 8px', border: 'none', background: 'var(--console-surface)', flexShrink: 0 }}>未授权</Tag>
-              )}
+                <span>{s.name}</span>
+              </label>
+              <span className="ui-tag">
+                {isChecked ? '整机' : isIndeterminate ? `${selectedIbKeys.length} / ${ibs.length}` : '未授权'}
+              </span>
             </div>
 
             {ibs.length > 0 && (
-              <div
-                style={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: 8,
-                  paddingLeft: 22,
-                  paddingTop: 4,
-                }}
-              >
+              <div className="um-picker-inbounds">
                 {ibs.map((ib) => {
                   const ibChecked = value.includes(iKey(ib.id))
                   return (
-                    <div
+                    <button
+                      type="button"
                       key={ib.id}
+                      className={`um-picker-inbound${ibChecked ? ' is-on' : ''}`}
+                      aria-pressed={ibChecked}
                       onClick={() => handleInboundToggle(ib.id)}
-                      style={{
-                        cursor: 'pointer',
-                        padding: '4px 10px',
-                        borderRadius: 6,
-                        fontSize: 12,
-                        lineHeight: '18px',
-                        userSelect: 'none',
-                        transition: 'all 0.15s ease',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 5,
-                        background: ibChecked ? 'var(--console-selected)' : 'var(--console-surface)',
-                        color: ibChecked ? 'var(--console-ink)' : 'var(--console-muted)',
-                        border: ibChecked ? '1px solid var(--console-border-hover)' : '1px solid var(--console-border)',
-                        fontWeight: ibChecked ? 500 : 400,
-                      }}
                       title={ib.tag}
                     >
-                      <span style={{ fontSize: 11, lineHeight: 1 }}>{ibChecked ? '✓' : '+'}</span>
+                      <span aria-hidden>{ibChecked ? '✓' : '+'}</span>
                       <span>{ib.tag}</span>
-                    </div>
+                    </button>
                   )
                 })}
               </div>

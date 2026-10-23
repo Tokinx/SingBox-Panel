@@ -82,7 +82,7 @@ export default function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/admin/overview" element={<Navigate to="/admin/servers" replace />} />
           <Route path="/admin/servers" element={<AdminGuard><Servers /></AdminGuard>} />
-          <Route path="/admin/servers/:id" element={<AdminGuard><ServerDetail /></AdminGuard>} />
+          <Route path="/admin/servers/:id/:section?" element={<AdminGuard><ServerDetail /></AdminGuard>} />
           <Route path="/admin/traffic" element={<AdminGuard><Traffic /></AdminGuard>} />
           <Route path="/admin/users" element={<AdminGuard><Users /></AdminGuard>} />
           <Route path="/admin/logs" element={<AdminGuard><Logs /></AdminGuard>} />
