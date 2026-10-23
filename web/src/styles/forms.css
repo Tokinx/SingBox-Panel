@@ -45,7 +45,7 @@
 .fm-chips .ant-checkbox-wrapper:has(input:focus-visible) { outline: 2px solid var(--console-focus); outline-offset: 2px; }
 
 /* ---------- Config editor ---------- */
-.fm-code.ant-input { display: block; width: 100%; font-family: var(--app-mono); font-size: 12.5px; line-height: 1.6; padding: 12px 14px; border-radius: 6px; background: var(--console-surface); white-space: pre; overflow-wrap: normal; overflow-x: auto; tab-size: 2; height: min(52dvh, 460px) !important; resize: none; }
+.fm-code.ant-input { display: block; width: 100%; font-family: var(--app-mono); font-size: 12.5px; line-height: 1.6; padding: 12px 14px; border-radius: 6px; background: var(--console-surface); white-space: pre; overflow-wrap: normal; overflow-x: auto; tab-size: 2; height: min(calc(52 * var(--dvh)), 460px) !important; resize: none; }
 .fm-loading { padding: 48px 16px; text-align: center; color: var(--console-faint); }
 
 /* ---------- Import preview ---------- */

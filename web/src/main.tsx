@@ -8,11 +8,13 @@ import './styles/app.css'
 import Appearance from './Appearance'
 import { ThemePreferenceProvider } from './themePreference'
 import { markStandalone, registerServiceWorker } from './pwa'
+import { installFluidScale } from './fluidScale'
 
 // Makes the panel installable and keeps the shell available offline. No-op in
 // dev and on insecure origins.
 registerServiceWorker()
 markStandalone()
+installFluidScale()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

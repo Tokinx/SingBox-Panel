@@ -246,6 +246,23 @@ function compactMessage(value: string, direction: LogDirection) {
   return value.toLowerCase().startsWith(prefix) ? value.slice(prefix.length) : value
 }
 
+function connectionId(context: string) {
+  const space = context.lastIndexOf(' ')
+  return space === -1 ? context : context.slice(0, space)
+}
+
+/** "connection to host:port" → arrow + emphasised target; other text unchanged. */
+function renderFlow(message: string, keyword: string): ReactNode {
+  const match = message.match(/^connection (to|from) (\S+)(.*)$/i)
+  if (!match) return renderSemanticText(message, keyword)
+  const [, way, target, rest] = match
+  return <>
+    <span className="lg-arrow" aria-label={way.toLowerCase() === 'to' ? '连接到' : '来自'}>{way.toLowerCase() === 'to' ? '→' : '←'}</span>
+    <span className="lg-target">{highlightText(target, keyword)}</span>
+    {rest ? <span className="lg-rest">{renderSemanticText(rest, keyword)}</span> : null}
+  </>
+}
+
 function formatUpdatedAt(value: number | null) {
   if (!value) return '--:--:--'
   return new Date(value).toLocaleTimeString('zh-CN', { hour12: false })
@@ -469,6 +486,21 @@ export default function Logs({ serverId }: { serverId?: number } = {}) {
     })
   }, [directionFilter, hideNoise, keyword, levelFilter, logEntries])
 
+  // Consecutive lines of one connection (inbound + outbound) share a band so
+  // pairs read together; the band flips whenever the connection id changes.
+  const connectionBands = useMemo(() => {
+    const bands = new Map<LogEntry["id"], boolean>()
+    let band = false
+    let previous = ''
+    for (const line of filteredLines) {
+      const id = connectionId(line.context)
+      if (!id || id !== previous) band = !band
+      previous = id
+      bands.set(line.id, band)
+    }
+    return bands
+  }, [filteredLines])
+
   const current = servers.find((s) => s.id === sid)
 
   const handleScroll = (event: UIEvent<HTMLDivElement>) => {
@@ -619,31 +651,24 @@ export default function Logs({ serverId }: { serverId?: number } = {}) {
                 const messageText = compactMessage(line.message, line.direction)
                 return (
                   <div
-                    className={`lg-line ${compact ? 'lg-line-compact' : 'lg-line-raw'} lg-line-${levelClass(line.level)}`}
+                    className={`lg-line ${compact ? 'lg-line-compact' : 'lg-line-raw'} lg-line-${levelClass(line.level)}${connectionBands.get(line.id) ? ' is-band' : ''}`}
                     title={compact ? line.raw : undefined}
                   >
                     {compact ? (
                       <>
                         <span className="lg-time">{line.time || '--:--:--'}</span>
-                        <span className={`lg-level lg-level-${levelClass(line.level)}`}>
-                          {line.level || 'LOG'}
+                        <span className={`lg-dir lg-dir-${line.direction || 'none'}`}>
+                          {line.direction === 'inbound' ? '入' : line.direction === 'outbound' ? '出' : '·'}
                         </span>
-                        <span className={`lg-direction lg-direction-${line.direction || 'none'}`}>
-                          {line.direction === 'inbound' ? 'INBOUND' : line.direction === 'outbound' ? 'OUTBOUND' : '—'}
+                        <span className="lg-subject">
+                          {['warn', 'error'].includes(levelClass(line.level)) ? <span className={`lg-badge lg-badge-${levelClass(line.level)}`}>{line.level}</span> : null}
+                          <span className={`lg-component lg-component-${line.direction || 'neutral'}`} title={line.component}>{highlightText(componentText, keyword)}</span>
+                          {line.user ? <span className="lg-user" title={line.user}>{highlightText(line.user, keyword)}</span> : null}
                         </span>
-                        <span className={`lg-user ${line.user ? '' : 'is-empty'}`} title={line.user || undefined}>
-                          {line.user ? highlightText(line.user, keyword) : null}
-                        </span>
-                        <span
-                          className={`lg-component lg-component-${line.direction || 'neutral'}`}
-                          title={line.component}
-                        >
-                          {highlightText(componentText, keyword)}
-                        </span>
+                        <span className="lg-message">{renderFlow(messageText, keyword)}</span>
                         <span className="lg-context" title={line.context}>
                           {renderContext(line.context, keyword)}
                         </span>
-                        <span className="lg-message">{renderSemanticText(messageText, keyword)}</span>
                       </>
                     ) : (
                       <span className="lg-raw-text">{renderSemanticText(line.raw, keyword)}</span>
