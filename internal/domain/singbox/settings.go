@@ -147,6 +147,21 @@ func (t TransportSettings) HeaderValuesMap() map[string][]string {
 	return values
 }
 
+// Host returns the first Host header value regardless of header-name casing.
+// URI and subscription formats expose Host separately from other HTTP headers.
+func (t TransportSettings) Host() string {
+	values := t.HeaderValuesMap()
+	if host := values["Host"]; len(host) > 0 {
+		return host[0]
+	}
+	for key, host := range values {
+		if strings.EqualFold(key, "host") && len(host) > 0 {
+			return host[0]
+		}
+	}
+	return ""
+}
+
 // HeaderObject returns the JSON-compatible HTTPHeader form: one value is a
 // string, repeated values are an array.
 func (t TransportSettings) HeaderObject() map[string]any {

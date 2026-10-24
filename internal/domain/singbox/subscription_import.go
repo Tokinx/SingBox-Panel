@@ -1489,7 +1489,7 @@ func clientParams(cn ClientNode) map[string]any {
 		if st.Transport.Path != "" {
 			p["path"] = st.Transport.Path
 		}
-		if h := st.Transport.Headers["Host"]; h != "" {
+		if h := st.Transport.Host(); h != "" {
 			p["host"] = h
 		}
 		if len(st.Transport.Headers) > 0 {

@@ -111,17 +111,6 @@ func buildTLS(t TLSSettings) *tlsInbound {
 	return out
 }
 
-func transportHost(t TransportSettings) string {
-	for key, values := range t.HeaderValuesMap() {
-		if strings.EqualFold(key, "host") {
-			if len(values) > 0 {
-				return values[0]
-			}
-		}
-	}
-	return ""
-}
-
 func transportHeaders(t TransportSettings, omitHost bool) map[string]any {
 	values := t.HeaderValuesMap()
 	if len(values) == 0 {
@@ -155,7 +144,7 @@ func buildTransport(t TransportSettings) *v2rayTransport {
 		out.MaxEarlyData = t.MaxEarlyData
 		out.EarlyDataHeader = t.EarlyDataHeader
 	} else if typ == "httpupgrade" {
-		out.Host = transportHost(t)
+		out.Host = t.Host()
 		out.Headers = transportHeaders(t, true)
 	} else {
 		out.Headers = transportHeaders(t, false)

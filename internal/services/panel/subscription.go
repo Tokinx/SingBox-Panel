@@ -864,7 +864,7 @@ func clashProxy(n node, seen map[string]int) map[string]any {
 		if st.Transport.Path != "" {
 			o["path"] = st.Transport.Path
 		}
-		if h := st.Transport.Headers["Host"]; h != "" {
+		if h := st.Transport.Host(); h != "" {
 			o["headers"] = map[string]any{"Host": h}
 		}
 		if st.Transport.MaxEarlyData > 0 {
@@ -1196,7 +1196,7 @@ func nodeParams(n node) map[string]string {
 		}
 		if net == "ws" {
 			p["Path"] = st.Transport.Path
-			if h := st.Transport.Headers["Host"]; h != "" {
+			if h := st.Transport.Host(); h != "" {
 				p["Host"] = h
 			}
 		}
@@ -1214,7 +1214,7 @@ func nodeParams(n node) map[string]string {
 		}
 		if net == "ws" {
 			p["Path"] = st.Transport.Path
-			if h := st.Transport.Headers["Host"]; h != "" {
+			if h := st.Transport.Host(); h != "" {
 				p["Host"] = h
 			}
 		}
@@ -1424,7 +1424,7 @@ func surgeProxyUnchecked(n node, name string) string {
 		}
 		if st.Transport.Type == "ws" {
 			line += ", ws=true, ws-path=" + st.Transport.Path
-			if h := st.Transport.Headers["Host"]; h != "" {
+			if h := st.Transport.Host(); h != "" {
 				line += ", ws-headers=Host:" + h
 			}
 		}

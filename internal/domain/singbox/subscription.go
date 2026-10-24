@@ -321,7 +321,7 @@ func BuildShareLink(n ClientNode) (string, error) {
 			if n.Settings.Transport.Path != "" {
 				q.Set("path", n.Settings.Transport.Path)
 			}
-			if h := n.Settings.Transport.Headers["Host"]; h != "" {
+			if h := n.Settings.Transport.Host(); h != "" {
 				q.Set("host", h)
 			}
 			if networkOf(n.Settings.Transport) == "ws" && n.Settings.Transport.MaxEarlyData > 0 {
@@ -354,7 +354,7 @@ func BuildShareLink(n ClientNode) (string, error) {
 		}
 		if net == "ws" || net == "httpupgrade" {
 			obj["path"] = n.Settings.Transport.Path
-			obj["host"] = n.Settings.Transport.Headers["Host"]
+			obj["host"] = n.Settings.Transport.Host()
 		}
 		if t.Reality.Enabled {
 			obj["tls"] = "reality"
@@ -404,7 +404,7 @@ func BuildShareLink(n ClientNode) (string, error) {
 			if n.Settings.Transport.Path != "" {
 				q.Set("path", n.Settings.Transport.Path)
 			}
-			if h := n.Settings.Transport.Headers["Host"]; h != "" {
+			if h := n.Settings.Transport.Host(); h != "" {
 				q.Set("host", h)
 			}
 			if networkOf(n.Settings.Transport) == "ws" && n.Settings.Transport.MaxEarlyData > 0 {
