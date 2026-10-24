@@ -13,6 +13,16 @@ const inbound = {
 } satisfies Inbound
 
 describe('inbound form round trip', () => {
+  it('keeps an explicit VLESS UDP encoding choice after save and reopen', () => {
+    for (const encoding of ['none', 'xudp', 'packetaddr']) {
+      const item = { ...inbound, type: 'vless' as const }
+      const saved = assembleSettings(item.settings, { ...toForm(item), packet_encoding: encoding }, item.type)
+      const reopened = toForm({ ...item, settings: JSON.parse(JSON.stringify(saved)) })
+      expect(reopened.packet_encoding).toBe(encoding)
+      expect(assembleSettings(saved, reopened, item.type).packet_encoding).toBe(encoding)
+    }
+  })
+
   it('preserves custom and repeated headers on an unchanged WebSocket form', () => {
     const values = toForm(inbound)
     expect(values.ws_host).toBe('cdn.example.com')

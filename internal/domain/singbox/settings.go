@@ -230,10 +230,10 @@ type InboundSettings struct {
 	VMessSecurity string `json:"vmess_security,omitempty"` // auto | none | zero | aes-128-gcm | chacha20-poly1305 | aes-128-cfb
 	VMessAlterID  int    `json:"vmess_alter_id,omitempty"` // 0 recommended; 1 enables legacy authentication
 
-	// PacketEncoding is the VLESS UDP wire encoding carried into share links for
-	// third-party clients. Generated sing-box clients force xudp regardless; the
-	// share-link mirror keeps Shadowrocket & friends on the same encoding.
-	PacketEncoding string `json:"packet_encoding,omitempty"` // "" | "xudp"
+	// PacketEncoding is the VLESS UDP wire encoding. Empty keeps the historical
+	// xudp default; "none" explicitly disables encoding and survives omitempty.
+	// The sing-box wire format represents the disabled state as an empty string.
+	PacketEncoding string `json:"packet_encoding,omitempty"` // "" | "none" | "xudp" | "packetaddr"
 
 	// hysteria2
 	UpMbps             int    `json:"up_mbps,omitempty"`

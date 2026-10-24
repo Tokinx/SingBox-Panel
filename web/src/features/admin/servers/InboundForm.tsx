@@ -152,7 +152,7 @@ export function assembleSettings(base: InboundSettings, v: FormVals, type: Inbou
 
   if (type === 'vless') {
     s.flow = v.flow || ''
-    s.packet_encoding = v.packet_encoding === 'none' ? '' : 'xudp'
+    s.packet_encoding = v.packet_encoding || 'xudp'
   }
   if (type === 'vmess') {
     s.vmess_security = v.vmess_security || 'auto'
@@ -614,7 +614,7 @@ export default function InboundForm({
                     valuePropName="checked"
                     className="fm-switch"
                     getValueFromEvent={(checked: boolean) => (checked ? 'xudp' : 'none')}
-                    getValueProps={(value: string) => ({ checked: value !== 'none' })}
+                    getValueProps={(value: string) => ({ checked: !value || value === 'xudp' })}
                   >
                     <Switch />
                   </Form.Item>

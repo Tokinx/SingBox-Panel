@@ -364,6 +364,12 @@ func parseOutbound(m map[string]any) (ParsedOutbound, bool) {
 		s.SSPlugin = JoinShadowsocksPluginFields(mStr(m, "plugin"), mStr(m, "plugin_opts"))
 	case "vless":
 		s.Flow = mStr(m, "flow")
+		if encoding, present := m["packet_encoding"].(string); present {
+			s.PacketEncoding = encoding
+			if encoding == "" {
+				s.PacketEncoding = "none"
+			}
+		}
 	case "vmess":
 		s.VMessSecurity = mStr(m, "security")
 		s.VMessAlterID = mInt(m, "alter_id")

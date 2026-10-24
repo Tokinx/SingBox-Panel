@@ -123,6 +123,8 @@ func BuildClientOutbound(n ClientNode) (json.RawMessage, error) {
 		pe := n.Settings.PacketEncoding
 		if pe == "" {
 			pe = "xudp"
+		} else if pe == "none" {
+			pe = ""
 		}
 		base["packet_encoding"] = pe
 		if tls != nil {
