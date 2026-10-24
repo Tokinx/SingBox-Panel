@@ -39,6 +39,7 @@ export default function Servers() {
   const [form] = Form.useForm()
   const submitLock = useRef(false)
   const [singboxForm] = Form.useForm()
+  const singboxMethod = Form.useWatch('method', singboxForm) ?? 'script'
 
   const handleUpdateAllAgents = () => {
     Modal.confirm({
@@ -515,6 +516,9 @@ export default function Servers() {
           </Form.Item>
           <Form.Item name="method" label="安装方式">
             <Select
+              onChange={(value) => {
+                if (value !== 'script') singboxForm.setFieldsValue({ version: undefined })
+              }}
               options={[
                 { value: 'script', label: '官方安装脚本' },
                 { value: 'apt', label: '官方 APT 源' },
@@ -522,8 +526,8 @@ export default function Servers() {
               ]}
             />
           </Form.Item>
-          <Form.Item name="version" label="版本">
-            <Input placeholder="最新" />
+          <Form.Item name="version" label="版本" extra={singboxMethod !== 'script' ? '指定版本请使用官方脚本' : undefined}>
+            <Input disabled={singboxMethod !== 'script'} placeholder={singboxMethod === 'script' ? '最新' : '使用软件源最新版本'} />
           </Form.Item>
         </Form>
       </Modal>
