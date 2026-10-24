@@ -95,3 +95,35 @@ func TestTrafficReceiptRollsBackWithFailedHistoryWrite(t *testing.T) {
 		t.Fatalf("retry lost usage: %v", usage)
 	}
 }
+
+func TestTrafficReportContinuesAfterRestoringAnOlderCursor(t *testing.T) {
+	f := newUserTrafficFixture(t, model.ConfigModeManaged)
+	reset := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	snapshot := timestampedFixtureReport(f, reset)
+	if err := recordTimestampedTraffic(f.db, f.server.ID, snapshot, reset.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	// A restored database has receipt 1, while the still-running Agent has
+	// already discarded acknowledged reports 2..9 and next sends report 10.
+	snapshot.Report.Sequence = 10
+	snapshot.Report.Buckets = []protocol.TrafficTimeBucket{{Time: reset.Add(2 * time.Minute).Unix(), Upload: 50}}
+	for i := 0; i < 2; i++ {
+		if err := recordTimestampedTraffic(f.db, f.server.ID, snapshot, reset.Add(time.Hour)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var server model.Server
+	if err := f.db.First(&server, f.server.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if server.TrafficUpload != 1250 {
+		t.Fatalf("new report lost or replayed after restore: %d", server.TrafficUpload)
+	}
+	var cursor model.TrafficReportCursor
+	if err := f.db.First(&cursor, "server_id = ? AND session = ?", f.server.ID, snapshot.Report.Session).Error; err != nil {
+		t.Fatal(err)
+	}
+	if cursor.Sequence != 10 {
+		t.Fatalf("receipt did not advance: %d", cursor.Sequence)
+	}
+}

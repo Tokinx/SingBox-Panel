@@ -73,9 +73,10 @@ func recordTimestampedTraffic(db *gorm.DB, serverID uint, snapshot *protocol.Tra
 		if report.Sequence <= cursor.Sequence {
 			return nil
 		}
-		if report.Sequence != cursor.Sequence+1 {
-			return fmt.Errorf("traffic report sequence gap")
-		}
+		// Restoring an older panel database can rewind this cursor while the
+		// Agent keeps running with newer, already acknowledged sequence numbers.
+		// Missing historical batches cannot be recovered from that Agent, but
+		// they must not prevent its subsequent usage from being accepted.
 		var inbounds []model.Inbound
 		if err := tx.Select("id", "tag", "type", "settings").Where("server_id = ?", serverID).Find(&inbounds).Error; err != nil {
 			return err
