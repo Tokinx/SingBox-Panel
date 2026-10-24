@@ -584,7 +584,9 @@ func trafficBucketExpression(db *gorm.DB, stepSeconds, offsetSeconds int64) (str
 	case "sqlite":
 		return "(CAST(strftime('%s', bucket) AS INTEGER) + " + offset + ") / " + step, nil
 	case "mysql":
-		return "FLOOR((UNIX_TIMESTAMP(bucket) + " + offset + ") / " + step + ")", nil
+		// Buckets are UTC DATETIME values. UNIX_TIMESTAMP would interpret them
+		// in the MySQL session timezone and shift calendar-day aggregation.
+		return "FLOOR((TIMESTAMPDIFF(SECOND, '1970-01-01 00:00:00', bucket) + " + offset + ") / " + step + ")", nil
 	case "postgres":
 		return "FLOOR((EXTRACT(EPOCH FROM bucket) + " + offset + ") / " + step + ")", nil
 	default:
