@@ -206,6 +206,7 @@ function Confirmation({ entry }: { entry: Entry }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const locked = useRef(false)
+  const confirmButton = useRef<HTMLButtonElement>(null)
   const run = async () => {
     if (locked.current) return
     locked.current = true
@@ -236,6 +237,12 @@ function Confirmation({ entry }: { entry: Entry }) {
       <AlertDialogContent
         className="ui-modal ui-confirm"
         style={{ width: entry.width || 416 }}
+        onOpenAutoFocus={(event) => {
+          if (entry.kind !== 'confirm') {
+            event.preventDefault()
+            confirmButton.current?.focus({ preventScroll: true })
+          }
+        }}
         onEscapeKeyDown={(event) => {
           if (busy) event.preventDefault()
         }}
@@ -267,6 +274,7 @@ function Confirmation({ entry }: { entry: Entry }) {
             </AlertPrimitive.Cancel>
           )}
           <Button
+            ref={confirmButton}
             type="primary"
             danger={entry.okType === 'danger' || entry.okButtonProps?.danger}
             loading={busy}
