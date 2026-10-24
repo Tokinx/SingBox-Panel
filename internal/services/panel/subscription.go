@@ -395,8 +395,10 @@ func (a *App) customNodeToNode(c *model.CustomNode) (node, bool) {
 		case "websocket":
 			transport = "ws"
 		}
+		// Keep unsupported types visible to ValidateClientOutbound. Dropping
+		// them here would silently turn a gRPC/HTTP/QUIC node into plain TCP.
+		st.Transport.Type = transport
 		if transport == "ws" || transport == "httpupgrade" {
-			st.Transport.Type = transport
 			st.Transport.Path = p.Path
 			st.Transport.MaxEarlyData = p.MaxEarlyData
 			st.Transport.EarlyDataHeader = p.EarlyDataHeaderName

@@ -346,6 +346,10 @@ func parseSingBoxSubscription(raw []byte) (SubscriptionParseResult, error) {
 			Settings: ob.Settings,
 			User:     ProxyUser{Username: ob.Username, UUID: ob.UUID, Password: ob.Password},
 		}
+		if err := cn.Settings.ValidateClientOutbound(cn.Type); err != nil {
+			result.Skipped = append(result.Skipped, ImportIssue{Input: ob.Tag, Error: err.Error()})
+			continue
+		}
 		result.Nodes = append(result.Nodes, importedNodeFromClient(cn, "", false))
 	}
 	if len(result.Nodes) == 0 {
@@ -976,6 +980,11 @@ func parseClashProxy(m map[string]any) (ImportedNode, error) {
 	if network == "grpc" {
 		return ImportedNode{}, fmt.Errorf("暂不支持 gRPC 传输")
 	}
+	if typ == "vless" || typ == "vmess" || typ == "trojan" {
+		// Preserve every requested stream type until validation; only copying
+		// recognized types would accept HTTP/QUIC nodes with their transport lost.
+		cn.Settings.Transport.Type = network
+	}
 	if network == "ws" || network == "httpupgrade" {
 		cn.Settings.Transport.Type = network
 		if transport != nil {
@@ -1115,15 +1124,17 @@ func parseClashProxy(m map[string]any) (ImportedNode, error) {
 			cn.Settings.SnellObfsHost = getString(m, "obfs-host", "obfs_host")
 		}
 		cn.Settings.SnellMode = getString(m, "mode")
-		validateSettings := cn.Settings
-		validateSettings.SnellVersion = SnellOutboundVersion(validateSettings.SnellVersion)
-		if err := validateSettings.ValidateClientOutbound("snell"); err != nil {
-			return ImportedNode{}, fmt.Errorf("snell 参数无效: %w", err)
-		}
 	default:
 		return ImportedNode{}, fmt.Errorf("暂不支持协议 %q", typ)
 	}
 
+	validateSettings := cn.Settings
+	if typ == "snell" {
+		validateSettings.SnellVersion = SnellOutboundVersion(validateSettings.SnellVersion)
+	}
+	if err := validateSettings.ValidateClientOutbound(typ); err != nil {
+		return ImportedNode{}, err
+	}
 	node := importedNodeFromClient(cn, "", false)
 	node.Params["udp"] = getBoolDefault(m, true, "udp", "udp-relay")
 	if cn.Settings.PacketEncoding != "" {

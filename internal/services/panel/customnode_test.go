@@ -114,6 +114,31 @@ func TestCustomNodeToNodeMapsVMessTLSAndTransport(t *testing.T) {
 	}
 }
 
+func TestValidateCustomNodeRejectsUnsupportedStreamTransports(t *testing.T) {
+	for _, field := range []string{"transport", "network"} {
+		for _, transport := range []string{"grpc", "http", "quic"} {
+			t.Run(field+"/"+transport, func(t *testing.T) {
+				params, err := json.Marshal(map[string]any{
+					"uuid": "11111111-1111-4111-8111-111111111111", field: transport,
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				n := customNodeFromParams(t, "vless", string(params))
+				if n.settings.Transport.Type != transport {
+					t.Fatalf("transport was lost before validation: %+v", n.settings.Transport)
+				}
+				req := customNodeReq{
+					Protocol: "vless", Address: "edge.example.com", Port: 443, Params: params,
+				}
+				if _, err := validateCustomNode(&req); err == nil || !strings.Contains(err.Error(), "unsupported transport") {
+					t.Fatalf("unsupported %s must fail before it is saved: %v", transport, err)
+				}
+			})
+		}
+	}
+}
+
 func TestCustomNodeToNodeMapsRealityAndWSAliases(t *testing.T) {
 	n := customNodeFromParams(t, "vless", `{
 		"uuid":"75d809e7-b5c5-4cf6-b0b6-836916cc9f45",

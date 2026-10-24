@@ -90,7 +90,7 @@ func TestParseSubscriptionJSONKeepsRealImportFailures(t *testing.T) {
 		{
 			name: "sing-box",
 			raw: `{"outbounds":[
-				{"type":"trojan","tag":"valid","server":"edge.example.com","server_port":443,"password":"secret"},
+				{"type":"trojan","tag":"valid","server":"edge.example.com","server_port":443,"password":"secret","tls":{"enabled":true}},
 				{"type":"direct"},
 				{"type":"unsupported","tag":"unknown"},
 				{"tag":"missing-type"},
@@ -125,6 +125,7 @@ func TestParseSubscriptionSingBoxRoutingObjectsDoNotExceedNodeLimit(t *testing.T
 	for i := 0; i < SubscriptionImportMaxNodes; i++ {
 		items = append(items, map[string]any{
 			"type": "trojan", "tag": "node", "server": "edge.example.com", "server_port": 443, "password": "secret",
+			"tls": map[string]any{"enabled": true},
 		})
 	}
 	items = append(items, map[string]any{"type": "direct", "tag": "direct"})
@@ -138,6 +139,43 @@ func TestParseSubscriptionSingBoxRoutingObjectsDoNotExceedNodeLimit(t *testing.T
 	}
 	if len(result.Nodes) != SubscriptionImportMaxNodes || len(result.Skipped) != 0 {
 		t.Fatalf("a trailing routing object must not turn a complete profile into a partial import: %+v", result)
+	}
+}
+
+func TestParseSubscriptionRejectsUnsupportedStreamTransports(t *testing.T) {
+	for _, format := range []string{"sing-box", "clash"} {
+		for _, transport := range []string{"grpc", "http", "quic"} {
+			t.Run(format+"/"+transport, func(t *testing.T) {
+				valid := map[string]any{
+					"type": "vless", "server": "edge.example.com", "uuid": "11111111-1111-4111-8111-111111111111",
+				}
+				invalid := map[string]any{
+					"type": "vless", "server": "edge.example.com", "uuid": "11111111-1111-4111-8111-111111111111",
+				}
+				key := "outbounds"
+				if format == "sing-box" {
+					valid["tag"], valid["server_port"] = "valid", 443
+					invalid["tag"], invalid["server_port"] = "unsupported", 443
+					invalid["transport"] = map[string]any{"type": transport}
+				} else {
+					key = "proxies"
+					valid["name"], valid["port"] = "valid", 443
+					invalid["name"], invalid["port"], invalid["network"] = "unsupported", 443, transport
+				}
+				raw, err := json.Marshal(map[string]any{key: []any{invalid, valid}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				result, err := ParseSubscription(raw)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(result.Nodes) != 1 || result.Nodes[0].Name != "valid" || len(result.Skipped) != 1 ||
+					!strings.Contains(strings.ToLower(result.Skipped[0].Error), transport) {
+					t.Fatalf("unsupported transport must be reported, never changed to TCP: %+v", result)
+				}
+			})
+		}
 	}
 }
 
