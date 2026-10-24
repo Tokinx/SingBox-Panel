@@ -45,6 +45,7 @@ function AlertDialogOverlay({
 function AlertDialogContent({
   className,
   size = "default",
+  onClick,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Content> & {
   size?: "default" | "sm"
@@ -60,6 +61,10 @@ function AlertDialogContent({
           className
         )}
         {...props}
+        onClick={(event) => {
+          event.stopPropagation()
+          onClick?.(event)
+        }}
       />
     </AlertDialogPortal>
   )

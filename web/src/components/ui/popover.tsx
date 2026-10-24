@@ -18,6 +18,7 @@ function PopoverContent({
   className,
   align = "center",
   sideOffset = 4,
+  onClick,
   ...props
 }: React.ComponentProps<typeof PopoverPrimitive.Content>) {
   return (
@@ -32,6 +33,10 @@ function PopoverContent({
           className
         )}
         {...props}
+        onClick={(event) => {
+          event.stopPropagation()
+          onClick?.(event)
+        }}
       />
     </PopoverPrimitive.Portal>
   )

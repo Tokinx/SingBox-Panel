@@ -49,6 +49,7 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  onClick,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
@@ -63,6 +64,10 @@ function DialogContent({
           className
         )}
         {...props}
+        onClick={(event) => {
+          event.stopPropagation()
+          onClick?.(event)
+        }}
       >
         {children}
         {showCloseButton && (
