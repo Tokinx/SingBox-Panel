@@ -1,9 +1,11 @@
 import React, {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useId,
   useRef,
+  useState,
 } from 'react'
 import {
   useForm as useHookForm,
@@ -34,6 +36,8 @@ export type FormInstance<T extends Values = any> = {
 }
 const FormContext = createContext<FormInstance | null>(null)
 const ListContext = createContext<string>('')
+const RequiredMarkContext = createContext(true)
+const ItemErrorsContext = createContext<((id: string, error?: string) => void) | null>(null)
 const path = (name: Name) =>
   Array.isArray(name) ? name.join('.') : String(name)
 
@@ -141,11 +145,28 @@ function ItemLayout({
   id,
   error,
 }: ItemProps & { id?: string; error?: string }) {
+  const showRequiredMark = useContext(RequiredMarkContext)
+  const reportToParent = useContext(ItemErrorsContext)
+  const [childErrors, setChildErrors] = useState<Record<string, string>>({})
+  const reportError = useCallback((fieldId: string, message?: string) => {
+    setChildErrors((current) => {
+      if (current[fieldId] === message) return current
+      const next = { ...current }
+      if (message) next[fieldId] = message
+      else delete next[fieldId]
+      return next
+    })
+  }, [])
+  useEffect(() => {
+    if (!noStyle || !reportToParent || !id) return
+    reportToParent(id, error)
+    return () => reportToParent(id)
+  }, [noStyle, reportToParent, id, error])
   if (noStyle)
     return (
       <>
         {children}
-        {error && (
+        {error && !reportToParent && (
           <span id={id ? `${id}-error` : undefined} className="ui-form-item-explain" role="alert">
             {error}
           </span>
@@ -156,7 +177,7 @@ function ItemLayout({
     <div
       className={cn(
         'ui-form-item',
-        error && 'ui-form-item-has-error',
+        (error || Object.keys(childErrors).length > 0) && 'ui-form-item-has-error',
         className,
       )}
       style={style}
@@ -167,12 +188,19 @@ function ItemLayout({
           <div className="ui-form-item-label">
             <Label htmlFor={id}>
               {label}
-              {required && <span className="ui-required">*</span>}
+              {required && showRequiredMark && <span className="ui-required">*</span>}
             </Label>
           </div>
         )}
         <div className="ui-form-item-control">
-          {children}
+          <ItemErrorsContext.Provider value={reportError}>
+            {children}
+          </ItemErrorsContext.Provider>
+          {Object.entries(childErrors).map(([fieldId, message]) => (
+            <div key={fieldId} id={`${fieldId}-error`} className="ui-form-item-explain" role="alert">
+              {message}
+            </div>
+          ))}
           {(error || help) && (
             <div
               id={id ? `${id}-error` : undefined}
@@ -357,7 +385,9 @@ function FormRoot({
           }
         }}
       >
-        {children}
+        <RequiredMarkContext.Provider value={requiredMark !== false}>
+          {children}
+        </RequiredMarkContext.Provider>
       </form>
     </FormContext.Provider>
   )
