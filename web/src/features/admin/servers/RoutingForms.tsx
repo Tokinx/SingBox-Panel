@@ -85,7 +85,7 @@ export function OutboundForm({
         server_port: s.server_port,
         username: s.username ?? s.settings?.username,
         uuid: s.uuid,
-        password: s.password,
+        password: s.password ?? (outbound.type === 'snell' ? inner.snell_psk : undefined),
         method: inner.method ?? '2022-blake3-aes-128-gcm',
         ss_psk: inner.ss_server_psk ?? s.password,
         tls: TLS_REQUIRED_OUT.has(outbound.type) || !!inner.tls?.enabled,

@@ -4,6 +4,22 @@ import { buildOutboundBody } from './outboundForm'
 import type { Outbound } from './types'
 
 describe('buildOutboundBody', () => {
+  it('replaces the PSK of an imported Snell outbound without retaining a hidden override', () => {
+    const outbound = {
+      id: 1, server_id: 1, tag: 'snell', type: 'snell', remark: '', sort: 0,
+      settings: { server: 'node.example.com', server_port: 443, password: 'old-psk',
+        settings: { snell_psk: 'old-psk', snell_version: 4, snell_reuse: true } },
+    } satisfies Outbound
+    const body = buildOutboundBody(outbound, {
+      type: 'snell', tag: 'snell', server: 'node.example.com', server_port: 443,
+      password: 'new-psk', snell_version: 4, snell_reuse: true,
+    })
+    expect(body.settings.password).toBe('new-psk')
+    expect(body.settings.settings?.snell_psk).toBeUndefined()
+    expect(body.settings.settings?.snell_reuse).toBe(true)
+    expect(outbound.settings.settings.snell_psk).toBe('old-psk')
+  })
+
   it('preserves hidden imported parameters while editing visible fields', () => {
     const outbound = {
       id: 1,

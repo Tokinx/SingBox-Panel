@@ -78,6 +78,9 @@ export function buildOutboundBody(outbound: Outbound | null, values: OutboundFor
     inner.gecko_max_packet_size = inner.obfs_type === 'gecko' ? (values.gecko_max_packet_size || 0) : 0
   }
   if (type === 'snell') {
+    // Imported configs duplicated the PSK here. The editable outer password
+    // is authoritative; a stale inner PSK otherwise wins during rendering.
+    delete inner.snell_psk
     inner.snell_version = values.snell_version || 4
     inner.snell_reuse = !!values.snell_reuse
     inner.snell_network = values.snell_network || 'tcp'
