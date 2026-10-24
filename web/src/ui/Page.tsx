@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useRef, type KeyboardEvent, type ReactNode } from 'react'
 
 /** Page heading: large title, optional one-line meta row, actions on the right. */
 export function PageHeader({ title, meta, actions }: { title: ReactNode; meta?: ReactNode; actions?: ReactNode }) {
@@ -32,9 +32,41 @@ export function Pills({ items, active, onChange, actions, label }: {
   actions?: ReactNode
   label?: string
 }) {
+  const buttons = useRef(new Map<string, HTMLButtonElement>())
+  const focusIndex = Math.max(0, items.findIndex((item) => item.key === active))
+  const moveFocus = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (event.altKey || event.ctrlKey || event.metaKey || !items.length) return
+    let nextIndex: number
+    switch (event.key) {
+      case 'ArrowLeft':
+        nextIndex = (index - 1 + items.length) % items.length
+        break
+      case 'ArrowRight':
+        nextIndex = (index + 1) % items.length
+        break
+      case 'Home':
+        nextIndex = 0
+        break
+      case 'End':
+        nextIndex = items.length - 1
+        break
+      default:
+        return
+    }
+    event.preventDefault()
+    const next = items[nextIndex]
+    buttons.current.get(next.key)?.focus()
+    if (next.key !== active) onChange(next.key)
+  }
   return <div className="ui-pills-row">
-    <div className="ui-pills" role="tablist" aria-label={label}>
-      {items.map((item) => <button key={item.key} type="button" role="tab" aria-selected={item.key === active}
+    <div className="ui-pills" role="tablist" aria-label={label} aria-orientation="horizontal">
+      {items.map((item, index) => <button key={item.key} type="button" role="tab" aria-selected={item.key === active}
+        ref={(button) => {
+          if (button) buttons.current.set(item.key, button)
+          else buttons.current.delete(item.key)
+        }}
+        tabIndex={index === focusIndex ? 0 : -1}
+        onKeyDown={(event) => moveFocus(event, index)}
         className={`ui-pill${item.key === active ? ' is-active' : ''}`} onClick={() => onChange(item.key)}>
         {item.label}{item.count !== undefined && <span className="ui-pill-count">{item.count}</span>}
       </button>)}
