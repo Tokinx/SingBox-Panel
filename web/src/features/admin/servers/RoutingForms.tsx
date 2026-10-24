@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Button, Checkbox, Form, Input, InputNumber, Modal, Segmented, Select, Space, Switch } from 'antd'
 import {
   createOutbound,
@@ -14,6 +14,7 @@ import { FormGroup, scrollToFirstError } from './InboundForm'
 import '../../../styles/forms.css'
 import { MODAL_MD } from '../../../ui/modal'
 import { OutboundImport } from './OutboundImport'
+import { Pills } from '../../../ui/Page'
 
 const OUT_TYPES: { value: OutboundType; label: string }[] = [
   { value: 'shadowsocks', label: 'Shadowsocks' },
@@ -47,6 +48,8 @@ export function OutboundForm({
   onSaved: () => void
 }) {
   const [form] = Form.useForm()
+  const importFormId = useId()
+  const [importReady, setImportReady] = useState(false)
   const [source, setSource] = useState<'manual' | 'external' | 'uri'>('manual')
   const [submitting, setSubmitting] = useState(false)
   const submitLock = useRef(false)
@@ -60,6 +63,7 @@ export function OutboundForm({
   useEffect(() => {
     if (!open) return
     setSource('manual')
+    setImportReady(false)
     // Reset first: keys omitted below would otherwise leak from the previously
     // opened outbound (e.g. a credential typed for a different landing).
     form.resetFields()
@@ -169,23 +173,25 @@ export function OutboundForm({
       closable={!submitting}
       maskClosable={!submitting}
       keyboard={!submitting}
-      footer={!outbound && source !== 'manual' ? null : undefined}
+      footer={!outbound && source !== 'manual' ? <>
+        <Button disabled={submitting} onClick={onClose}>取消</Button>
+        <Button type="primary" htmlType="submit" form={importFormId} disabled={!importReady} loading={submitting}>保存出站</Button>
+      </> : undefined}
       confirmLoading={submitting}
       width={MODAL_MD}
       centered
       destroyOnHidden
     >
-      {!outbound && <Segmented
-        block
-        aria-label="出站来源"
-        value={source}
-        disabled={submitting}
-        options={[{ value: 'manual', label: '手动填写' }, { value: 'external', label: '外部节点' }, { value: 'uri', label: 'URI 导入' }]}
-        onChange={(value) => setSource(value as typeof source)}
-        style={{ marginBottom: 16 }}
-      />}
+      {!outbound && <fieldset className="fm-source-picker" disabled={submitting}>
+        <Pills
+          label="出站来源"
+          active={source}
+          items={[{ key: 'manual', label: '手动填写' }, { key: 'external', label: '外部节点' }, { key: 'uri', label: 'URI 导入' }]}
+          onChange={(value) => { setImportReady(false); setSource(value as typeof source) }}
+        />
+      </fieldset>}
       {!outbound && source !== 'manual' ? (
-        <OutboundImport key={source} serverId={serverId} source={source} onClose={onClose} onSaved={onSaved} onSavingChange={setSubmitting} />
+        <OutboundImport key={source} serverId={serverId} source={source} onClose={onClose} onSaved={onSaved} onSavingChange={setSubmitting} formId={importFormId} onReadyChange={setImportReady} />
       ) : <Form form={form} layout="vertical" className="fm-form">
         <FormGroup title="基本">
           <Form.Item name="tag" label="标签" rules={[{ required: true }]}>

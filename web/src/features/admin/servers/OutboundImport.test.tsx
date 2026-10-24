@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { OutboundImport } from './OutboundImport'
+import { OutboundForm } from './RoutingForms'
 import { createOutbound, listOutboundSources, previewOutboundImport } from '../../../api'
 import type { OutboundBody } from '../../../api'
 
@@ -105,6 +106,23 @@ describe('outbound imports', () => {
     fireEvent.mouseDown(screen.getByRole('combobox', { name: '外部节点' }))
     expect(await screen.findByText('Ungrouped node')).toBeTruthy()
     expect(createOutbound).not.toHaveBeenCalled()
+  })
+
+  it('submits an import from the fixed modal footer', async () => {
+    const getStyle = window.getComputedStyle
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((element) => getStyle(element))
+    const onClose = vi.fn(), onSaved = vi.fn()
+    render(<OutboundForm serverId={3} outbound={null} open onClose={onClose} onSaved={onSaved} />)
+    fireEvent.click(screen.getByRole('tab', { name: 'URI 导入' }))
+    expect(saveButton().disabled).toBe(true)
+    expect(saveButton().closest('.ant-modal-footer')).not.toBeNull()
+    parseURI()
+    await screen.findByLabelText('出站标签')
+    await waitFor(() => expect(saveButton().disabled).toBe(false))
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(createOutbound).toHaveBeenCalledWith(3, draft))
+    expect(onSaved).toHaveBeenCalledOnce()
+    expect(onClose).toHaveBeenCalledOnce()
   })
 
 })

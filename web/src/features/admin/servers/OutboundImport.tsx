@@ -1,15 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Descriptions, Form, Input, Select, Space } from 'antd'
+import { Alert, Button, Form, Input, Select, Space } from 'antd'
 import { createOutbound, errMsg, listOutboundSources, previewOutboundImport } from '../../../api'
 import type { OutboundBody, OutboundSource } from '../../../api'
 import { showConfigApplyResult } from '../../../configApply'
 
-export function OutboundImport({ serverId, source, onClose, onSaved, onSavingChange }: {
+export function OutboundImport({ serverId, source, onClose, onSaved, onSavingChange, formId, onReadyChange }: {
   serverId: number
   source: 'external' | 'uri'
   onClose: () => void
   onSaved: () => void
   onSavingChange?: (saving: boolean) => void
+  formId?: string
+  onReadyChange?: (ready: boolean) => void
 }) {
   const [nodes, setNodes] = useState<OutboundSource[]>([])
   const [loading, setLoading] = useState(false)
@@ -97,6 +99,9 @@ export function OutboundImport({ serverId, source, onClose, onSaved, onSavingCha
     }
   }
 
+  const canSave = !!preview && !!tag.trim() && !parsing
+  useEffect(() => { onReadyChange?.(canSave) }, [canSave, onReadyChange])
+
   const groups = new Map<string, number>()
   for (const node of nodes) {
     const name = node.group.trim()
@@ -105,7 +110,7 @@ export function OutboundImport({ serverId, source, onClose, onSaved, onSavingCha
   const groupNodes = group === undefined ? [] : nodes.filter((node) => node.group.trim() === group)
   const settings = preview?.settings
   return (
-    <Form layout="vertical" onFinish={save} style={{ marginTop: 20 }}>
+    <Form id={formId} layout="vertical" className="fm-form fm-import-form" onFinish={save}>
       {source === 'external' ? (
         <>
           <Form.Item label="节点分组">
@@ -149,7 +154,7 @@ export function OutboundImport({ serverId, source, onClose, onSaved, onSavingCha
               onChange={(id: number) => { setNodeId(id); void parse(id) }}
             />
           </Form.Item>
-          <Button type="text" size="small" disabled={saving || loading} onClick={() => {
+          <Button className="fm-import-refresh" type="text" size="small" disabled={saving || loading} onClick={() => {
             invalidate()
             setNodeId(undefined)
             setGroup(undefined)
@@ -160,11 +165,12 @@ export function OutboundImport({ serverId, source, onClose, onSaved, onSavingCha
           }}>刷新节点列表</Button>
         </>
       ) : (
-        <Form.Item label="节点 URI" extra="每次导入一条节点分享链接；订阅地址请先在外部节点页面添加。">
+        <Form.Item label="节点 URI" extra="一次解析一条节点分享链接。">
           <Input.TextArea
             aria-label="节点 URI"
             autoSize={{ minRows: 3, maxRows: 7 }}
-            placeholder="vless://…、vmess://…、ss://…、trojan://…、hysteria2://…、tuic://…、anytls://…、socks5://…"
+            placeholder="粘贴节点链接，例如 vless://…"
+            className="mono"
             value={uri}
             disabled={saving}
             onChange={(e) => { invalidate(); setURI(e.target.value) }}
@@ -175,21 +181,23 @@ export function OutboundImport({ serverId, source, onClose, onSaved, onSavingCha
       {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />}
       {preview && (
         <>
-          <Descriptions size="small" column={1} bordered style={{ marginBottom: 16 }}>
-            <Descriptions.Item label="协议">{preview.type}</Descriptions.Item>
-            <Descriptions.Item label="服务器">{settings?.server}</Descriptions.Item>
-            <Descriptions.Item label="端口">{settings?.server_port}</Descriptions.Item>
-            <Descriptions.Item label="TLS">{settings?.settings?.tls?.reality?.enabled ? 'REALITY' : settings?.settings?.tls?.enabled ? 'TLS' : '未启用'}</Descriptions.Item>
-          </Descriptions>
-          <Form.Item label="出站标签" required extra="保存后生成独立出站，源节点或订阅的后续更新不会自动同步。">
+          <section className="fm-import-preview">
+            <h3>连接详情 <span className="ui-tag">{preview.type}</span></h3>
+            <dl className="ui-kv">
+              <div><dt>服务器</dt><dd className="mono">{settings?.server}</dd></div>
+              <div><dt>端口</dt><dd className="mono">{settings?.server_port}</dd></div>
+              <div><dt>安全</dt><dd>{settings?.settings?.tls?.reality?.enabled ? 'REALITY' : settings?.settings?.tls?.enabled ? 'TLS' : '未启用 TLS'}</dd></div>
+            </dl>
+          </section>
+          <Form.Item label="出站标签" required extra="独立保存，后续不随订阅自动更新。">
             <Input aria-label="出站标签" value={tag} disabled={saving} onChange={(e) => setTag(e.target.value)} />
           </Form.Item>
         </>
       )}
-      <Space style={{ display: 'flex', justifyContent: 'flex-end' }}>
+      {!formId && <Space style={{ display: 'flex', justifyContent: 'flex-end' }}>
         <Button onClick={onClose} disabled={saving}>取消</Button>
         <Button type="primary" htmlType="submit" loading={saving} disabled={!preview || !tag.trim() || parsing}>保存出站</Button>
-      </Space>
+      </Space>}
     </Form>
   )
 }
