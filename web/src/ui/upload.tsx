@@ -1,6 +1,7 @@
 import React, { useId, useRef } from 'react'
 import { UploadCloud, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { randomUUID } from '../util'
 export type UploadFile = {
   uid: string
   name: string
@@ -41,7 +42,7 @@ function Dragger({
         .map((file) => {
           beforeUpload?.(file)
           return {
-            uid: crypto.randomUUID(),
+            uid: randomUUID(),
             name: file.name,
             size: file.size,
             originFileObj: file,
