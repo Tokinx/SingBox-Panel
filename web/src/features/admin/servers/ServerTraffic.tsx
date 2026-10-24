@@ -271,45 +271,61 @@ function LiveRateValue({ store, part }: { store: LiveRateStore; part: 'download'
 // sample only re-renders this panel, never the historical chart or port table.
 const LiveChart = memo(function LiveChart({ serverId, rateStore }: { serverId: number; rateStore: LiveRateStore }) {
   const [livePoints, setLivePoints] = useState<TrafficPoint[]>([])
-  const [clock, setClock] = useState(Date.now)
+  const [sample, setSample] = useState<{ point: TrafficPoint; sampledAt: number } | null>(null)
+  const [clock, setClock] = useState(() => performance.now())
   const liveUrl = useMemo(() => `/api/admin/servers/${serverId}/traffic/live`, [serverId])
 
   const onSSEMessage = useCallback((msg: SSEMessage) => {
     if (msg.kind !== 'traffic' || !Number.isFinite(msg.ts)) return
+    const date = new Date(msg.ts)
+    if (Number.isNaN(date.getTime())) return
     const snap = msg.data as any
+    const age = typeof msg.age_ms === 'number' && Number.isFinite(msg.age_ms) && msg.age_ms >= 0 ? msg.age_ms : 0
+    const point: TrafficPoint = {
+      time: date.toISOString(),
+      upload: 0, download: 0,
+      upload_rate: snap?.upload_rate || 0,
+      download_rate: snap?.download_rate || 0,
+      tcp_connections: 0, udp_connections: 0,
+    }
+    // The panel's age includes backlog/queue time. Local elapsed time uses a
+    // monotonic clock, independent of the browser's wall clock or timezone.
+    setSample({ point, sampledAt: performance.now() - age })
     setLivePoints((prev) => {
       const next = prev.length >= 100 ? prev.slice(prev.length - 99) : prev.slice()
-      next.push({
-        time: new Date(msg.ts).toISOString(),
-        upload: 0, download: 0,
-        upload_rate: snap?.upload_rate || 0,
-        download_rate: snap?.download_rate || 0,
-        tcp_connections: 0, udp_connections: 0,
-      })
+      next.push(point)
       return next
     })
   }, [])
 
   const { connected } = useSSE(liveUrl, true, onSSEMessage)
-  const liveRate = livePoints.length > 0 ? livePoints[livePoints.length - 1] : null
 
   useEffect(() => {
-    const timer = setInterval(() => setClock(Date.now()), 3000)
+    const timer = setInterval(() => setClock(performance.now()), 3000)
     return () => clearInterval(timer)
   }, [])
 
   useEffect(() => {
     // SSE heartbeats only prove the browser can reach the panel. Old backlog
     // or a stalled Agent must not keep a nonzero current speed alive.
-    const fresh = connected && liveRate && Math.max(clock, Date.now()) - Date.parse(liveRate.time) < 15_000
-    rateStore.set({ upload: fresh ? liveRate.upload_rate : 0, download: fresh ? liveRate.download_rate : 0, connected })
-    if (liveRate && !fresh && (liveRate.upload_rate > 0 || liveRate.download_rate > 0)) {
-      setLivePoints((points) => [...points.slice(-99), {
-        time: new Date().toISOString(), upload: 0, download: 0,
-        upload_rate: 0, download_rate: 0, tcp_connections: 0, udp_connections: 0,
-      }])
+    const elapsed = sample ? Math.max(0, Math.max(clock, performance.now()) - sample.sampledAt) : 0
+    const fresh = connected && sample && elapsed < 15_000
+    rateStore.set({ upload: fresh ? sample.point.upload_rate : 0, download: fresh ? sample.point.download_rate : 0, connected })
+    if (sample && !fresh) {
+      setLivePoints((points) => {
+        const last = points[points.length - 1]
+        if (!last || (last.upload_rate === 0 && last.download_rate === 0)) return points
+        const zeroTime = new Date(Date.parse(sample.point.time) + elapsed)
+        return [...points.slice(-99), {
+          // Keep synthetic points in the server's UTC coordinate system, and
+          // do not replace the real sample's freshness baseline with them.
+          time: Number.isNaN(zeroTime.getTime()) ? sample.point.time : zeroTime.toISOString(),
+          upload: 0, download: 0, upload_rate: 0, download_rate: 0,
+          tcp_connections: 0, udp_connections: 0,
+        }]
+      })
     }
-  }, [clock, connected, liveRate, rateStore])
+  }, [clock, connected, sample, rateStore])
 
   return (
     <section className="ui-card tr-panel">

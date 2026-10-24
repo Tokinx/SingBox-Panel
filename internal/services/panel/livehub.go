@@ -144,6 +144,11 @@ func (lh *liveHub) clearServer(serverID uint) {
 
 // SSE formats a liveEvent as an SSE data frame.
 func (e liveEvent) SSE() string {
-	data, _ := json.Marshal(e)
+	// Encode age at delivery time, not publication time, so backlog and queued
+	// events can be expired without comparing the browser and server clocks.
+	data, _ := json.Marshal(struct {
+		liveEvent
+		AgeMS int64 `json:"age_ms"`
+	}{liveEvent: e, AgeMS: max(int64(0), time.Now().UnixMilli()-e.TS)})
 	return "data: " + string(data) + "\n\n"
 }

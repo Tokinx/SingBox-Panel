@@ -4,6 +4,8 @@ import { useAuth } from './store'
 export interface SSEMessage {
   kind: string
   ts: number
+  // Age at server encoding time; optional for connections to older panels.
+  age_ms?: number
   data: unknown
 }
 
