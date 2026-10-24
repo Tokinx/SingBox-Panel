@@ -167,7 +167,6 @@ func (a *App) routes() *gin.Engine {
 		admin.POST("/servers/:id/config-mode", a.setConfigMode)
 		admin.GET("/servers/:id/node-formats", a.serverNodeFormats)
 
-		admin.POST("/servers/:id/node-json", a.convertNodeJSON)
 		admin.GET("/servers/:id/inbounds", a.listInbounds)
 		admin.POST("/servers/:id/inbounds", a.createInbound)
 		admin.PUT("/servers/:id/inbounds/:inboundID", a.updateInbound)

@@ -157,14 +157,8 @@ export const remoteConfig = (id: number, signal?: AbortSignal) =>
 export const applyRawConfig = (id: number, config: string) =>
   http.post<{ ok: boolean; output: string; summary: ImportSummary; config_mode: 'managed' | 'raw'; warnings?: string[] }>(`/api/admin/servers/${id}/apply-raw`, { config }).then((r) => r.data)
 
-export const convertNodeJSON = <T extends InboundBody | OutboundBody>(serverId: number, body: {
-  kind: 'inbound' | 'outbound'; direction: 'encode' | 'decode'; id?: number; body: T; config?: unknown
-}, signal?: AbortSignal) => http.post<{ body: T; config: Record<string, unknown>; managed_users: boolean }>(
-  `/api/admin/servers/${serverId}/node-json`, body, { signal },
-).then((r) => r.data)
-
 // ---- admin: inbounds ----
-export interface InboundBody {
+interface InboundBody {
   type: InboundType
   tag?: string
   listen_port: number
