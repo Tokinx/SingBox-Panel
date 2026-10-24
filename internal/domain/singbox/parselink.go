@@ -168,12 +168,18 @@ func parseVLESS(uri string) (ClientNode, error) {
 
 func parseVMess(uri string) (ClientNode, error) {
 	raw := uri[len("vmess://"):]
-	data, err := base64.StdEncoding.DecodeString(raw)
-	if err != nil {
-		data, err = base64.RawURLEncoding.DecodeString(raw)
-		if err != nil {
-			return ClientNode{}, fmt.Errorf("vmess link is not valid base64")
+	var data []byte
+	var err error
+	for _, encoding := range []*base64.Encoding{
+		base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding,
+	} {
+		data, err = encoding.DecodeString(raw)
+		if err == nil {
+			break
 		}
+	}
+	if err != nil {
+		return ClientNode{}, fmt.Errorf("vmess link is not valid base64")
 	}
 	var obj map[string]any
 	if err := json.Unmarshal(data, &obj); err != nil {
@@ -181,11 +187,14 @@ func parseVMess(uri string) (ClientNode, error) {
 	}
 	host := strOf(obj, "add")
 	port := intOf(obj, "port")
-	if host == "" || port <= 0 {
+	if host == "" || port <= 0 || port > 65535 {
 		return ClientNode{}, fmt.Errorf("vmess link missing server/port")
 	}
 	cn := ClientNode{Name: strOf(obj, "ps"), Server: host, ServerPort: port, Type: "vmess"}
 	cn.User.UUID = strOf(obj, "id")
+	if cn.User.UUID == "" {
+		return ClientNode{}, fmt.Errorf("vmess link missing uuid")
+	}
 	cn.Settings.VMessAlterID = intOf(obj, "aid")
 	cn.Settings.VMessSecurity = strOf(obj, "scy")
 	if cn.Settings.VMessSecurity == "" {
@@ -372,6 +381,11 @@ func parseHysteria2(uri string) (ClientNode, error) {
 	cn := ClientNode{Name: shareName(u), Server: host, ServerPort: port, Type: "hysteria2"}
 	if u.User != nil {
 		cn.User.Password = u.User.Username()
+		// Hysteria2 supports both auth@host and username:password@host.
+		// sing-box expects the complete auth string in its password field.
+		if password, ok := u.User.Password(); ok {
+			cn.User.Password += ":" + password
+		}
 	}
 	cn.Settings.TLS.Enabled = true
 	cn.Settings.TLS.ServerName = q.Get("sni")

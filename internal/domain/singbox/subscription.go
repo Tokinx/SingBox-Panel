@@ -412,7 +412,7 @@ func BuildShareLink(n ClientNode) (string, error) {
 				}
 			}
 		}
-		return fmt.Sprintf("trojan://%s@%s?%s#%s", url.QueryEscape(n.User.Password), hostPort, q.Encode(), name), nil
+		return fmt.Sprintf("trojan://%s@%s?%s#%s", url.User(n.User.Password).String(), hostPort, q.Encode(), name), nil
 
 	case "shadowsocks":
 		password := SSClientPassword(n.Settings, n.User.Password)
@@ -487,7 +487,7 @@ func BuildShareLink(n ClientNode) (string, error) {
 		if t.ClientInsecure() {
 			q.Set("insecure", "1")
 		}
-		return fmt.Sprintf("hysteria2://%s@%s?%s#%s", url.QueryEscape(n.User.Password), hostPort, q.Encode(), name), nil
+		return fmt.Sprintf("hysteria2://%s@%s?%s#%s", url.User(n.User.Password).String(), hostPort, q.Encode(), name), nil
 
 	case "tuic":
 		q := url.Values{}
@@ -506,8 +506,8 @@ func BuildShareLink(n ClientNode) (string, error) {
 		if t.ClientInsecure() {
 			q.Set("allow_insecure", "1")
 		}
-		return fmt.Sprintf("tuic://%s:%s@%s?%s#%s",
-			n.User.UUID, url.QueryEscape(n.User.Password), hostPort, q.Encode(), name), nil
+		return fmt.Sprintf("tuic://%s@%s?%s#%s",
+			url.UserPassword(n.User.UUID, n.User.Password).String(), hostPort, q.Encode(), name), nil
 
 	case "anytls":
 		q := url.Values{}
@@ -525,7 +525,7 @@ func BuildShareLink(n ClientNode) (string, error) {
 			q.Set("insecure", "1")
 		}
 		return fmt.Sprintf("anytls://%s@%s?%s#%s",
-			url.QueryEscape(n.User.Password), hostPort, q.Encode(), name), nil
+			url.User(n.User.Password).String(), hostPort, q.Encode(), name), nil
 
 	case "hysteria": // v1
 		q := url.Values{}
@@ -544,8 +544,8 @@ func BuildShareLink(n ClientNode) (string, error) {
 		return fmt.Sprintf("hysteria://%s?%s#%s", hostPort, q.Encode(), name), nil
 
 	case "naive":
-		return fmt.Sprintf("naive+https://%s:%s@%s#%s",
-			url.QueryEscape(n.User.Name), url.QueryEscape(n.User.Password), hostPort, name), nil
+		return fmt.Sprintf("naive+https://%s@%s#%s",
+			url.UserPassword(n.User.Name, n.User.Password).String(), hostPort, name), nil
 
 	default:
 		// snell and shadowtls have no widely-supported share-link scheme; the
