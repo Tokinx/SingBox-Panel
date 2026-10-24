@@ -130,19 +130,24 @@ export function InstallSingboxModal({
   onCancel: () => void
   onConfirm: () => void
 }) {
+  const method = Form.useWatch('method', form) ?? 'script'
   return (
     <Modal className="fm-modal" title="安装 / 升级 sing-box" open={open} onOk={onConfirm} onCancel={onCancel} okText="开始安装" width={MODAL_SM}>
       <Form form={form} layout="vertical" className="fm-form" initialValues={{ channel: 'stable', method: 'script' }}>
         <div className="fm-grid" style={{ paddingTop: 6 }}>
           <Form.Item name="channel" label="渠道"><Select options={[{ value: 'stable', label: 'stable' }, { value: 'beta', label: 'beta' }]} /></Form.Item>
           <Form.Item name="method" label="安装方式">
-            <Select options={[
+            <Select onChange={(value) => {
+              if (value !== 'script') form.setFieldsValue({ version: undefined })
+            }} options={[
               { value: 'script', label: '官方脚本' },
               { value: 'apt', label: 'APT 源' },
               { value: 'dnf', label: 'DNF 源' },
             ]} />
           </Form.Item>
-          <Form.Item name="version" label="版本" className="fm-full"><Input placeholder="最新" className="mono" /></Form.Item>
+          <Form.Item name="version" label="版本" className="fm-full" extra={method !== 'script' ? '指定版本请使用官方脚本' : undefined}>
+            <Input disabled={method !== 'script'} placeholder={method === 'script' ? '最新' : '使用软件源最新版本'} className="mono" />
+          </Form.Item>
         </div>
       </Form>
     </Modal>

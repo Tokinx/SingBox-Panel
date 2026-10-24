@@ -80,6 +80,9 @@ func TestAllSingboxInstallMethodsVerifyBinaryAndRequestedVersion(t *testing.T) {
 			{"expected version", true, "1.14.0", "1.14.0", false},
 			{"latest beta", true, "1.14.0-alpha.1", "", false},
 		} {
+			if method != "script" && tc.requested != "" {
+				continue // Package methods reject version pins before installation.
+			}
 			t.Run(method+"/"+tc.name, func(t *testing.T) {
 				installer := singboxInstaller{
 					run: func(_ context.Context, command string, args ...string) (string, error) {
@@ -96,6 +99,27 @@ func TestAllSingboxInstallMethodsVerifyBinaryAndRequestedVersion(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestPackageInstallRejectsVersionPinBeforeCommands(t *testing.T) {
+	for _, method := range []string{protocol.MethodAPT, protocol.MethodDNF} {
+		t.Run(method, func(t *testing.T) {
+			installer := singboxInstaller{
+				run: func(context.Context, string, ...string) (string, error) {
+					t.Fatal("a rejected version pin must not execute any system command")
+					return "", nil
+				},
+				detectVersion: func(context.Context) (bool, string) {
+					t.Fatal("a rejected version pin must not reach post-install verification")
+					return true, "1.14.0"
+				},
+			}
+			_, err := installer.install(context.Background(), protocol.ChannelStable, "1.14.0", method)
+			if err == nil || !strings.Contains(err.Error(), "script") {
+				t.Fatalf("version pin must be rejected with script-method guidance: %v", err)
+			}
+		})
 	}
 }
 

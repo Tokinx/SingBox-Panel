@@ -479,6 +479,10 @@ func (a *App) installSingbox(c *gin.Context) {
 	if req.Method == "" {
 		req.Method = protocol.MethodScript
 	}
+	if req.Version != "" && (req.Method == protocol.MethodAPT || req.Method == protocol.MethodDNF) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "指定 sing-box 版本请使用官方脚本安装方式；APT/DNF 仅支持软件源最新版本"})
+		return
+	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 6*time.Minute)
 	defer cancel()
 	res, err := a.hub.SendCommand(ctx, id, protocol.CmdInstallSingbox, req)

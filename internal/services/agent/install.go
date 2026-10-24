@@ -68,6 +68,9 @@ func (i singboxInstaller) install(ctx context.Context, channel, version, method 
 	if version != "" && !versionRe.MatchString(version) {
 		return "", fmt.Errorf("invalid version %q", version)
 	}
+	if version != "" && (method == protocol.MethodAPT || method == protocol.MethodDNF) {
+		return "", fmt.Errorf("specific sing-box versions require the script installation method")
+	}
 	var output string
 	var err error
 	switch method {
