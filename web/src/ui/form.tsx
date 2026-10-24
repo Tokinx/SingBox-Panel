@@ -14,6 +14,8 @@ import {
 } from 'react-hook-form'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+import { message } from './feedback'
+import { errMsg } from '../api'
 
 type Values = Record<string, any>
 type Name = string | number | (string | number)[]
@@ -37,7 +39,7 @@ const path = (name: Name) =>
 
 function useForm<T extends Values = any>(): [FormInstance<T>] {
   const raw = useHookForm<Values>({
-    mode: 'onSubmit',
+    mode: 'onChange',
     reValidateMode: 'onChange',
     shouldUnregister: false,
   })
@@ -53,10 +55,12 @@ function useForm<T extends Values = any>(): [FormInstance<T>] {
       _names: names.current,
       getFieldValue: (name) => raw.getValues(path(name)),
       getFieldsValue: () => raw.getValues() as T,
-      setFieldValue: (name, value) => raw.setValue(path(name), value),
+      setFieldValue: (name, value) => raw.setValue(path(name), value, {
+        shouldValidate: raw.getFieldState(path(name)).invalid,
+      }),
       setFieldsValue: (values) =>
         Object.entries(values).forEach(([key, value]) =>
-          raw.setValue(key, value),
+          raw.setValue(key, value, { shouldValidate: raw.getFieldState(key).invalid }),
         ),
       resetFields: () => raw.reset(initial.current),
       validateFields: async () => {
@@ -78,7 +82,8 @@ function useForm<T extends Values = any>(): [FormInstance<T>] {
       },
       scrollToField: (name, options) => {
         const field = document.getElementById(`${id}-${path(name)}`)
-        field?.closest('details')?.setAttribute('open', '')
+        for (let parent = field?.parentElement; parent; parent = parent.parentElement)
+          if (parent.tagName === 'DETAILS') parent.setAttribute('open', '')
         field?.scrollIntoView(options)
         field?.focus({ preventScroll: true })
       },
@@ -141,7 +146,7 @@ function ItemLayout({
       <>
         {children}
         {error && (
-          <span className="ui-form-item-explain" role="alert">
+          <span id={id ? `${id}-error` : undefined} className="ui-form-item-explain" role="alert">
             {error}
           </span>
         )}
@@ -236,6 +241,17 @@ function BoundItem(props: ItemProps) {
       },
     },
   })
+  const dependencyValues = useWatch({
+    control: form._raw.control,
+    name: (props.dependencies || []).map(path),
+    disabled: !props.dependencies?.length,
+  })
+  useEffect(() => {
+    if (!props.dependencies?.length) return
+    const state = form._raw.getFieldState(name)
+    if (state.isDirty || state.isTouched || state.invalid)
+      void form._raw.trigger(name)
+  }, [dependencyValues, form, name])
   useEffect(() => {
     form._names.add(name)
     return () => {
@@ -307,6 +323,7 @@ function FormRoot({
   const [fallback] = useForm()
   const form = provided || fallback
   const initialized = useRef(false)
+  const submitting = useRef(false)
   useEffect(() => {
     if (initialized.current) return
     initialized.current = true
@@ -322,13 +339,21 @@ function FormRoot({
         className={cn('ui-form', `ui-form-${layout}`, className)}
         onSubmit={async (event) => {
           event.preventDefault()
+          if (submitting.current) return
+          submitting.current = true
           try {
             const values = await form.validateFields()
             await onFinish?.(values)
           } catch (error: any) {
-            onFinishFailed?.(error)
-            if (error?.errorFields?.[0])
-              form.scrollToField(error.errorFields[0].name, { block: 'center' })
+            if (error?.errorFields) {
+              onFinishFailed?.(error)
+              if (error.errorFields[0])
+                form.scrollToField(error.errorFields[0].name, { block: 'center' })
+            } else {
+              message.error(errMsg(error))
+            }
+          } finally {
+            submitting.current = false
           }
         }}
       >
