@@ -34,8 +34,9 @@ type PanelConfig struct {
 	// the web_dir YAML field for binary installs.
 	WebDir string `yaml:"web_dir"`
 
-	// Timezone is the IANA zone used for traffic day/month boundaries and
-	// server quota reset days. Defaults to Asia/Shanghai.
+	// Timezone is the IANA zone used for user traffic history boundaries.
+	// Server traffic and monthly reset cycles always use UTC.
+	// Defaults to Asia/Shanghai.
 	Timezone string `yaml:"timezone"`
 
 	Database     DatabaseConfig `yaml:"database"`

@@ -105,7 +105,6 @@ interface ServerBody {
   address?: string
   region?: string
   remark?: string
-  traffic_quota?: number
   traffic_reset_day?: number
 }
 export const listServers = (signal?: AbortSignal) =>
@@ -155,7 +154,7 @@ export const serverLogs = (id: number, lines = 200, signal?: AbortSignal) =>
   http.get<{ text: string }>(`/api/admin/servers/${id}/logs`, { params: { lines }, signal }).then((r) => r.data.text)
 export const serverStatus = (id: number, signal?: AbortSignal) =>
   http.get<{ status: StatusData }>(`/api/admin/servers/${id}/status`, { signal }).then((r) => r.data.status)
-export const getServerTraffic = (id: number, range: TrafficRange = '24h', signal?: AbortSignal) =>
+export const getServerTraffic = (id: number, range: TrafficRange = 'cycle', signal?: AbortSignal) =>
   http.get<TrafficSeries>(`/api/admin/servers/${id}/traffic`, { params: { range }, signal }).then((r) => r.data)
 export const remoteConfig = (id: number, signal?: AbortSignal) =>
   http.get<RemoteConfig>(`/api/admin/servers/${id}/remote-config`, { signal }).then((r) => r.data)

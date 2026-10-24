@@ -59,6 +59,7 @@ export interface Server {
   traffic_available?: boolean
   traffic_upload_rate?: number
   traffic_download_rate?: number
+  traffic_reset_day?: number
   config_mode: 'managed' | 'raw' | ''
   agent_url: string
   inbounds?: Inbound[]
@@ -66,7 +67,7 @@ export interface Server {
   updated_at: string
 }
 
-export type TrafficRange = '15m' | '30m' | '1h' | '12h' | '24h' | '7d' | '30d'
+export type TrafficRange = 'cycle' | '15m' | '30m' | '1h' | '12h' | '24h' | '7d' | '30d'
 
 export interface TrafficPoint {
   time: string
@@ -93,6 +94,11 @@ export interface TrafficSeries {
   range: TrafficRange
   step_seconds: number
   timezone?: string
+  traffic_reset_day: number
+  cycle_start: string
+  cycle_end: string
+  cycle_upload: number
+  cycle_download: number
   updated_at: string | null
   upload: number
   download: number

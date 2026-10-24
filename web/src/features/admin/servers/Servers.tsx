@@ -167,7 +167,7 @@ export default function Servers() {
     setEditing(s)
     // Reset first so fields the previous target had do not leak in.
     form.resetFields()
-    form.setFieldsValue({ name: s.name, address: s.address, remark: s.remark })
+    form.setFieldsValue({ name: s.name, address: s.address, remark: s.remark, traffic_reset_day: s.traffic_reset_day ?? 1 })
     setOpen(true)
   }
 
@@ -486,7 +486,7 @@ export default function Servers() {
         confirmLoading={saving}
         destroyOnClose
       >
-        <Form form={form} layout="vertical">
+        <Form form={form} layout="vertical" initialValues={{ traffic_reset_day: 1 }}>
           <Form.Item name="name" label="名称" rules={[{ required: true }]}>
             <Input placeholder="hk-1" />
           </Form.Item>
@@ -495,6 +495,9 @@ export default function Servers() {
           </Form.Item>
           <Form.Item name="remark" label="备注">
             <Input />
+          </Form.Item>
+          <Form.Item name="traffic_reset_day" label="流量重置日" extra="每月当天 UTC 00:00 起算；短月按月末，历史记录保留。" rules={[{ required: true }]}>
+            <Select options={Array.from({ length: 31 }, (_, index) => ({ value: index + 1, label: `每月 ${index + 1} 日` }))} />
           </Form.Item>
         </Form>
       </Modal>

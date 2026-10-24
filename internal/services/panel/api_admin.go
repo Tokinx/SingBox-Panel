@@ -177,17 +177,19 @@ func (a *App) serverLogs(c *gin.Context) {
 // ---------- servers ----------
 
 type serverReq struct {
-	Name    string `json:"name"`
-	Address string `json:"address"`
-	Region  string `json:"region"`
-	Remark  string `json:"remark"`
+	Name            string `json:"name"`
+	Address         string `json:"address"`
+	Region          string `json:"region"`
+	Remark          string `json:"remark"`
+	TrafficResetDay *int   `json:"traffic_reset_day"`
 }
 
 type serverUpdateReq struct {
-	Name    *string `json:"name"`
-	Address *string `json:"address"`
-	Region  *string `json:"region"`
-	Remark  *string `json:"remark"`
+	Name            *string `json:"name"`
+	Address         *string `json:"address"`
+	Region          *string `json:"region"`
+	Remark          *string `json:"remark"`
+	TrafficResetDay *int    `json:"traffic_reset_day"`
 }
 
 // latestAgentVersion is the agent build the panel currently serves. It reads
@@ -249,18 +251,27 @@ func (a *App) createServer(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "name required"})
 		return
 	}
+	resetDay := 1
+	if req.TrafficResetDay != nil {
+		resetDay = *req.TrafficResetDay
+	}
+	if !validTrafficResetDay(resetDay) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "流量重置日必须是 1–31 日"})
+		return
+	}
 	address, err := normalizeNodeAddress(req.Address)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "节点连接地址格式无效: " + err.Error()})
 		return
 	}
 	srv := &model.Server{
-		Name:       req.Name,
-		Address:    address,
-		Region:     req.Region,
-		Remark:     req.Remark,
-		AgentToken: randHex(24),
-		ConfigMode: model.ConfigModeManaged,
+		Name:            req.Name,
+		Address:         address,
+		Region:          req.Region,
+		Remark:          req.Remark,
+		AgentToken:      randHex(24),
+		ConfigMode:      model.ConfigModeManaged,
+		TrafficResetDay: resetDay,
 	}
 	if err := a.db.Create(srv).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -331,11 +342,18 @@ func (a *App) updateServer(c *gin.Context) {
 	if req.Remark != nil {
 		updates["remark"] = *req.Remark
 	}
+	if req.TrafficResetDay != nil {
+		if !validTrafficResetDay(*req.TrafficResetDay) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "流量重置日必须是 1–31 日"})
+			return
+		}
+		updates["traffic_reset_day"] = *req.TrafficResetDay
+	}
 	if err := a.db.Model(&model.Server{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	// Name, address, region and remark are panel metadata. None belongs in the
+	// Server metadata and traffic cycles do not belong in the
 	// sing-box config, so editing a node must not restart its service.
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

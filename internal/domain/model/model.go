@@ -178,11 +178,12 @@ type Server struct {
 	TrafficUpdatedAt      *time.Time `json:"traffic_updated_at"`
 	TrafficRemoteUpload   uint64     `json:"-"`
 	TrafficRemoteDownload uint64     `json:"-"`
-	// TrafficQuota/TrafficResetDay are retained columns from a removed
-	// provider-quota feature (the panel only sees sing-box traffic, not the
-	// host's). They are no longer read or written by the API.
-	TrafficQuota    uint64 `gorm:"not null;default:0" json:"-"`
-	TrafficResetDay int    `gorm:"not null;default:1" json:"-"`
+	// TrafficQuota is a retained, unused provider-quota column. The panel
+	// measures sing-box traffic, not the host's provider meter.
+	TrafficQuota uint64 `gorm:"not null;default:0" json:"-"`
+	// TrafficResetDay starts each monthly statistics cycle at 00:00 UTC.
+	// Days absent from a month are clamped to that month's final day.
+	TrafficResetDay int `gorm:"not null;default:1" json:"traffic_reset_day"`
 
 	// FinalOutbound is the default route target (default "direct").
 	FinalOutbound string `gorm:"size:64" json:"final_outbound"`
