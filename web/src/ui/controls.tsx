@@ -539,6 +539,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
       style,
       className,
       id,
+      size,
       onSearch,
       maxTagCount,
       popupMatchSelectWidth,
@@ -624,6 +625,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
             'ui-select',
             mode ? 'ui-select-multiple' : 'ui-select-single',
             disabled && 'ui-select-disabled',
+            size === 'small' && 'ui-select-sm',
             className,
           )}
           style={style}

@@ -50,6 +50,7 @@ function TableRoot<T extends object>({
   rowClassName,
   onRow,
   className,
+  size,
   style,
   scroll,
   virtual,
@@ -92,7 +93,7 @@ function TableRoot<T extends object>({
   const virtualizer = useVirtualizer({
     count: windowed ? rows.length : 0,
     getScrollElement: () => viewport.current,
-    estimateSize: () => 48,
+    estimateSize: () => size === 'small' ? 40 : 48,
     overscan: 8,
     getItemKey: (index) => getKey(rows[index], index),
   })
@@ -152,7 +153,7 @@ function TableRoot<T extends object>({
     )
   }
   return (
-    <div className={cn('ui-table-wrapper', className)} style={style}>
+    <div className={cn('ui-table-wrapper', size === 'small' && 'ui-table-sm', className)} style={style}>
       <div
         className="ui-table-container"
         ref={viewport}
