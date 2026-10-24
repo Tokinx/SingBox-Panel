@@ -72,13 +72,17 @@ export async function copyToClipboard(text: string): Promise<void> {
     }
   }
   const ta = document.createElement('textarea')
+  const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
   ta.value = text
   ta.setAttribute('readonly', '')
   ta.style.position = 'fixed'
   ta.style.top = '0'
   ta.style.left = '0'
   ta.style.opacity = '0'
-  document.body.appendChild(ta)
+  // Keep the fallback inside the active Radix focus scope. A textarea under
+  // body would immediately lose focus to an open dialog before copying.
+  const container = previousFocus?.closest('[role="dialog"], [role="alertdialog"]') ?? document.body
+  container.appendChild(ta)
   try {
     ta.focus()
     ta.select()
@@ -87,7 +91,8 @@ export async function copyToClipboard(text: string): Promise<void> {
       throw new Error('execCommand copy rejected')
     }
   } finally {
-    document.body.removeChild(ta)
+    ta.remove()
+    previousFocus?.focus({ preventScroll: true })
   }
 }
 

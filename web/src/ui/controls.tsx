@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { copyToClipboard } from '../util'
+import { message } from './feedback'
 
 export type ButtonProps = Omit<
   React.ButtonHTMLAttributes<HTMLButtonElement>,
@@ -1054,7 +1055,7 @@ function TypographyText({
               setCopied(true)
               clearTimeout(timer.current)
               timer.current = setTimeout(() => setCopied(false), 1500)
-            })
+            }).catch(() => message.error('复制失败，请手动选择文本复制'))
           }}
         >
           {copied ? <Check size={14} /> : <Copy size={14} />}
