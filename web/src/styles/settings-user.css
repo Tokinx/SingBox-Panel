@@ -108,6 +108,7 @@
 .settings-release-label { font-size: 13px; color: var(--console-muted); }
 .settings-release-select.ui-select { min-width: 220px; }
 .settings-release-option { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.ui-select-dropdown .settings-release-option { flex-wrap: wrap; white-space: normal; }
 .settings-release-option .ui-tag { height: 18px; padding: 0 6px; font-size: 11px; }
 @media (max-width: 767px) {
   .settings-release-picker .settings-actions { width: 100%; }

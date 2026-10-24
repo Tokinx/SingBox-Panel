@@ -690,7 +690,12 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
               document.getElementById(commandId)?.focus()
             }
           }}
-          style={{ width: 'var(--radix-popover-trigger-width)', minWidth: 180 }}
+          style={{
+            width: popupMatchSelectWidth === false ? 'max-content' : 'var(--radix-popover-trigger-width)',
+            minWidth: popupMatchSelectWidth === false
+              ? 'min(var(--radix-popover-trigger-width), calc(100vw - 24px))'
+              : undefined,
+          }}
         >
           <Command id={commandId} tabIndex={-1} shouldFilter={false}>
             {(showSearch || mode) && (
