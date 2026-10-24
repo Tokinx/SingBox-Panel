@@ -1,5 +1,5 @@
 import { AlertDialog as AlertPrimitive } from 'radix-ui'
-import React, { useRef, useState, useSyncExternalStore } from 'react'
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import {
   AlertDialog,
@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Button, type ButtonProps } from './controls'
 import { cn } from '@/lib/utils'
+import { errMsg } from '../api'
 
 type ModalProps = {
   open?: boolean
@@ -66,17 +67,40 @@ function ModalRoot({
   keyboard = true,
 }: ModalProps) {
   const opener = useRef<HTMLElement | null>(null)
+  const locked = useRef(false)
+  const [pending, setPending] = useState(false)
+  const [error, setError] = useState('')
+  const busy = confirmLoading || pending
+  useEffect(() => { if (open) setError('') }, [open])
+  const cancel = () => {
+    if (!busy && !locked.current) onCancel?.()
+  }
+  const submit = async () => {
+    if (busy || locked.current) return
+    locked.current = true
+    setPending(true)
+    setError('')
+    try {
+      await onOk?.()
+    } catch (cause: any) {
+      // Field validation already displays its errors next to the controls.
+      if (!cause?.errorFields) setError(errMsg(cause))
+    } finally {
+      locked.current = false
+      setPending(false)
+    }
+  }
   return (
     <Dialog
       open={!!open}
       onOpenChange={(next) => {
-        if (!next) onCancel?.()
+        if (!next) cancel()
       }}
     >
       <DialogContent
         className={cn('ui-modal', className)}
         style={{ width, ...style }}
-        showCloseButton={closable}
+        showCloseButton={closable && !busy}
         aria-describedby={undefined}
         onOpenAutoFocus={() => {
           opener.current = document.activeElement as HTMLElement
@@ -86,10 +110,10 @@ function ModalRoot({
           opener.current?.focus()
         }}
         onEscapeKeyDown={(event) => {
-          if (!keyboard || confirmLoading) event.preventDefault()
+          if (!keyboard || busy) event.preventDefault()
         }}
         onPointerDownOutside={(event) => {
-          if (!maskClosable || confirmLoading) event.preventDefault()
+          if (!maskClosable || busy) event.preventDefault()
         }}
       >
         <header className="ui-modal-header">
@@ -97,19 +121,22 @@ function ModalRoot({
             {title || <span className="sr-only">对话框</span>}
           </DialogTitle>
         </header>
-        <div className="ui-modal-body">{children}</div>
+        <div className="ui-modal-body">
+          {children}
+          {error && <p className="text-destructive mt-3" role="alert">{error}</p>}
+        </div>
         {footer !== null && (
           <footer className="ui-modal-footer">
             {footer === undefined ? (
               <>
-                <Button onClick={onCancel} {...cancelButtonProps}>
+                <Button {...cancelButtonProps} disabled={busy || cancelButtonProps?.disabled} onClick={cancel}>
                   {cancelText}
                 </Button>
                 <Button
                   type="primary"
-                  loading={confirmLoading}
-                  onClick={() => void onOk?.()}
                   {...okButtonProps}
+                  loading={busy}
+                  onClick={() => void submit()}
                 >
                   {okText}
                 </Button>
@@ -190,7 +217,7 @@ function Confirmation({ entry }: { entry: Entry }) {
       await entry.onOk?.()
       remove(entry.id)
     } catch (e) {
-      setError(e instanceof Error ? e.message : '操作失败，请重试')
+      setError(errMsg(e))
     } finally {
       locked.current = false
       setBusy(false)
@@ -320,11 +347,16 @@ export function Popconfirm({
 }) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const locked = useRef(false)
   return (
     <PopoverRoot
       open={open}
       onOpenChange={(value) => {
-        if (!busy) setOpen(value)
+        if (!locked.current) {
+          setOpen(value)
+          if (value) setError('')
+        }
       }}
     >
       <PopoverTrigger asChild>{children}</PopoverTrigger>
@@ -332,6 +364,7 @@ export function Popconfirm({
         <div className="ui-popconfirm-message">
           <div>{title}</div>
           {description && <p>{description}</p>}
+          {error && <p className="text-destructive mt-3" role="alert">{error}</p>}
         </div>
         <div className="ui-popconfirm-buttons">
           <Button size="small" disabled={busy} onClick={() => setOpen(false)}>
@@ -343,13 +376,17 @@ export function Popconfirm({
             {...okButtonProps}
             loading={busy}
             onClick={async () => {
-              if (busy) return
+              if (locked.current) return
+              locked.current = true
               setBusy(true)
+              setError('')
               try {
                 await onConfirm?.()
                 setOpen(false)
-              } catch {
+              } catch (cause) {
+                setError(errMsg(cause))
               } finally {
+                locked.current = false
                 setBusy(false)
               }
             }}
