@@ -308,7 +308,6 @@ const LiveChart = memo(function LiveChart({ serverId, rateStore }: { serverId: n
 })
 
 const RANGE_OPTIONS: { label: string; value: TrafficRange }[] = [
-  { label: '本周期', value: 'cycle' },
   { label: '1 小时', value: '1h' },
   { label: '12 小时', value: '12h' },
   { label: '24 小时', value: '24h' },
@@ -329,7 +328,7 @@ export default function ServerTraffic({ serverId, titleExtra }: { serverId: numb
   const compact = !screens.md
   const [data, setData] = useState<TrafficSeries | null>(null)
   const [loading, setLoading] = useState(false)
-  const [range, setRange] = useState<TrafficRange>('cycle')
+  const [range, setRange] = useState<TrafficRange>('24h')
   const loadAbortRef = useRef<AbortController | null>(null)
   const loadGenerationRef = useRef(0)
   const rateStore = useMemo(() => createLiveRateStore(), [])
@@ -380,7 +379,6 @@ export default function ServerTraffic({ serverId, titleExtra }: { serverId: numb
     <div className="tr-page">
       <PageHeader
         title="流量"
-        meta={data ? `每月 ${data.traffic_reset_day} 日 00:00 UTC 重置 · 本周期 ${data.cycle_start.slice(0, 10)} — ${data.cycle_end.slice(0, 10)}` : '按 UTC 统计'}
         actions={
           <div className="tr-actions">
             {titleExtra}
@@ -402,9 +400,9 @@ export default function ServerTraffic({ serverId, titleExtra }: { serverId: numb
 
       <Stats
         items={[
-          { label: '本周期下载', value: total(data?.cycle_download ?? 0) },
-          { label: '本周期上传', value: total(data?.cycle_upload ?? 0) },
-          { label: '本周期合计', value: total((data?.cycle_upload ?? 0) + (data?.cycle_download ?? 0)) },
+          { label: '下载', value: total(data?.download ?? 0) },
+          { label: '上传', value: total(data?.upload ?? 0) },
+          { label: '合计', value: total((data?.upload ?? 0) + (data?.download ?? 0)) },
           {
             label: '实时速率',
             value: <LiveRateValue store={rateStore} part="download" />,
@@ -418,7 +416,7 @@ export default function ServerTraffic({ serverId, titleExtra }: { serverId: numb
         <section className="ui-card tr-panel">
           <header className="tr-panel-head">
             <h3>
-              {range === 'cycle' ? '本周期用量' : '历史用量'}
+              历史用量
               <span className="tr-panel-note mono">UTC</span>
             </h3>
             <TrafficLegend />
@@ -432,7 +430,7 @@ export default function ServerTraffic({ serverId, titleExtra }: { serverId: numb
       </div>
 
       {data && available ? (
-        <Section title={`入站 · ${RANGE_OPTIONS.find((option) => option.value === range)?.label ?? range}`}>
+        <Section title="入站">
           <Table<PortRow>
             className="tr-port-table"
             rowKey="inbound_id"

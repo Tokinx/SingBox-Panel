@@ -41,36 +41,75 @@ func TestTrafficCycleUsesUTCCalendarAndClampsEachMonth(t *testing.T) {
 	}
 }
 
-func TestTrafficCycleExcludesPreviousCycleAndUsesSameInboundWindow(t *testing.T) {
+func TestServerTrafficWindowKeepsSelectedRangeAndResetsAtUTCMidnight(t *testing.T) {
+	reset := time.Date(2026, 10, 5, 0, 0, 0, 0, time.UTC)
+	for _, rangeName := range []string{"1h", "12h", "24h", "7d", "30d"} {
+		for _, now := range []time.Time{reset.Add(-time.Second), reset, reset.Add(36 * time.Hour)} {
+			cfg, start, end, usageStart, ok := serverTrafficWindow(now, rangeName, 5)
+			wantStart, wantEnd := trafficWindow(now, trafficRanges[rangeName], time.UTC)
+			wantUsageStart, _ := trafficCycleBounds(now, 5)
+			if wantUsageStart.Before(wantStart) {
+				wantUsageStart = wantStart
+			}
+			if !ok || cfg != trafficRanges[rangeName] || !start.Equal(wantStart) || !end.Equal(wantEnd) || !usageStart.Equal(wantUsageStart) {
+				t.Fatalf("%s at %v: chart=%v..%v usage=%v", rangeName, now, start, end, usageStart)
+			}
+		}
+	}
+	if _, _, _, _, ok := serverTrafficWindow(reset, "cycle", 5); ok {
+		t.Fatal("removed cycle range is still accepted")
+	}
+}
+
+func TestTrafficResetExcludesPreviousUsageWithoutDeletingHistory(t *testing.T) {
 	db := testDB(t)
 	now := time.Date(2026, 10, 6, 13, 0, 0, 0, time.UTC)
-	cfg, start, end, _, _, ok := serverTrafficWindow(now, "cycle", 5)
+	cfg, start, end, usageStart, ok := serverTrafficWindow(now, "7d", 5)
 	if !ok || !end.Equal(time.Date(2026, 10, 7, 0, 0, 0, 0, time.UTC)) {
-		t.Fatal("invalid cycle window")
+		t.Fatal("invalid history window")
 	}
 	rows := []model.TrafficHourly{
-		{ServerID: 1, Bucket: start.Add(-time.Hour), Download: 1000},
-		{ServerID: 1, InboundID: 9, Bucket: start.Add(-time.Hour), Download: 900},
-		{ServerID: 1, Bucket: start, Upload: 20, Download: 100},
-		{ServerID: 1, InboundID: 9, Bucket: start, Upload: 10, Download: 60},
-		{ServerID: 2, Bucket: start, Download: 5000},
+		{ServerID: 1, Bucket: usageStart.Add(-time.Hour), Download: 1000},
+		{ServerID: 1, InboundID: 9, Bucket: usageStart.Add(-time.Hour), Download: 900},
+		{ServerID: 1, Bucket: usageStart, Upload: 20, Download: 100},
+		{ServerID: 1, InboundID: 9, Bucket: usageStart, Upload: 10, Download: 60},
+		{ServerID: 2, Bucket: usageStart, Download: 5000},
 	}
 	if err := db.Create(&rows).Error; err != nil {
 		t.Fatal(err)
 	}
-	records, err := queryTrafficBuckets(db, trafficQuery{hourly: cfg.hourly, start: start, end: end, step: cfg.step, serverID: 1})
+	records, err := queryTrafficBuckets(db, trafficQuery{hourly: cfg.hourly, start: usageStart, end: end, step: cfg.step, serverID: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
 	total, inbounds := buildAggregatedTrafficPoints(records, start, end, cfg.step)
 	up, down := sumTraffic(total)
 	ibUp, ibDown := sumTraffic(inbounds[9])
-	if up != 20 || down != 100 || ibUp != 10 || ibDown != 60 || len(total) != 2 {
-		t.Fatalf("cycle node=%d/%d inbound=%d/%d points=%d", up, down, ibUp, ibDown, len(total))
+	if up != 20 || down != 100 || ibUp != 10 || ibDown != 60 || len(total) != 7 {
+		t.Fatalf("reset node=%d/%d inbound=%d/%d points=%d", up, down, ibUp, ibDown, len(total))
+	}
+	for _, point := range total {
+		if point.Time.Before(usageStart) && (point.Upload != 0 || point.Download != 0) {
+			t.Fatalf("pre-reset chart point contains usage: %+v", point)
+		}
+	}
+	var count int64
+	if err := db.Model(&model.TrafficHourly{}).Count(&count).Error; err != nil || count != int64(len(rows)) {
+		t.Fatalf("history was removed: count=%d error=%v", count, err)
+	}
+	// A shorter selected range must not retain the whole reset period's total.
+	cfg, start, end, usageStart, _ = serverTrafficWindow(now, "24h", 5)
+	records, err = queryTrafficBuckets(db, trafficQuery{hourly: cfg.hourly, start: usageStart, end: end, step: cfg.step, serverID: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	total, _ = buildAggregatedTrafficPoints(records, start, end, cfg.step)
+	if up, down = sumTraffic(total); up != 0 || down != 0 || len(total) != 24 {
+		t.Fatalf("range totals did not follow 24h: %d/%d, points=%d", up, down, len(total))
 	}
 }
 
-func TestServerTrafficResetDayUpdateAndDefaultCycle(t *testing.T) {
+func TestServerTrafficResetDayUpdateAndDefault24Hours(t *testing.T) {
 	db := testDB(t)
 	srv := model.Server{Name: "cycle", AgentToken: "cycle-token", TrafficResetDay: 20}
 	if err := db.Create(&srv).Error; err != nil {
@@ -109,7 +148,7 @@ func TestServerTrafficResetDayUpdateAndDefaultCycle(t *testing.T) {
 	}
 	cycleStart, _ := trafficCycleBounds(time.Now(), 31)
 	if err := db.Create(&[]model.TrafficHourly{
-		{ServerID: srv.ID, Bucket: cycleStart, Upload: 20, Download: 100},
+		{ServerID: srv.ID, Bucket: time.Now().UTC().Truncate(time.Hour), Upload: 20, Download: 100},
 		{ServerID: srv.ID, Bucket: cycleStart.Add(-time.Hour), Upload: 500, Download: 1000},
 	}).Error; err != nil {
 		t.Fatal(err)
@@ -123,11 +162,11 @@ func TestServerTrafficResetDayUpdateAndDefaultCycle(t *testing.T) {
 	if err := json.Unmarshal(res.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result.Range != "cycle" || result.TrafficResetDay != 31 || result.Timezone != "UTC" || result.CycleStart.IsZero() || !result.CycleEnd.After(result.CycleStart) {
-		t.Fatalf("cycle response = %+v", result)
+	if result.Range != "24h" || result.TrafficResetDay != 31 || result.Timezone != "UTC" || len(result.Points) != 24 {
+		t.Fatalf("24h response = %+v", result)
 	}
-	if result.CycleUpload != 20 || result.CycleDownload != 100 || result.Upload != 20 || result.Download != 100 {
-		t.Fatalf("unexpected cycle totals: %+v", result)
+	if result.Upload != 20 || result.Download != 100 {
+		t.Fatalf("unexpected range totals: %+v", result)
 	}
 	res = httptest.NewRecorder()
 	router.ServeHTTP(res, httptest.NewRequest(http.MethodGet, path+"/traffic?range=7d", nil))
@@ -140,7 +179,7 @@ func TestServerTrafficResetDayUpdateAndDefaultCycle(t *testing.T) {
 	if result.Timezone != "UTC" || len(result.Points) != 7 || result.Points[0].Time.Hour() != 0 {
 		t.Fatalf("relative range not aligned to UTC: %+v", result)
 	}
-	if result.CycleUpload != 20 || result.CycleDownload != 100 {
-		t.Fatalf("history range changed cycle totals: %+v", result)
+	if result.Upload != 20 || result.Download != 100 {
+		t.Fatalf("history range included pre-reset traffic: %+v", result)
 	}
 }

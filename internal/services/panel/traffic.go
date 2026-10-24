@@ -485,10 +485,6 @@ type trafficSeries struct {
 	StepSeconds      int64               `json:"step_seconds"`
 	Timezone         string              `json:"timezone"`
 	TrafficResetDay  int                 `json:"traffic_reset_day"`
-	CycleStart       time.Time           `json:"cycle_start"`
-	CycleEnd         time.Time           `json:"cycle_end"`
-	CycleUpload      uint64              `json:"cycle_upload"`
-	CycleDownload    uint64              `json:"cycle_download"`
 	UpdatedAt        *time.Time          `json:"updated_at"`
 	Upload           uint64              `json:"upload"`
 	Download         uint64              `json:"download"`
@@ -599,8 +595,6 @@ type trafficQuery struct {
 	end      time.Time
 	step     time.Duration
 	serverID uint // 0 = every server
-	// totalsOnly restricts the query to node totals (inbound_id = 0).
-	totalsOnly bool
 }
 
 func (q trafficQuery) model() any {
@@ -627,9 +621,6 @@ func queryTrafficBuckets(db *gorm.DB, q trafficQuery) ([]aggregatedTrafficRecord
 	query := db.Model(q.model()).Select(selectExpression).Where("bucket >= ? AND bucket < ?", q.start, q.end)
 	if q.serverID != 0 {
 		query = query.Where("server_id = ?", q.serverID)
-	}
-	if q.totalsOnly {
-		query = query.Where("inbound_id = 0")
 	}
 	var rows []aggregatedTrafficRecord
 	if err := query.
@@ -723,16 +714,16 @@ func (a *App) serverTraffic(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "server not found"})
 		return
 	}
-	rangeName := c.DefaultQuery("range", "cycle")
+	rangeName := c.DefaultQuery("range", "24h")
 	now := time.Now()
-	rangeConfig, start, end, cycleStart, cycleEnd, ok := serverTrafficWindow(now, rangeName, server.TrafficResetDay)
+	rangeConfig, start, end, usageStart, ok := serverTrafficWindow(now, rangeName, server.TrafficResetDay)
 	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unsupported range %q", rangeName)})
 		return
 	}
 	a.flushTraffic()
 	records, err := queryTrafficBuckets(a.db, trafficQuery{
-		hourly: rangeConfig.hourly, start: start, end: end, step: rangeConfig.step, serverID: serverID,
+		hourly: rangeConfig.hourly, start: usageStart, end: end, step: rangeConfig.step, serverID: serverID,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -741,25 +732,6 @@ func (a *App) serverTraffic(c *gin.Context) {
 	totalPoints, byInbound := buildAggregatedTrafficPoints(records, start, end, rangeConfig.step)
 	totalUpload, totalDownload := sumTraffic(totalPoints)
 	peakUpload, peakDownload := peakRates(totalPoints)
-	cycleUpload, cycleDownload := totalUpload, totalDownload
-	if rangeName != "cycle" {
-		// Headline usage always follows the purchase/reset cycle even when
-		// the administrator changes the history chart's visible range.
-		_, _, cycleQueryEnd, _, _, _ := serverTrafficWindow(now, "cycle", server.TrafficResetDay)
-		cycleRecords, err := queryTrafficBuckets(a.db, trafficQuery{
-			hourly: true, start: cycleStart, end: cycleQueryEnd, step: 24 * time.Hour,
-			serverID: serverID, totalsOnly: true,
-		})
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		cycleUpload, cycleDownload = 0, 0
-		for _, record := range cycleRecords {
-			cycleUpload += record.Upload
-			cycleDownload += record.Download
-		}
-	}
 
 	var inbounds []model.Inbound
 	if err := a.db.Where("server_id = ?", serverID).Order("listen_port, id").Find(&inbounds).Error; err != nil {
@@ -807,10 +779,9 @@ func (a *App) serverTraffic(c *gin.Context) {
 	c.JSON(http.StatusOK, trafficSeries{
 		Available: server.TrafficAvailable,
 		Range:     rangeName, StepSeconds: int64(rangeConfig.step / time.Second), Timezone: "UTC",
-		TrafficResetDay: server.TrafficResetDay, CycleStart: cycleStart, CycleEnd: cycleEnd,
-		CycleUpload: cycleUpload, CycleDownload: cycleDownload,
-		UpdatedAt: server.TrafficUpdatedAt,
-		Upload:    totalUpload, Download: totalDownload,
+		TrafficResetDay: server.TrafficResetDay,
+		UpdatedAt:       server.TrafficUpdatedAt,
+		Upload:          totalUpload, Download: totalDownload,
 		PeakUploadRate: peakUpload, PeakDownloadRate: peakDownload,
 		UploadRate: server.TrafficUploadRate, DownloadRate: server.TrafficDownloadRate,
 		TCPConnections: server.TrafficTCPConnections, UDPConnections: server.TrafficUDPConnections,

@@ -496,7 +496,7 @@ export default function Servers() {
           <Form.Item name="remark" label="备注">
             <Input />
           </Form.Item>
-          <Form.Item name="traffic_reset_day" label="流量重置日" extra="每月当天 UTC 00:00 起算；短月按月末，历史记录保留。" rules={[{ required: true }]}>
+          <Form.Item name="traffic_reset_day" label="流量重置日" extra="每月当天 UTC 00:00 重新计量；短月按月末，重置前流量不计入页面，历史记录保留。" rules={[{ required: true }]}>
             <Select options={Array.from({ length: 31 }, (_, index) => ({ value: index + 1, label: `每月 ${index + 1} 日` }))} />
           </Form.Item>
         </Form>

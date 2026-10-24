@@ -24,21 +24,18 @@ func trafficCycleBounds(now time.Time, resetDay int) (start, nextReset time.Time
 	return start, boundary(month.AddDate(0, 1, 0))
 }
 
-// serverTrafficWindow keeps relative history ranges available while making
-// the current reset cycle the default. Only the cycle uses the reset day;
-// every range's daily buckets align to UTC midnight.
-func serverTrafficWindow(now time.Time, rangeName string, resetDay int) (trafficRangeConfig, time.Time, time.Time, time.Time, time.Time, bool) {
-	cycleStart, cycleEnd := trafficCycleBounds(now, resetDay)
-	if rangeName == "cycle" {
-		cfg := trafficRangeConfig{step: 24 * time.Hour, hourly: true}
-		// Include today's bucket, but do not add future days to the chart.
-		end := now.UTC().Truncate(24 * time.Hour).Add(24 * time.Hour)
-		return cfg, cycleStart, end, cycleStart, cycleEnd, true
-	}
-	cfg, ok := trafficRanges[rangeName]
+// serverTrafficWindow preserves the selected chart window and excludes usage
+// before the most recent UTC reset. Old buckets remain stored; the leading
+// chart points simply have no usage when a reset falls inside the window.
+func serverTrafficWindow(now time.Time, rangeName string, resetDay int) (cfg trafficRangeConfig, start, end, usageStart time.Time, ok bool) {
+	cfg, ok = trafficRanges[rangeName]
 	if !ok {
-		return cfg, time.Time{}, time.Time{}, cycleStart, cycleEnd, false
+		return cfg, time.Time{}, time.Time{}, time.Time{}, false
 	}
-	start, end := trafficWindow(now, cfg, time.UTC)
-	return cfg, start, end, cycleStart, cycleEnd, true
+	start, end = trafficWindow(now, cfg, time.UTC)
+	usageStart, _ = trafficCycleBounds(now, resetDay)
+	if usageStart.Before(start) {
+		usageStart = start
+	}
+	return cfg, start, end, usageStart, true
 }
