@@ -433,7 +433,6 @@ export default function ServerTraffic({ serverId, titleExtra }: { serverId: numb
             className="tr-port-table"
             rowKey="inbound_id"
             size="middle"
-            pagination={false}
             tableLayout="fixed"
             scroll={{ x: compact ? 600 : undefined }}
             dataSource={portRows}

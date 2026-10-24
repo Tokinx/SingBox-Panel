@@ -78,7 +78,6 @@ function UserTraffic({ user }: { user: User }) {
             <Table<UserTrafficInbound>
               size="small"
               rowKey={(r) => `${r.server_id}-${r.inbound_id}`}
-              pagination={false}
               dataSource={data.inbounds}
               scroll={{ x: 640 }}
               locale={{ emptyText: '暂无记录' }}
@@ -128,7 +127,7 @@ function SubscriptionHistory({ user, open, onClose }: { user: User | null; open:
     return () => controller.abort()
   }, [open, user?.id, reloadKey])
   return (
-    <Modal title={user ? `${user.email} · 使用记录` : ''} open={open} onCancel={onClose} footer={null} width={MODAL_LG} className="um-modal" destroyOnClose>
+    <Modal title={user ? `${user.email} · 使用记录` : ''} open={open} onCancel={onClose} footer={null} width={MODAL_LG} className="um-modal">
       {open && user && <UserTraffic key={user.id} user={user} />}
       <section className="um-group">
         <header className="um-group-head">
@@ -140,7 +139,6 @@ function SubscriptionHistory({ user, open, onClose }: { user: User | null; open:
           <Table<SubscriptionFetch>
             size="small"
             rowKey="id"
-            pagination={false}
             dataSource={fetches}
             scroll={{ x: 590, y: 260 }}
             locale={{ emptyText: '暂无记录' }}
@@ -437,7 +435,6 @@ export default function Users() {
           className="um-table"
           dataSource={visibleUsers}
           columns={columns}
-          pagination={false}
           scroll={{ x: 'max-content' }}
           locale={{ emptyText: '没有匹配的用户' }}
         />
@@ -464,7 +461,6 @@ export default function Users() {
         onOk={submit}
         onCancel={() => setOpen(false)}
         confirmLoading={saving}
-        destroyOnClose
       >
         <Form form={form} layout="vertical">
           <Form.Item name="email" label="用户名" rules={[{ required: true }]}>

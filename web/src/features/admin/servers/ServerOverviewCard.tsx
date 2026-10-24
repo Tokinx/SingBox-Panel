@@ -41,7 +41,7 @@ export function ServerOverviewCard({
       <Button icon={<RotateCw />} loading={refreshing} onClick={onRefresh} aria-label="刷新状态" title="刷新状态" />
       <Button loading={exportLoading} onClick={onExport}>导出订阅</Button>
       <Button onClick={onEditConfig}>配置文件</Button>
-      <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: [
+      <Dropdown placement="bottomRight" menu={{ items: [
         { key: 'restart', label: '重启 sing-box', disabled: !server.online || !!busy, onClick: onRestart },
         { key: 'import', label: '识别现有配置', disabled: !!busy, onClick: onImport },
         { type: 'divider' },

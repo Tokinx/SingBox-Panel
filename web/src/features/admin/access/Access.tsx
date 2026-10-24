@@ -65,21 +65,20 @@ function protocolOf(link: string): string {
   return m ? m[1].toLowerCase() : '-'
 }
 
-// nodeTypeLabel maps a protocol (or share-link scheme) to a colored tag.
-const nodeTypeLabel: Record<string, { label: string; color: string }> = {
-  vless: { label: 'VLESS', color: 'blue' },
-  vmess: { label: 'VMess', color: 'purple' },
-  ss: { label: 'SS', color: 'green' },
-  shadowsocks: { label: 'SS', color: 'green' },
-  trojan: { label: 'Trojan', color: 'geekblue' },
-  hysteria2: { label: 'Hysteria2', color: 'cyan' },
-  hysteria: { label: 'Hysteria', color: 'cyan' },
-  tuic: { label: 'TUIC', color: 'orange' },
-  anytls: { label: 'AnyTLS', color: 'magenta' },
-  socks: { label: 'SOCKS', color: 'default' },
-  socks5: { label: 'SOCKS5', color: 'default' },
-  snell: { label: 'Snell', color: 'gold' },
-  mixed: { label: 'Mixed', color: 'volcano' },
+const nodeTypeLabel: Record<string, string> = {
+  vless: 'VLESS',
+  vmess: 'VMess',
+  ss: 'SS',
+  shadowsocks: 'SS',
+  trojan: 'Trojan',
+  hysteria2: 'Hysteria2',
+  hysteria: 'Hysteria',
+  tuic: 'TUIC',
+  anytls: 'AnyTLS',
+  socks: 'SOCKS',
+  socks5: 'SOCKS5',
+  snell: 'Snell',
+  mixed: 'Mixed',
 }
 
 const MAX_VISIBLE_SUBSCRIPTIONS = 5
@@ -167,7 +166,7 @@ const AccessItem = memo(function AccessItem({ item, checked, disabled, onToggle 
     <label className={`um-access-chip${checked ? ' checked' : ''}${disabled ? ' disabled' : ''}`} title={item.detail}>
       <Checkbox checked={checked} disabled={disabled} onChange={(event) => onToggle(item, event.target.checked)} />
       <span className="um-access-chip-name">{item.name}</span>
-      <span className="um-access-chip-proto">{nodeTypeLabel[item.protocol]?.label || item.protocol || '-'}</span>
+      <span className="um-access-chip-proto">{nodeTypeLabel[item.protocol] || item.protocol || '-'}</span>
       {!item.enabled ? <span className="um-access-chip-off">停用</span> : null}
     </label>
   )
@@ -318,7 +317,7 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
       items: (server.inbounds ?? []).map((inbound: Inbound) => ({
         id: inbound.id,
         kind: 'managed' as const,
-        name: inbound.tag || nodeTypeLabel[inbound.type]?.label || inbound.type,
+        name: inbound.tag || nodeTypeLabel[inbound.type] || inbound.type,
         serverId: server.id,
         serverName: server.name,
         detail: `${server.address || server.public_ip || '-'}:${inbound.listen_port}`,
@@ -809,7 +808,7 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
                   onChange={(event) => updateNodeCustomName(key, event.target.value)}
                 />
                 <span className="um-access-order-kind">{orderItem.node_type === 'managed' ? '面板' : '外部'}</span>
-                {item?.protocol ? <span className="ui-tag um-access-order-protocol">{nodeTypeLabel[item.protocol]?.label || item.protocol}</span> : null}
+                {item?.protocol ? <span className="ui-tag um-access-order-protocol">{nodeTypeLabel[item.protocol] || item.protocol}</span> : null}
               </div>
             )
           })
@@ -832,7 +831,6 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
       confirmLoading={saving}
       width={MODAL_LG}
       style={{ maxWidth: 'calc(100vw - 16px)' }}
-      destroyOnClose
       footer={(
         <div className="um-access-footer">
           <span className={isDirty ? 'is-dirty' : ''}>{isDirty ? '有未保存更改' : '已同步'}</span>
@@ -965,7 +963,7 @@ const MobileNodeCard = memo(function MobileNodeCard({
         </span>
       </div>
       <div className="um-mcard-meta">
-        <span className="ui-tag">{type?.label || protocol || '-'}</span>
+        <span className="ui-tag">{type || protocol || '-'}</span>
         <span>{group}</span>
         {!node.enabled ? <span>停用</span> : null}
       </div>
@@ -1381,7 +1379,6 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
       ) : (
         <span className="custom-node-row-action">
           <Popover
-            trigger="click"
             open={quickGroup?.id === n.id}
             onOpenChange={(open) => {
               if (open) {
@@ -1427,7 +1424,7 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
       width: 110,
       render: (_: unknown, n: CustomNode) => {
         const key = n.link && n.link.trim() ? protocolOf(n.link) : n.protocol
-        return <span className="ui-tag">{nodeTypeLabel[key]?.label || key || '-'}</span>
+        return <span className="ui-tag">{nodeTypeLabel[key] || key || '-'}</span>
       },
     },
     {
@@ -1574,7 +1571,6 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
             rowKey="id"
             className="um-table"
             dataSource={subscriptions}
-            pagination={false}
             virtual={subscriptions.length > MAX_VISIBLE_SUBSCRIPTIONS}
             scroll={{
               x: 720,
@@ -1631,7 +1627,6 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
             rowKey="id"
             className="um-table"
             dataSource={filteredNodes}
-            pagination={false}
             virtual={filteredNodes.length > 20}
             tableLayout="fixed"
             scroll={{ x: 900, y: filteredNodes.length > 20 ? 560 : undefined }}
@@ -1658,7 +1653,6 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
         confirmLoading={subscriptionSaving}
         className="um-modal"
         width={MODAL_LG}
-        destroyOnClose
       >
         <Form form={subscriptionForm} layout="vertical">
           <Form.Item name="name" label="名称" rules={[{ required: true, whitespace: true, message: '请输入订阅名称' }]}>
@@ -1755,7 +1749,6 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
         onCancel={() => setDetailNode(null)}
         footer={<Button onClick={() => setDetailNode(null)}>关闭</Button>}
         width={MODAL_MD}
-        destroyOnClose
       >
         {detailNode ? (
           <dl className="ui-kv ui-card um-detail">
@@ -1790,7 +1783,6 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
         confirmLoading={nodeSaving}
         okText="保存"
         cancelText="取消"
-        destroyOnClose
         className="um-modal"
         width={MODAL_MD}
         style={{ maxWidth: 'calc(100vw - 24px)' }}

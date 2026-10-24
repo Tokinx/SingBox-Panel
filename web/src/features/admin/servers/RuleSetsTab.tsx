@@ -97,7 +97,6 @@ export const RuleSetsTab: React.FC<RuleSetsTabProps> = ({ serverId, ruleSets, ou
       okText: '删除',
       cancelText: '取消',
       okType: 'danger',
-      centered: true,
       onOk: () => handleDelete(rs),
     })
   }
@@ -155,7 +154,7 @@ export const RuleSetsTab: React.FC<RuleSetsTabProps> = ({ serverId, ruleSets, ou
 
   return (
     <div>
-      <Table dataSource={ruleSets} columns={columns} rowKey="id" pagination={false} locale={{ emptyText: '暂无规则集' }} />
+      <Table dataSource={ruleSets} columns={columns} rowKey="id" locale={{ emptyText: '暂无规则集' }} />
 
       <Modal
         title={editingRS ? '编辑规则集' : '新增规则集'}
@@ -164,8 +163,6 @@ export const RuleSetsTab: React.FC<RuleSetsTabProps> = ({ serverId, ruleSets, ou
         onOk={handleSubmit}
         onCancel={() => setModalOpen(false)}
         confirmLoading={loading}
-        centered
-        destroyOnClose
       >
         <Form form={form} layout="vertical" initialValues={{ type: 'remote', format: 'binary', update_interval: '1d' }}>
           <Form.Item

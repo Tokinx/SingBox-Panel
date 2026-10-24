@@ -90,7 +90,6 @@ export function NodeFormatsModalContent({ data }: { data: NodeFormats }) {
         onCancel={() => setDetailItem(null)}
         footer={<Button onClick={() => setDetailItem(null)}>关闭</Button>}
         width={MODAL_MD}
-        destroyOnHidden
       >
         {detailItem && (
           <div className="fm-kv">

@@ -391,8 +391,6 @@ export const createCustomNode = (body: CustomNodeBody) =>
 export const updateCustomNode = (id: number, body: CustomNodeBody) =>
   http.put<{ node: CustomNode }>(`/api/admin/custom-nodes/${id}`, body).then((r) => r.data.node)
 export const deleteCustomNode = (id: number) => http.delete(`/api/admin/custom-nodes/${id}`).then((r) => r.data)
-export const batchDeleteCustomNodes = (ids: number[]) =>
-  http.post('/api/admin/custom-nodes/batch-delete', { ids }).then((r) => r.data)
 export const batchSetCustomNodeGroup = (ids: number[], group: string) =>
   http.post('/api/admin/custom-nodes/batch-group', { ids, group }).then((r) => r.data)
 

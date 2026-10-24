@@ -125,18 +125,6 @@
 .um-access-footer > span.is-dirty { color: var(--console-warning-text); }
 .um-access-footer-actions { display: flex; gap: 8px; margin-left: auto; }
 
-/* ---------- Server access picker ---------- */
-.um-picker { display: flex; flex-direction: column; max-height: 340px; overflow-y: auto; border: 1px solid var(--console-border); border-radius: var(--app-radius); }
-.um-picker-empty { padding: 16px; color: var(--console-faint); font-size: 13px; text-align: center; }
-.um-picker-server { padding: 10px 14px; }
-.um-picker-server + .um-picker-server { border-top: 1px solid var(--console-border); }
-.um-picker-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.um-picker-name { display: inline-flex; align-items: center; gap: 8px; min-width: 0; font-weight: 500; cursor: pointer; user-select: none; overflow-wrap: anywhere; }
-.um-picker-inbounds { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0 2px 24px; }
-.um-picker-inbound { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border: 1px solid var(--console-border); border-radius: 6px; background: transparent; color: var(--console-muted); font: inherit; font-size: 12px; cursor: pointer; }
-.um-picker-inbound:hover { border-color: var(--console-border-hover); color: var(--console-ink); }
-.um-picker-inbound.is-on { border-color: var(--console-border-strong); background: var(--console-selected); color: var(--console-ink); }
-
 /* ---------- Mobile ---------- */
 .um-xs-status { display: none; }
 @media (max-width: 575px) {

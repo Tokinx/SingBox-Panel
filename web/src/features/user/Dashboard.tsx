@@ -281,7 +281,7 @@ export default function Dashboard() {
           )}
         </Modal>
 
-        <Modal title="修改密码" open={pwdOpen} onOk={doChangePwd} onCancel={() => setPwdOpen(false)} destroyOnClose width={MODAL_SM}>
+        <Modal title="修改密码" open={pwdOpen} onOk={doChangePwd} onCancel={() => setPwdOpen(false)} width={MODAL_SM}>
           <Form form={pwdForm} layout="vertical">
             <Form.Item name="old_password" label="当前密码" rules={[{ required: true }]}><Input.Password /></Form.Item>
             <Form.Item name="new_password" label="新密码" rules={[{ required: true, message: '请输入新密码' }, { max: 72 }]}><Input.Password /></Form.Item>

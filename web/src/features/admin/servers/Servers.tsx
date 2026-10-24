@@ -353,7 +353,7 @@ export default function Servers() {
       <PageHeader
         title="服务器"
         actions={<>
-          <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: [
+          <Dropdown placement="bottomRight" menu={{ items: [
             { key: 'singbox', label: '更新 sing-box', disabled: updatingSingbox, onClick: handleUpdateSingbox },
             { key: 'agent', label: '同步 Agent', disabled: updatingAll, onClick: handleUpdateAllAgents },
           ] }}>
@@ -460,7 +460,7 @@ export default function Servers() {
               <div className="srv-inbounds"><span className="srv-label">入站 </span>{s.inbounds?.length ?? 0}</div>
               <div className="ui-row-actions">
                 <Button size="small" type="text" icon={<Pencil />} aria-label={`编辑 ${s.name}`} onClick={() => openEdit(s)} />
-                <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: [
+                <Dropdown placement="bottomRight" menu={{ items: [
                   { key: 'up', label: '上移', disabled: !canSort || position <= 0 || sorting, onClick: () => moveServerByKeyboard(s, -1) },
                   { key: 'down', label: '下移', disabled: !canSort || position >= servers.length - 1 || sorting, onClick: () => moveServerByKeyboard(s, 1) },
                   { type: 'divider' },
@@ -484,7 +484,6 @@ export default function Servers() {
         onOk={onSubmit}
         onCancel={() => setOpen(false)}
         confirmLoading={saving}
-        destroyOnClose
       >
         <Form form={form} layout="vertical" initialValues={{ traffic_reset_day: 1 }}>
           <Form.Item name="name" label="名称" rules={[{ required: true }]}>
@@ -509,7 +508,6 @@ export default function Servers() {
         onOk={doUpdateSingbox}
         onCancel={() => setSingboxModalOpen(false)}
         okText="开始更新"
-        destroyOnClose
       >
         <Form form={singboxForm} layout="vertical" initialValues={{ channel: 'stable', method: 'script' }}>
           <Form.Item name="channel" label="版本渠道">

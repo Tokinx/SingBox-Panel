@@ -191,8 +191,6 @@ export function OutboundForm({
       </> : undefined}
       confirmLoading={submitting}
       width={MODAL_MD}
-      centered
-      destroyOnHidden
     >
       {!outbound && <fieldset className="fm-source-picker" disabled={submitting}>
         <Pills
@@ -745,8 +743,6 @@ export function RuleForm({
       okText={rule ? '保存' : '创建'}
       cancelText="取消"
       width={MODAL_MD}
-      centered
-      destroyOnHidden
     >
       <fieldset disabled={submitting} aria-busy={submitting} className="min-w-0 border-0 p-0 m-0">
       <Form form={form} layout="vertical" className="fm-form">

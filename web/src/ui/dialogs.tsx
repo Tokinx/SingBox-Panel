@@ -38,9 +38,6 @@ type ModalProps = {
   confirmLoading?: boolean
   okButtonProps?: ButtonProps
   cancelButtonProps?: ButtonProps
-  destroyOnClose?: boolean
-  destroyOnHidden?: boolean
-  centered?: boolean
   maskClosable?: boolean
   closable?: boolean
   keyboard?: boolean
@@ -158,8 +155,6 @@ type ConfirmProps = {
   onOk?: () => unknown
   onCancel?: () => unknown
   width?: number
-  centered?: boolean
-  icon?: React.ReactNode
 }
 type Entry = ConfirmProps & {
   id: number
@@ -315,14 +310,12 @@ export function Popover({
   title,
   open,
   onOpenChange,
-  trigger,
 }: {
   children: React.ReactNode
   content?: React.ReactNode
   title?: React.ReactNode
   open?: boolean
   onOpenChange?: (open: boolean) => void
-  trigger?: string
 }) {
   return (
     <PopoverRoot open={open} onOpenChange={onOpenChange}>
@@ -422,13 +415,11 @@ export type MenuProps = {
 export function Dropdown({
   children,
   menu,
-  trigger,
   placement,
   onOpenChange,
 }: {
   children: React.ReactNode
   menu: MenuProps
-  trigger?: string[]
   placement?: string
   onOpenChange?: (open: boolean) => void
 }) {

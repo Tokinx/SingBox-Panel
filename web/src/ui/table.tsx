@@ -20,7 +20,6 @@ type Column<T> = {
   render?: (value: any, record: T, index: number) => React.ReactNode
   sorter?: ((a: T, b: T) => number) | boolean
   defaultSortOrder?: 'ascend' | 'descend'
-  sortOrder?: 'ascend' | 'descend' | null
   responsive?: string[]
   className?: string
   fixed?: 'left' | 'right' | boolean
@@ -32,7 +31,6 @@ type TableProps<T> = {
   rowKey?: string | ((row: T, index?: number) => React.Key)
   rowClassName?: string | ((row: T, index: number) => string)
   onRow?: (row: T, index?: number) => React.HTMLAttributes<HTMLTableRowElement>
-  pagination?: false | object
   size?: string
   className?: string
   style?: React.CSSProperties
@@ -40,7 +38,6 @@ type TableProps<T> = {
   virtual?: boolean
   tableLayout?: 'auto' | 'fixed'
   locale?: { emptyText?: React.ReactNode }
-  loading?: boolean
   summary?: (data: T[]) => React.ReactNode
 }
 function TableRoot<T extends object>({

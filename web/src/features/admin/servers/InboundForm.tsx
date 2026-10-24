@@ -382,8 +382,6 @@ export default function InboundForm({
       onCancel={onClose}
       confirmLoading={submitting}
       width={MODAL_MD}
-      centered
-      destroyOnHidden
     >
       <fieldset disabled={submitting} aria-busy={submitting} className="min-w-0 border-0 p-0 m-0">
       <Form form={form} layout="vertical" className="fm-form">

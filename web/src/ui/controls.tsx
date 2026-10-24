@@ -303,7 +303,6 @@ export const InputNumber = forwardRef<
   Omit<InputProps, 'onChange' | 'value' | 'defaultValue' | 'type'> & {
     onChange?: (value: number | null) => void
     value?: number | string | null
-    defaultValue?: number
     precision?: number
   }
 >(function InputNumber(
@@ -512,9 +511,7 @@ type SelectProps = {
   'aria-invalid'?: boolean
   'aria-describedby'?: string
   onSearch?: (input: string) => void
-  maxTagCount?: string | number
   popupMatchSelectWidth?: boolean
-  tokenSeparators?: string[]
   onDropdownVisibleChange?: (open: boolean) => void
 }
 export const Select = forwardRef<HTMLButtonElement, SelectProps>(
@@ -541,9 +538,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
       id,
       size,
       onSearch,
-      maxTagCount,
       popupMatchSelectWidth,
-      tokenSeparators,
       onDropdownVisibleChange,
       ...aria
     },
@@ -1080,51 +1075,4 @@ export const Typography = {
       <TypographyText {...props} />
     </div>
   ),
-}
-export function Tag({
-  children,
-  color,
-}: {
-  children?: React.ReactNode
-  color?: string
-}) {
-  return <span className="ui-tag">{children}</span>
-}
-export function Card({
-  children,
-  title,
-  className,
-  style,
-}: {
-  children?: React.ReactNode
-  title?: React.ReactNode
-  className?: string
-  style?: React.CSSProperties
-}) {
-  return (
-    <section className={cn('ui-card', className)} style={style}>
-      {title && <header>{title}</header>}
-      {children}
-    </section>
-  )
-}
-export function Tabs({
-  items,
-  activeKey,
-  onChange,
-}: {
-  items?: { key: string; label: React.ReactNode; children?: React.ReactNode }[]
-  activeKey?: string
-  onChange?: (key: string) => void
-}) {
-  return (
-    <div>
-      <Segmented
-        options={(items || []).map((i) => ({ value: i.key, label: i.label }))}
-        value={activeKey}
-        onChange={onChange}
-      />
-      {items?.find((i) => i.key === activeKey)?.children}
-    </div>
-  )
 }

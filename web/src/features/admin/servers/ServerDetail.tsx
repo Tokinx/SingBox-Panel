@@ -3,7 +3,6 @@ import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import {
   Alert,
   Button,
-  Card,
   Form,
   Input,
   Modal,
@@ -11,8 +10,6 @@ import {
   Select,
   Space,
   Table,
-  Tabs,
-  Tag,
   Typography,
   message,
 } from '../../../ui'
@@ -472,7 +469,6 @@ export default function ServerDetail() {
     Modal.info({
       title: '安装 / 升级 Agent',
       width: MODAL_MD,
-      icon: null,
       content: (
         <div>
           
@@ -636,7 +632,6 @@ export default function ServerDetail() {
       okType: 'danger',
       okText: '删除',
       cancelText: '取消',
-      centered: true,
       // Close the confirm immediately; the delete runs in the background behind
       // the "配置下发中" toast, matching the create/update flow.
       onOk: () => {
@@ -654,7 +649,6 @@ export default function ServerDetail() {
       okType: 'danger',
       okText: '删除',
       cancelText: '取消',
-      centered: true,
       onOk: () => {
         if (currentSIDRef.current !== targetSID) return
         applyWithToast(`outbound-del-${o.id}`, () => deleteOutbound(targetSID, o.id)).then(loadCurrentServer)
@@ -670,7 +664,6 @@ export default function ServerDetail() {
       okType: 'danger',
       okText: '删除',
       cancelText: '取消',
-      centered: true,
       onOk: () => {
         if (currentSIDRef.current !== targetSID) return
         applyWithToast(`rule-del-${r.id}`, () => deleteRule(targetSID, r.id)).then(loadCurrentServer)
@@ -807,7 +800,6 @@ export default function ServerDetail() {
   const inboundTable = (
     <Table
       rowKey="id"
-      pagination={false}
       scroll={{ x: 560 }}
       dataSource={server.inbounds || []}
       locale={{ emptyText: '暂无入站' }}
@@ -825,7 +817,6 @@ export default function ServerDetail() {
   const outboundTable = (
     <Table
       rowKey="id"
-      pagination={false}
       tableLayout="fixed"
       scroll={{ x: 720 }}
       dataSource={outbounds}
@@ -888,7 +879,6 @@ export default function ServerDetail() {
     <>
       <Table
         rowKey="id"
-        pagination={false}
         scroll={{ x: 640 }}
         dataSource={rules}
         locale={{ emptyText: '暂无规则' }}

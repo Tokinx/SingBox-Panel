@@ -33,7 +33,6 @@ export function ImportPreviewModal({
       okText="确认导入"
       confirmLoading={loading}
       width={MODAL_LG}
-      destroyOnHidden
     >
       {summary && (
         <div className="fm-preview">
@@ -41,7 +40,6 @@ export function ImportPreviewModal({
             <Table
               size="small"
               rowKey="tag"
-              pagination={false}
               dataSource={summary.inbounds || []}
               columns={[
                 { title: '标签', dataIndex: 'tag' },
@@ -60,7 +58,6 @@ export function ImportPreviewModal({
             <Table
               size="small"
               rowKey="tag"
-              pagination={false}
               dataSource={summary.outbounds || []}
               columns={[
                 { title: '标签', dataIndex: 'tag' },
@@ -73,7 +70,6 @@ export function ImportPreviewModal({
             <Table
               size="small"
               rowKey={(_, index) => String(index)}
-              pagination={false}
               dataSource={summary.rules || []}
               columns={[
                 { title: '匹配入站', render: (_, row: { inbound: string[] | null }) => row.inbound?.length ? row.inbound.join(', ') : <span className="faint">不限</span> },
@@ -107,7 +103,7 @@ export function ConfigEditorModal({
   onSave: () => void
 }) {
   return (
-    <Modal className="fm-modal" title="编辑配置" open={open} onCancel={onCancel} onOk={onSave} okText="校验并下发" okButtonProps={{ disabled: loading }} confirmLoading={saving} width={MODAL_LG} destroyOnHidden>
+    <Modal className="fm-modal" title="编辑配置" open={open} onCancel={onCancel} onOk={onSave} okText="校验并下发" okButtonProps={{ disabled: loading }} confirmLoading={saving} width={MODAL_LG}>
       {loading ? (
         <div className="fm-loading">读取中…</div>
       ) : (
@@ -135,7 +131,7 @@ export function InstallSingboxModal({
   onConfirm: () => void
 }) {
   return (
-    <Modal className="fm-modal" title="安装 / 升级 sing-box" open={open} onOk={onConfirm} onCancel={onCancel} okText="开始安装" width={MODAL_SM} destroyOnHidden>
+    <Modal className="fm-modal" title="安装 / 升级 sing-box" open={open} onOk={onConfirm} onCancel={onCancel} okText="开始安装" width={MODAL_SM}>
       <Form form={form} layout="vertical" className="fm-form" initialValues={{ channel: 'stable', method: 'script' }}>
         <div className="fm-grid" style={{ paddingTop: 6 }}>
           <Form.Item name="channel" label="渠道"><Select options={[{ value: 'stable', label: 'stable' }, { value: 'beta', label: 'beta' }]} /></Form.Item>
@@ -162,7 +158,7 @@ export function NodeFormatsExportModal({
   onCancel: () => void
 }) {
   return (
-    <Modal className="fm-modal" title="导出节点" open={open} onCancel={onCancel} footer={null} width={MODAL_LG} destroyOnHidden>
+    <Modal className="fm-modal" title="导出节点" open={open} onCancel={onCancel} footer={null} width={MODAL_LG}>
       {loading ? <div className="fm-loading">加载中…</div> : data ? <NodeFormatsModalContent data={data} /> : null}
     </Modal>
   )
