@@ -79,6 +79,21 @@ describe('outbound URI imports', () => {
     expect(onClose).not.toHaveBeenCalled()
     expect(saveButton().disabled).toBe(false)
   })
+  it('does not close or unlock a replacement dialog after an old save completes', async () => {
+    let resolve!: (value: Awaited<ReturnType<typeof createOutbound>>) => void
+    vi.mocked(createOutbound).mockReturnValue(new Promise((done) => { resolve = done }))
+    const onClose = vi.fn(), onSaved = vi.fn(), onSavingChange = vi.fn()
+    const { unmount } = render(<OutboundImport serverId={3} onClose={onClose} onSaved={onSaved} onSavingChange={onSavingChange} />)
+    parseURI()
+    await screen.findByLabelText('出站标签')
+    fireEvent.click(saveButton())
+    await waitFor(() => expect(createOutbound).toHaveBeenCalledOnce())
+    unmount()
+    await act(async () => resolve({ apply_state: 'pending' } as Awaited<ReturnType<typeof createOutbound>>))
+    expect(onClose).not.toHaveBeenCalled()
+    expect(onSaved).not.toHaveBeenCalled()
+    expect(onSavingChange).toHaveBeenCalledExactlyOnceWith(true)
+  })
   it('submits an import from the fixed modal footer', async () => {
     const onClose = vi.fn(), onSaved = vi.fn()
     render(<OutboundForm serverId={3} outbound={null} open onClose={onClose} onSaved={onSaved} />)

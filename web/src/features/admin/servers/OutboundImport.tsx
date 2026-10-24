@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Alert, Button, Form, Input, Space } from '../../../ui'
 import { createOutbound, errMsg, previewOutboundImport } from '../../../api'
 import type { OutboundBody } from '../../../api'
@@ -20,8 +20,15 @@ export function OutboundImport({ serverId, onClose, onSaved, onSavingChange, for
   const [saving, setSaving] = useState(false)
   const request = useRef<AbortController | null>(null)
   const saveLock = useRef(false)
+  const session = useRef(0)
 
-  useEffect(() => () => request.current?.abort(), [serverId])
+  useLayoutEffect(() => {
+    session.current += 1
+    return () => {
+      session.current += 1
+      request.current?.abort()
+    }
+  }, [serverId])
 
   const invalidate = () => {
     request.current?.abort()
@@ -50,6 +57,7 @@ export function OutboundImport({ serverId, onClose, onSaved, onSavingChange, for
 
   const save = async () => {
     if (!preview || !tag.trim() || saveLock.current) return
+    const savingSession = session.current
     saveLock.current = true
     setSaving(true)
     onSavingChange?.(true)
@@ -58,15 +66,18 @@ export function OutboundImport({ serverId, onClose, onSaved, onSavingChange, for
       // Preserve the entire parsed payload, including parameters absent from
       // the compact manual form. A failed save leaves the draft available.
       const result = await createOutbound(serverId, { ...preview, tag: tag.trim() })
+      if (savingSession !== session.current) return
       showConfigApplyResult(result)
       onSaved()
       onClose()
     } catch (e) {
-      setError(errMsg(e))
+      if (savingSession === session.current) setError(errMsg(e))
     } finally {
-      saveLock.current = false
-      setSaving(false)
-      onSavingChange?.(false)
+      if (savingSession === session.current) {
+        saveLock.current = false
+        setSaving(false)
+        onSavingChange?.(false)
+      }
     }
   }
 
