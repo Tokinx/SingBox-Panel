@@ -41,12 +41,15 @@ func newUserTrafficFixture(t *testing.T, configMode string) userTrafficFixture {
 	mustCreate(t, db, &f.multi)
 	mustCreate(t, db, &f.single)
 	normalized := "alice@example.com"
-	f.alice = model.User{Email: "Alice@Example.com", EmailNormalized: &normalized, Role: model.RoleUser, Enabled: true, SubToken: "s1", ProxyToken: "p1"}
+	f.alice = model.User{Email: "Alice@Example.com", EmailNormalized: &normalized, Role: model.RoleUser, Enabled: true, SubToken: "s1", ProxyToken: "p1", ServerIDs: []uint{f.server.ID}}
 	mustCreate(t, db, &f.alice)
 	// A real panel user called "user" (the single-user identity name).
 	userName := "user"
-	f.namedUser = model.User{Email: "user", EmailNormalized: &userName, Role: model.RoleUser, Enabled: true, SubToken: "s2", ProxyToken: "p2"}
+	f.namedUser = model.User{Email: "user", EmailNormalized: &userName, Role: model.RoleUser, Enabled: true, SubToken: "s2", ProxyToken: "p2", ServerIDs: []uint{f.server.ID}}
 	mustCreate(t, db, &f.namedUser)
+	if err := migrateUserTrafficIdentities(db); err != nil {
+		t.Fatal(err)
+	}
 	return f
 }
 
@@ -136,20 +139,23 @@ func TestUserTrafficSkipsRawConfigAndMissingBaseline(t *testing.T) {
 	}
 }
 
-func TestUserTrafficLegacyNamesAndRenameAlias(t *testing.T) {
+func TestUserTrafficLegacyNamesSurviveRenameAndRestart(t *testing.T) {
 	f := newUserTrafficFixture(t, model.ConfigModeManaged)
-	legacy := model.User{Email: "Legacy", Role: model.RoleUser, Enabled: true, SubToken: "s3", ProxyToken: "p3"}
+	legacy := model.User{Email: "Legacy", Role: model.RoleUser, Enabled: true, SubToken: "s3", ProxyToken: "p3", ServerIDs: []uint{f.server.ID}}
 	mustCreate(t, f.db, &legacy)
 	if err := f.db.Model(&legacy).Update("email_normalized", nil).Error; err != nil {
 		t.Fatal(err)
 	}
-	w := newTrafficWriter(f.db)
+	if err := migrateUserTrafficIdentities(f.db); err != nil {
+		t.Fatal(err)
+	}
 	// Alice was renamed; the node still reports her previous name.
 	renamed := "alice-new"
 	if err := f.db.Model(&f.alice).Updates(map[string]any{"email": "alice-new", "email_normalized": renamed}).Error; err != nil {
 		t.Fatal(err)
 	}
-	w.noteRename("Alice@Example.com", f.alice.ID, time.Now())
+	// No process-local alias survives this simulated restart; the binding does.
+	w := newTrafficWriter(f.db)
 	f.report(t, w, []protocol.UserTrafficSnapshot{
 		{Inbound: "vless-multi", User: "legacy", Upload: 3, Download: 30},
 		{Inbound: "vless-multi", User: "Alice@Example.com", Upload: 4, Download: 40},
@@ -158,11 +164,10 @@ func TestUserTrafficLegacyNamesAndRenameAlias(t *testing.T) {
 	if got[legacy.ID] != [2]uint64{3, 30} || got[f.alice.ID] != [2]uint64{4, 40} {
 		t.Fatalf("user rows = %v", got)
 	}
-	// Expired aliases no longer resolve.
-	w.noteRename("old-name", f.alice.ID, time.Now().Add(-time.Hour))
-	f.report(t, w, []protocol.UserTrafficSnapshot{{Inbound: "vless-multi", User: "old-name", Upload: 1, Download: 1}})
-	if got := userRows(t, f.db)[f.alice.ID]; got != [2]uint64{4, 40} {
-		t.Fatalf("expired alias attributed traffic: %v", got)
+	// Long offline periods cannot expire ownership of an already-issued name.
+	delayed, err := w.resolveUserDeltas([]userTrafficDelta{{ServerID: f.server.ID, InboundID: f.multi.ID, Name: "Alice@Example.com", Upload: 1}}, time.Now().Add(24*time.Hour))
+	if err != nil || len(delayed) != 1 {
+		t.Fatalf("delayed legacy name lost its owner: %v, %v", delayed, err)
 	}
 }
 

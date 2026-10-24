@@ -25,10 +25,6 @@ import (
 // without any authorized user (see proxyUsersForInbound).
 const lockoutProxyUserName = "__singbox_panel_disabled__"
 
-// renameAliasTTL keeps a renamed user's previous proxy name resolvable while
-// nodes still run the config issued before the rename.
-const renameAliasTTL = 15 * time.Minute
-
 type userTrafficDelta struct {
 	ServerID  uint
 	InboundID uint
@@ -47,11 +43,6 @@ type userBucketKey struct {
 
 type userBucketValue struct {
 	Upload, Download uint64
-}
-
-type userAlias struct {
-	userID  uint
-	expires time.Time
 }
 
 // multiUserTrafficDeltas keeps the user deltas that belong to multi-user
@@ -87,27 +78,16 @@ func multiUserTrafficDeltas(serverID uint, inbounds []model.Inbound, users []pro
 	return out
 }
 
-// noteRename keeps the previous proxy name of a renamed user resolvable for a
-// short while; nodes report the old name until the new config is applied.
-func (w *trafficWriter) noteRename(previousName string, userID uint, now time.Time) {
-	name := normalizeUsername(previousName)
-	if name == "" {
-		return
+// resolveUserDeltas accepts only identities previously bound to this inbound.
+// Legacy login names remain bound to their original account, while new configs
+// report immutable names. Unknown or deleted identities are never reassigned.
+func (w *trafficWriter) resolveUserDeltas(deltas []userTrafficDelta, _ time.Time) (map[userBucketKey]userBucketValue, error) {
+	type identityKey struct {
+		serverID, inboundID uint
+		name                string
 	}
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	for key, alias := range w.aliases {
-		if now.After(alias.expires) {
-			delete(w.aliases, key)
-		}
-	}
-	w.aliases[name] = userAlias{userID: userID, expires: now.Add(renameAliasTTL)}
-}
-
-// resolveUserDeltas maps proxy user names to panel user IDs. Current names
-// win over rename aliases; unknown names are dropped.
-func (w *trafficWriter) resolveUserDeltas(deltas []userTrafficDelta, now time.Time) (map[userBucketKey]userBucketValue, error) {
 	names := make([]string, 0, len(deltas))
+	var serverIDs, inboundIDs []uint
 	seen := map[string]bool{}
 	for _, delta := range deltas {
 		name := normalizeUsername(delta.Name)
@@ -115,36 +95,38 @@ func (w *trafficWriter) resolveUserDeltas(deltas []userTrafficDelta, now time.Ti
 			seen[name] = true
 			names = append(names, name)
 		}
+		serverIDs = append(serverIDs, delta.ServerID)
+		inboundIDs = append(inboundIDs, delta.InboundID)
 	}
-	ids := make(map[string]uint, len(names))
+	ids := make(map[identityKey]uint, len(deltas))
 	if len(names) > 0 {
+		var bindings []model.UserTrafficIdentity
+		if err := w.db.Where("name IN ? AND server_id IN ? AND inbound_id IN ?", names, normalizedIDs(serverIDs), normalizedIDs(inboundIDs)).Find(&bindings).Error; err != nil {
+			return nil, fmt.Errorf("resolve traffic identities: %w", err)
+		}
+		userIDs := make([]uint, 0, len(bindings))
+		for _, binding := range bindings {
+			userIDs = append(userIDs, binding.UserID)
+		}
 		var users []model.User
-		if err := w.db.Select("id", "email", "email_normalized").
-			Where("email_normalized IN ? OR (email_normalized IS NULL AND LOWER(email) IN ?)", names, names).
-			Find(&users).Error; err != nil {
-			return nil, fmt.Errorf("resolve traffic users: %w", err)
-		}
-		for _, user := range users {
-			name := normalizeUsername(user.Email)
-			if user.EmailNormalized != nil {
-				name = *user.EmailNormalized
+		if len(userIDs) > 0 {
+			if err := w.db.Select("id", "proxy_token", "sub_token").Where("id IN ?", normalizedIDs(userIDs)).Find(&users).Error; err != nil {
+				return nil, fmt.Errorf("resolve traffic users: %w", err)
 			}
-			ids[name] = user.ID
+		}
+		keys := make(map[uint]string, len(users))
+		for i := range users {
+			keys[users[i].ID] = proxyTrafficName(&users[i])
+		}
+		for _, binding := range bindings {
+			if key := keys[binding.UserID]; key != "" && key == binding.UserKey {
+				ids[identityKey{binding.ServerID, binding.InboundID, binding.Name}] = binding.UserID
+			}
 		}
 	}
-	w.mu.Lock()
-	for _, name := range names {
-		if _, found := ids[name]; found {
-			continue
-		}
-		if alias, ok := w.aliases[name]; ok && now.Before(alias.expires) {
-			ids[name] = alias.userID
-		}
-	}
-	w.mu.Unlock()
 	out := make(map[userBucketKey]userBucketValue, len(deltas))
 	for _, delta := range deltas {
-		userID := ids[normalizeUsername(delta.Name)]
+		userID := ids[identityKey{delta.ServerID, delta.InboundID, normalizeUsername(delta.Name)}]
 		if userID == 0 {
 			continue
 		}
@@ -187,11 +169,6 @@ func (w *trafficWriter) dropUser(userID uint) {
 	for key := range w.pendingUsers {
 		if key.UserID == userID {
 			delete(w.pendingUsers, key)
-		}
-	}
-	for name, alias := range w.aliases {
-		if alias.userID == userID {
-			delete(w.aliases, name)
 		}
 	}
 }

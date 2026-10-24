@@ -111,15 +111,14 @@ type trafficWriter struct {
 	pending map[trafficBucketKey]trafficBucketValue
 	dropped map[uint]bool
 	flushMu sync.Mutex
-	// Per-user hourly deltas and recent rename aliases (traffic_users.go).
+	// Per-user hourly deltas (traffic_users.go).
 	pendingUsers map[userBucketKey]userBucketValue
-	aliases      map[string]userAlias
 }
 
 func newTrafficWriter(db *gorm.DB) *trafficWriter {
 	return &trafficWriter{
 		db: db, pending: map[trafficBucketKey]trafficBucketValue{}, dropped: map[uint]bool{},
-		pendingUsers: map[userBucketKey]userBucketValue{}, aliases: map[string]userAlias{},
+		pendingUsers: map[userBucketKey]userBucketValue{},
 	}
 }
 

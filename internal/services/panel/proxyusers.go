@@ -48,12 +48,22 @@ func proxyUsersForInbound(db *gorm.DB, inbound *model.Inbound, settings singbox.
 	}
 	now := time.Now()
 	identities := make([]singbox.ProxyUser, 0, len(users))
+	trafficIdentities := make([]model.UserTrafficIdentity, 0, len(users))
 	for i := range users {
 		user := &users[i]
 		if user.Expired(now) || !user.HasInbound(inbound.ServerID, inbound.ID) {
 			continue
 		}
-		identities = append(identities, proxyIdentity(user, inbound.ID))
+		identity := proxyIdentity(user, inbound.ID)
+		identity.Name = proxyTrafficName(user)
+		identities = append(identities, identity)
+		trafficIdentities = append(trafficIdentities, model.UserTrafficIdentity{
+			ServerID: inbound.ServerID, InboundID: inbound.ID, Name: identity.Name,
+			UserID: user.ID, UserKey: identity.Name,
+		})
+	}
+	if err := rememberProxyTrafficIdentities(db, trafficIdentities); err != nil {
+		return nil, fmt.Errorf("register proxy traffic identities: %w", err)
 	}
 	if len(identities) == 0 {
 		// Several protocols interpret an omitted/empty users list as anonymous or

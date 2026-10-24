@@ -599,6 +599,10 @@ func (a *App) createUser(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if reservedTrafficUsername(email) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": errUsernameReserved.Error()})
+		return
+	}
 	if err := validateNewPassword(req.Password); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -693,8 +697,9 @@ func (a *App) updateUser(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{"error": "email already exists"})
 			return
 		}
-		if normalizeUsername(u.Email) != normalizedEmail && a.hub != nil && a.hub.traffic != nil {
-			a.hub.traffic.noteRename(u.Email, u.ID, time.Now())
+		if normalizeUsername(u.Email) != normalizedEmail && reservedTrafficUsername(email) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": errUsernameReserved.Error()})
+			return
 		}
 		u.Email = email
 		u.EmailNormalized = &normalizedEmail

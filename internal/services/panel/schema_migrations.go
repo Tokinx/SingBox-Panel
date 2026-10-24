@@ -338,6 +338,11 @@ var applicationMigrations = []schemaMigration{
 			return tx.AutoMigrate(&model.UserNodeOrder{})
 		},
 	},
+	{
+		version: 25,
+		name:    "persistent proxy traffic identities",
+		up:      migrateUserTrafficIdentities,
+	},
 }
 
 // migrationReplaySafe records whether an interrupted attempt of each migration
@@ -381,6 +386,7 @@ var migrationReplaySafe = map[uint]bool{
 	22: true,  // AutoMigrate plus a rollup rebuilt from scratch
 	23: true,  // AutoMigrate
 	24: true,  // AutoMigrate
+	25: true,  // AutoMigrate plus insert-only legacy traffic identity bindings
 }
 
 // runSchemaMigrations applies every pending migration in order. If any
