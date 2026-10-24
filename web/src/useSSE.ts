@@ -118,6 +118,9 @@ export function useSSE(
         })
         if (stopped || connectionGeneration !== generation) return
         if (resp.status === 401) {
+          // Password changes rotate the token while this request may still be
+          // connecting. Retry with the current session instead of logging out.
+          if (token !== useAuth.getState().token) return
           shouldReconnect = false
           stopped = true
           handleUnauthorized()

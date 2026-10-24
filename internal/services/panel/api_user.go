@@ -91,7 +91,9 @@ func (a *App) handleChangePassword(c *gin.Context) {
 		return
 	}
 	if !checkPassword(u.Password, req.OldPassword) {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "wrong current password"})
+		// The session is valid; only this form value is wrong. A 401 makes
+		// clients revoke the current session and discard the password dialog.
+		c.JSON(http.StatusBadRequest, gin.H{"error": "当前密码不正确"})
 		return
 	}
 	hash, err := hashPassword(req.NewPassword)

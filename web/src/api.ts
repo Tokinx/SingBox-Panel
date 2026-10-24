@@ -35,7 +35,12 @@ http.interceptors.request.use((config) => {
 http.interceptors.response.use(
   (r) => r,
   (err) => {
-    if (err?.response?.status === 401 && !location.pathname.startsWith('/login')) {
+    const token = useAuth.getState().token
+    // An in-flight request can still carry the previous token after a password
+    // change. Its late 401 must not revoke the newly issued session.
+    if (err?.response?.status === 401 && token &&
+        err.config?.headers?.Authorization === `Bearer ${token}` &&
+        !location.pathname.startsWith('/login')) {
       useAuth.getState().logout()
       location.href = '/login'
     }
