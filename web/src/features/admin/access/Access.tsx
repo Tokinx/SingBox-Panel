@@ -1202,7 +1202,8 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
       path: p.path,
       host: p.host,
       congestion_control: p.congestion_control,
-      udp_relay_mode: p.udp_relay_mode,
+      // Match the backend's normalization of historical TUIC relay modes.
+      udp_relay_mode: p.udp_relay_mode && p.udp_relay_mode !== 'quic' ? 'native' : p.udp_relay_mode,
       udp_over_stream: !!p.udp_over_stream,
       ss_plugin: p.ss_plugin,
       obfs: p.obfs,
@@ -1877,7 +1878,6 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
                       options={[
                         { value: 'native', label: 'native' },
                         { value: 'quic', label: 'quic' },
-                        { value: 'stable', label: 'stable' },
                       ]}
                     />
                   </Form.Item>
