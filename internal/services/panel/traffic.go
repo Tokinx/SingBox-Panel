@@ -725,7 +725,8 @@ func (a *App) serverTraffic(c *gin.Context) {
 		return
 	}
 	rangeName := c.DefaultQuery("range", "cycle")
-	rangeConfig, start, end, cycleStart, cycleEnd, ok := serverTrafficWindow(time.Now(), rangeName, server.TrafficResetDay)
+	now := time.Now()
+	rangeConfig, start, end, cycleStart, cycleEnd, ok := serverTrafficWindow(now, rangeName, server.TrafficResetDay)
 	if !ok {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unsupported range %q", rangeName)})
 		return
@@ -745,8 +746,9 @@ func (a *App) serverTraffic(c *gin.Context) {
 	if rangeName != "cycle" {
 		// Headline usage always follows the purchase/reset cycle even when
 		// the administrator changes the history chart's visible range.
+		_, _, cycleQueryEnd, _, _, _ := serverTrafficWindow(now, "cycle", server.TrafficResetDay)
 		cycleRecords, err := queryTrafficBuckets(a.db, trafficQuery{
-			hourly: true, start: cycleStart, end: cycleEnd, step: 24 * time.Hour,
+			hourly: true, start: cycleStart, end: cycleQueryEnd, step: 24 * time.Hour,
 			serverID: serverID, totalsOnly: true,
 		})
 		if err != nil {
