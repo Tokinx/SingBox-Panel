@@ -90,7 +90,7 @@
 .lg-line-warn:hover { background: color-mix(in srgb, var(--console-warning) 11%, transparent); }
 .lg-line-error:hover { background: color-mix(in srgb, var(--console-error) 12%, transparent); }
 .lg-line-compact {
-  display: grid; align-items: baseline; column-gap: 12px;
+  display: grid; align-items: first baseline; column-gap: 12px;
   grid-template-columns: 62px 22px minmax(150px, 300px) minmax(200px, 1fr) minmax(120px, auto) 22px;
 }
 .lg-line-raw { display: grid; grid-template-columns: minmax(0, 1fr) 22px; align-items: baseline; column-gap: 12px; }
@@ -124,7 +124,7 @@
 .lg-token-danger { color: var(--console-error-text); font-weight: 600; }
 .lg-highlight { padding: 0 1px; border-radius: 2px; background: color-mix(in srgb, var(--console-warning) 32%, transparent); color: var(--console-ink); }
 
-.lg-copy-button { display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--console-faint); font-size: 12px; opacity: 0; cursor: pointer; transition: opacity .12s ease; }
+.lg-copy-button { display: inline-grid; align-self: start; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--console-faint); font-size: 12px; opacity: 0; cursor: pointer; transition: opacity .12s ease; }
 .lg-line:hover .lg-copy-button, .lg-copy-button:focus-visible { opacity: 1; }
 .lg-copy-button:hover { background: var(--console-selected); color: var(--console-ink); }
 .lg-copy-button:focus-visible { outline: 2px solid var(--console-focus); outline-offset: 1px; }
@@ -158,12 +158,12 @@
   .lg-line-compact .lg-subject { grid-column: 3; grid-row: 1; }
   .lg-line-compact .lg-context { display: none; }
   .lg-line-compact .lg-message { grid-column: 1 / 4; grid-row: 2; }
-  .lg-line-compact .lg-copy-button { grid-column: 4; grid-row: 1 / 3; align-self: center; }
+  .lg-line-compact .lg-copy-button { grid-column: 4; grid-row: 1; align-self: start; }
   .lg-copy-button { opacity: .6; }
 }
 
 /* Readable compact rows: direction chip, subject, flow target, muted context. */
-.lg-dir { display: inline-grid; place-items: center; width: 20px; height: 18px; border-radius: 4px; font-family: var(--app-font); font-size: 11px; font-weight: 600; line-height: 1; align-self: center; }
+.lg-dir { display: inline-grid; place-items: center; width: 20px; height: 18px; border-radius: 4px; font-family: var(--app-font); font-size: 11px; font-weight: 600; line-height: 1; align-self: first baseline; }
 .lg-dir-inbound { color: #1d4ed8; background: color-mix(in srgb, #3b82f6 14%, transparent); }
 .lg-dir-outbound { color: #15803d; background: color-mix(in srgb, #22c55e 16%, transparent); }
 .lg-dir-none { color: var(--console-faint); }
