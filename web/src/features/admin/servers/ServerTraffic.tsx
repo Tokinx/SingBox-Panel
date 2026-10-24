@@ -271,18 +271,19 @@ function LiveRateValue({ store, part }: { store: LiveRateStore; part: 'download'
 // sample only re-renders this panel, never the historical chart or port table.
 const LiveChart = memo(function LiveChart({ serverId, rateStore }: { serverId: number; rateStore: LiveRateStore }) {
   const [livePoints, setLivePoints] = useState<TrafficPoint[]>([])
+  const [clock, setClock] = useState(Date.now)
   const liveUrl = useMemo(() => `/api/admin/servers/${serverId}/traffic/live`, [serverId])
 
   const onSSEMessage = useCallback((msg: SSEMessage) => {
-    if (msg.kind !== 'traffic' || !msg.data) return
+    if (msg.kind !== 'traffic' || !Number.isFinite(msg.ts)) return
     const snap = msg.data as any
     setLivePoints((prev) => {
       const next = prev.length >= 100 ? prev.slice(prev.length - 99) : prev.slice()
       next.push({
         time: new Date(msg.ts).toISOString(),
         upload: 0, download: 0,
-        upload_rate: snap.upload_rate || 0,
-        download_rate: snap.download_rate || 0,
+        upload_rate: snap?.upload_rate || 0,
+        download_rate: snap?.download_rate || 0,
         tcp_connections: 0, udp_connections: 0,
       })
       return next
@@ -293,8 +294,22 @@ const LiveChart = memo(function LiveChart({ serverId, rateStore }: { serverId: n
   const liveRate = livePoints.length > 0 ? livePoints[livePoints.length - 1] : null
 
   useEffect(() => {
-    rateStore.set({ upload: liveRate?.upload_rate ?? 0, download: liveRate?.download_rate ?? 0, connected })
-  }, [connected, liveRate, rateStore])
+    const timer = setInterval(() => setClock(Date.now()), 3000)
+    return () => clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    // SSE heartbeats only prove the browser can reach the panel. Old backlog
+    // or a stalled Agent must not keep a nonzero current speed alive.
+    const fresh = connected && liveRate && Math.max(clock, Date.now()) - Date.parse(liveRate.time) < 15_000
+    rateStore.set({ upload: fresh ? liveRate.upload_rate : 0, download: fresh ? liveRate.download_rate : 0, connected })
+    if (liveRate && !fresh && (liveRate.upload_rate > 0 || liveRate.download_rate > 0)) {
+      setLivePoints((points) => [...points.slice(-99), {
+        time: new Date().toISOString(), upload: 0, download: 0,
+        upload_rate: 0, download_rate: 0, tcp_connections: 0, udp_connections: 0,
+      }])
+    }
+  }, [clock, connected, liveRate, rateStore])
 
   return (
     <section className="ui-card tr-panel">

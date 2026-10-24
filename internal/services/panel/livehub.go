@@ -78,9 +78,8 @@ func (lh *liveHub) unsubscribe(serverID uint, sub *trafficSub) {
 // publishTraffic stores a traffic sample in the rolling window and broadcasts
 // it to all subscribers for that server.
 func (lh *liveHub) publishTraffic(serverID uint, snapshot *protocol.TrafficSnapshot) {
-	if snapshot == nil {
-		return
-	}
+	// A null sample marks the source unavailable. Keep it in the backlog so
+	// reconnecting viewers cannot mistake the last good rate for a live one.
 	evt := liveEvent{
 		Kind: "traffic",
 		TS:   time.Now().UnixMilli(),

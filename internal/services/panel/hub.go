@@ -118,6 +118,10 @@ func (h *Hub) unregister(ac *agentConn) {
 	h.mu.Unlock()
 	if removed {
 		touchServerSeen(h.db, ac.serverID, false)
+		if err := h.traffic.record(ac.serverID, nil); err != nil {
+			log.Printf("traffic: clear offline server %d: %v", ac.serverID, err)
+		}
+		h.live.publishTraffic(ac.serverID, nil)
 	}
 }
 
@@ -437,5 +441,8 @@ func (h *Hub) onHeartbeat(ac *agentConn, e protocol.HeartbeatEvt) {
 	}
 	if err := h.traffic.record(serverID, e.Traffic); err != nil {
 		log.Printf("traffic: record server %d: %v", serverID, err)
+	}
+	if e.Traffic == nil {
+		h.live.publishTraffic(serverID, nil)
 	}
 }
