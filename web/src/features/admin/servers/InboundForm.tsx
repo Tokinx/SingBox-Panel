@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Button, Form, Input, InputNumber, Modal, Select, Space, Switch, type FormInstance } from 'antd'
-import { createInbound, updateInbound } from '../../../api'
+import { Alert, Button, Form, Input, InputNumber, Modal, Select, Space, Switch, type FormInstance } from 'antd'
+import { createInbound, updateInbound, type InboundBody } from '../../../api'
+import { NodeJSONEditor, useNodeJSON } from './NodeJSONEditor'
+import { Pills } from '../../../ui/Page'
 import { applyWithToast } from '../../../configApply'
 import type { Inbound, InboundSettings, InboundType } from '../../../types'
 import { randomBase64, randomHex, randomUUID, SHADOWSOCKS_METHODS, ss2022KeyLen } from '../../../util'
@@ -295,6 +297,9 @@ export default function InboundForm({
   onSaved: () => void
 }) {
   const [form] = Form.useForm()
+  const [mode, setMode] = useState<'form' | 'json'>('form')
+  const [draft, setDraft] = useState<Inbound | null>(inbound)
+  const editor = useNodeJSON<InboundBody>(serverId, 'inbound', inbound?.id)
   const [submitting, setSubmitting] = useState(false)
   const submitLock = useRef(false)
   const type: InboundType = Form.useWatch('type', form) ?? 'shadowsocks'
@@ -306,7 +311,10 @@ export default function InboundForm({
   const multiUser = !!Form.useWatch('multi_user', form) && supportsMultiUser(type, method)
 
   useEffect(() => {
+    editor.reset()
     if (!open) return
+    setMode('form')
+    setDraft(inbound)
     // Reset first: toForm() omits many keys (tag, credentials, TLS paths...),
     // and without a reset those survive from the previously opened inbound —
     // 新增协议 would inherit the last one's tag and secrets.
@@ -324,24 +332,37 @@ export default function InboundForm({
     return opts
   }
 
+  const formBody = (v = form.getFieldsValue(true)): InboundBody => ({
+    type: v.type, tag: v.tag, listen_port: v.listen_port || randomPort(), enabled: true,
+    settings: assembleSettings(draft?.settings || {}, v, v.type),
+  })
+  const switchMode = async (next: string) => {
+    if (next === mode || editor.loading || submitting) return
+    if (next === 'json') {
+      if (await editor.encode(formBody())) setMode('json')
+    } else {
+      const body = await editor.decode()
+      if (!body) return
+      const nextDraft = { ...draft, ...body, id: inbound?.id ?? 0, server_id: serverId, settings: body.settings ?? {} } as Inbound
+      setDraft(nextDraft)
+      form.resetFields()
+      form.setFieldsValue(toForm(nextDraft))
+      setMode('form')
+    }
+  }
+
   const submit = async () => {
     if (submitLock.current) return
     submitLock.current = true
     setSubmitting(true)
     try {
-      const v = await form.validateFields().catch((err) => {
-        scrollToFirstError(form, err)
-        throw err
-      })
-      const settings = assembleSettings(inbound?.settings || {}, v, v.type)
-      const body = {
-        type: v.type as InboundType,
-        tag: v.tag,
-        listen_port: v.listen_port || randomPort(),
-        // Inbounds are always active; remove one instead of pausing it.
-        enabled: true,
-        settings,
+      let body: InboundBody | null
+      if (mode === 'json') body = await editor.decode()
+      else {
+        const v = await form.validateFields().catch((err) => { scrollToFirstError(form, err); throw err })
+        body = formBody(v)
       }
+      if (!body) return
       const editing = inbound
       // Close the modal immediately; the config is delivered in the background
       // behind a "配置下发中" spinner toast, so the form never appears to hang.
@@ -368,13 +389,20 @@ export default function InboundForm({
       title={inbound ? '编辑入站' : '新增入站'}
       open={open}
       onOk={submit}
-      onCancel={onClose}
-      confirmLoading={submitting}
+      onCancel={() => { if (!editor.loading && !submitting) onClose() }}
+      closable={!editor.loading && !submitting}
+      maskClosable={!editor.loading && !submitting}
+      confirmLoading={submitting || editor.loading}
       width={MODAL_MD}
       centered
       destroyOnHidden
     >
-      <Form form={form} layout="vertical" className="fm-form">
+      <fieldset className="fm-source-picker" disabled={submitting || editor.loading}>
+        <Pills label="入站编辑方式" active={mode} onChange={(next) => void switchMode(next)} items={[{ key: 'form', label: '表单' }, { key: 'json', label: 'JSON' }]} />
+      </fieldset>
+      {mode === 'json' && <NodeJSONEditor editor={editor} />}
+      {mode === 'form' && editor.error && <Alert className="fm-json-error" type="error" showIcon message={editor.error} />}
+      <div hidden={mode === 'json'}><Form form={form} layout="vertical" className="fm-form">
         <FormGroup title="基本">
           <Form.Item name="type" label="协议" rules={[{ required: true }]}>
             <Select
@@ -761,7 +789,7 @@ export default function InboundForm({
             )}
           </FormGroup>
         )}
-      </Form>
+      </Form></div>
     </Modal>
   )
 }

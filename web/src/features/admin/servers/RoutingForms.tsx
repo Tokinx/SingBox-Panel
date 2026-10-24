@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { Button, Checkbox, Form, Input, InputNumber, Modal, Segmented, Select, Space, Switch } from 'antd'
+import { Alert, Button, Checkbox, Form, Input, InputNumber, Modal, Segmented, Select, Space, Switch } from 'antd'
 import {
   createOutbound,
   createRule,
@@ -15,6 +15,8 @@ import '../../../styles/forms.css'
 import { MODAL_MD } from '../../../ui/modal'
 import { OutboundImport } from './OutboundImport'
 import { Pills } from '../../../ui/Page'
+import { NodeJSONEditor, useNodeJSON } from './NodeJSONEditor'
+import type { OutboundBody } from '../../../api'
 
 const OUT_TYPES: { value: OutboundType; label: string }[] = [
   { value: 'shadowsocks', label: 'Shadowsocks' },
@@ -48,9 +50,11 @@ export function OutboundForm({
   onSaved: () => void
 }) {
   const [form] = Form.useForm()
+  const [draft, setDraft] = useState<Outbound | null>(outbound)
+  const editor = useNodeJSON<OutboundBody>(serverId, 'outbound', outbound?.id)
   const importFormId = useId()
   const [importReady, setImportReady] = useState(false)
-  const [source, setSource] = useState<'manual' | 'external' | 'uri'>('manual')
+  const [source, setSource] = useState<'manual' | 'json' | 'external' | 'uri'>('manual')
   const [submitting, setSubmitting] = useState(false)
   const submitLock = useRef(false)
   const type: OutboundType = Form.useWatch('type', form) ?? 'shadowsocks'
@@ -60,12 +64,7 @@ export function OutboundForm({
   const snellObfsMode = Form.useWatch('snell_obfs_mode', form) ?? 'none'
   const hysteriaObfsType = Form.useWatch('obfs_type', form) ?? ''
 
-  useEffect(() => {
-    if (!open) return
-    setSource('manual')
-    setImportReady(false)
-    // Reset first: keys omitted below would otherwise leak from the previously
-    // opened outbound (e.g. a credential typed for a different landing).
+  const loadOutbound = (outbound: Outbound | null) => {
     form.resetFields()
     if (outbound) {
       const s = outbound.settings || {}
@@ -135,18 +134,42 @@ export function OutboundForm({
         transport_type: 'tcp',
       })
     }
+  }
+  useEffect(() => {
+    editor.reset()
+    if (!open) return
+    setSource('manual')
+    setImportReady(false)
+    setDraft(outbound)
+    loadOutbound(outbound)
   }, [open, outbound])
+
+  const switchSource = async (next: typeof source) => {
+    if (next === source || editor.loading || submitting) return
+    setImportReady(false)
+    if (source === 'json') {
+      const body = await editor.decode()
+      if (!body) return
+      const nextDraft = { ...draft, ...body, id: outbound?.id ?? 0, server_id: serverId, settings: body.settings ?? {} } as Outbound
+      setDraft(nextDraft)
+      loadOutbound(nextDraft)
+    }
+    if (next === 'json' && !await editor.encode(buildOutboundBody(draft, form.getFieldsValue(true)))) return
+    setSource(next)
+  }
 
   const submit = async () => {
     if (submitLock.current) return
     submitLock.current = true
     setSubmitting(true)
     try {
-      const v = await form.validateFields().catch((err) => {
-        scrollToFirstError(form, err)
-        throw err
-      })
-      const body = buildOutboundBody(outbound, v)
+      let body: OutboundBody | null
+      if (source === 'json') body = await editor.decode()
+      else {
+        const v = await form.validateFields().catch((err) => { scrollToFirstError(form, err); throw err })
+        body = buildOutboundBody(draft, v)
+      }
+      if (!body) return
       const editing = outbound
       // 关闭弹窗后在后台下发，避免确认按钮卡顿
       onClose()
@@ -169,30 +192,32 @@ export function OutboundForm({
       title={outbound ? '编辑出站' : '新增出站'}
       open={open}
       onOk={submit}
-      onCancel={() => { if (!submitting) onClose() }}
-      closable={!submitting}
-      maskClosable={!submitting}
-      keyboard={!submitting}
-      footer={!outbound && source !== 'manual' ? <>
+      onCancel={() => { if (!submitting && !editor.loading) onClose() }}
+      closable={!submitting && !editor.loading}
+      maskClosable={!submitting && !editor.loading}
+      keyboard={!submitting && !editor.loading}
+      footer={!outbound && (source === 'external' || source === 'uri') ? <>
         <Button disabled={submitting} onClick={onClose}>取消</Button>
         <Button type="primary" htmlType="submit" form={importFormId} disabled={!importReady} loading={submitting}>保存出站</Button>
       </> : undefined}
-      confirmLoading={submitting}
+      confirmLoading={submitting || editor.loading}
       width={MODAL_MD}
       centered
       destroyOnHidden
     >
-      {!outbound && <fieldset className="fm-source-picker" disabled={submitting}>
+      <fieldset className="fm-source-picker" disabled={submitting || editor.loading}>
         <Pills
           label="出站来源"
           active={source}
-          items={[{ key: 'manual', label: '手动填写' }, { key: 'external', label: '外部节点' }, { key: 'uri', label: 'URI 导入' }]}
-          onChange={(value) => { setImportReady(false); setSource(value as typeof source) }}
+          items={[{ key: 'manual', label: '表单' }, { key: 'json', label: 'JSON' }, ...(!outbound ? [{ key: 'external', label: '外部节点' }, { key: 'uri', label: 'URI 导入' }] : [])]}
+          onChange={(value) => void switchSource(value as typeof source)}
         />
-      </fieldset>}
-      {!outbound && source !== 'manual' ? (
+      </fieldset>
+      {source === 'json' && <NodeJSONEditor editor={editor} />}
+      {source !== 'json' && editor.error && <Alert className="fm-json-error" type="error" showIcon message={editor.error} />}
+      {!outbound && (source === 'external' || source === 'uri') ? (
         <OutboundImport key={source} serverId={serverId} source={source} onClose={onClose} onSaved={onSaved} onSavingChange={setSubmitting} formId={importFormId} onReadyChange={setImportReady} />
-      ) : <Form form={form} layout="vertical" className="fm-form">
+      ) : <div hidden={source === 'json'}><Form form={form} layout="vertical" className="fm-form">
         <FormGroup title="基本">
           <Form.Item name="tag" label="标签" rules={[{ required: true }]}>
             <Input placeholder="hk-out" />
@@ -485,7 +510,7 @@ export function OutboundForm({
             </div>
           </FormGroup>
         )}
-      </Form>}
+      </Form></div>}
     </Modal>
   )
 }
