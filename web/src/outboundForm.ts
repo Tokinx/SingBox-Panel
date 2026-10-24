@@ -52,6 +52,10 @@ export function buildOutboundBody(outbound: Outbound | null, values: OutboundFor
   if (type === 'socks') {
     outer.username = typeof values.username === 'string' ? values.username.trim() : ''
     outer.password = values.password || ''
+    // Empty fields explicitly remove authentication, including imported
+    // fallback copies that the renderer would otherwise reuse.
+    delete inner.username
+    delete inner.password
   }
   if (type === 'vless' || type === 'vmess' || type === 'tuic') outer.uuid = values.uuid || ''
   if (type === 'trojan' || type === 'hysteria2' || type === 'tuic' || type === 'anytls' || type === 'snell') {

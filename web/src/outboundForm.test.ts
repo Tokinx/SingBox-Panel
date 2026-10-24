@@ -4,6 +4,22 @@ import { buildOutboundBody } from './outboundForm'
 import type { Outbound } from './types'
 
 describe('buildOutboundBody', () => {
+  it('clears both copies of authentication from a URI-imported SOCKS outbound', () => {
+    const outbound = {
+      id: 1, server_id: 1, tag: 'socks', type: 'socks', remark: '', sort: 0,
+      settings: { server: 'node.example.com', server_port: 1080, username: 'alice', password: 'old',
+        settings: { username: 'alice', password: 'old' } },
+    } satisfies Outbound
+    const body = buildOutboundBody(outbound, {
+      type: 'socks', tag: 'socks', server: 'node.example.com', server_port: 1080, username: '', password: '',
+    })
+    expect(body.settings.username).toBe('')
+    expect(body.settings.password).toBe('')
+    expect(body.settings.settings?.username).toBeUndefined()
+    expect(body.settings.settings?.password).toBeUndefined()
+    expect(outbound.settings.settings.password).toBe('old')
+  })
+
   it('replaces the PSK of an imported Snell outbound without retaining a hidden override', () => {
     const outbound = {
       id: 1, server_id: 1, tag: 'snell', type: 'snell', remark: '', sort: 0,
