@@ -79,19 +79,10 @@ func TestOutboundImportPreviewAndSave(t *testing.T) {
 	if err := db.Create(&srv).Error; err != nil {
 		t.Fatal(err)
 	}
-	source := model.CustomNode{Name: "landing", Link: "socks5://alice:secret@example.com:1080", Enabled: true}
-	disabled := model.CustomNode{Name: "disabled", Link: source.Link}
-	hidden := model.CustomNode{Name: "hidden", Link: source.Link, Enabled: true, HiddenBySubscriptionRule: true}
-	snell := model.CustomNode{Name: "snell", Protocol: "snell", Address: "snell.example.com", Port: 443, Enabled: true, Params: model.JSONText(`{"psk":"secret","version":5}`)}
-	for _, row := range []*model.CustomNode{&source, &disabled, &hidden, &snell} {
-		if err := db.Create(row).Error; err != nil {
-			t.Fatal(err)
-		}
-	}
+	link := "socks5://alice:secret@example.com:1080#landing"
 	app := &App{db: db, orch: NewOrchestrator(db, NewHub(db))}
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.GET("/servers/:id/sources", app.listOutboundSources)
 	router.POST("/servers/:id/preview", app.previewOutboundImport)
 	router.POST("/servers/:id/outbounds", app.createOutbound)
 	call := func(method, path string, body any) *httptest.ResponseRecorder {
@@ -106,14 +97,7 @@ func TestOutboundImportPreviewAndSave(t *testing.T) {
 		router.ServeHTTP(w, req)
 		return w
 	}
-	list := call(http.MethodGet, "sources", nil)
-	if list.Code != 200 || strings.Contains(list.Body.String(), "secret") || strings.Contains(list.Body.String(), "disabled") || strings.Contains(list.Body.String(), "hidden") {
-		t.Fatalf("bad sources response: %d %s", list.Code, list.Body.String())
-	}
-	if !strings.Contains(list.Body.String(), "snell") {
-		t.Fatal("structured external node omitted")
-	}
-	preview := call(http.MethodPost, "preview", gin.H{"custom_node_id": source.ID})
+	preview := call(http.MethodPost, "preview", gin.H{"uri": link})
 	if preview.Code != 200 || preview.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("preview: %d %s", preview.Code, preview.Body.String())
 	}
@@ -132,17 +116,13 @@ func TestOutboundImportPreviewAndSave(t *testing.T) {
 	if saved.Code != 200 {
 		t.Fatalf("save: %d %s", saved.Code, saved.Body.String())
 	}
-	again := call(http.MethodPost, "preview", gin.H{"custom_node_id": source.ID})
+	again := call(http.MethodPost, "preview", gin.H{"uri": link})
 	if again.Code != 200 || !strings.Contains(again.Body.String(), `"tag":"landing-2"`) {
 		t.Fatalf("duplicate tag not resolved: %s", again.Body.String())
 	}
-	snellPreview := call(http.MethodPost, "preview", gin.H{"custom_node_id": snell.ID})
-	if snellPreview.Code != 200 || !strings.Contains(snellPreview.Body.String(), `"snell_version":4`) {
-		t.Fatalf("snell: %s", snellPreview.Body.String())
-	}
 	for _, bad := range []gin.H{
-		{}, {"custom_node_id": source.ID, "uri": source.Link}, {"custom_node_id": disabled.ID}, {"custom_node_id": hidden.ID}, {"custom_node_id": 9999},
-		{"uri": "https://subscription.example.com"}, {"uri": source.Link + "\n" + source.Link}, {"uri": "socks5://127.0.0.1:1080"},
+		{}, {"uri": ""}, {"uri": "   "},
+		{"uri": "https://subscription.example.com"}, {"uri": link + "\n" + link}, {"uri": "socks5://127.0.0.1:1080"},
 		{"uri": "socks5://example.com:0"}, {"uri": "hysteria://secret@example.com:443"},
 	} {
 		w := call(http.MethodPost, "preview", bad)
@@ -150,12 +130,12 @@ func TestOutboundImportPreviewAndSave(t *testing.T) {
 			t.Fatalf("bad input accepted: %v => %d %s", bad, w.Code, w.Body.String())
 		}
 	}
-	reserved := call(http.MethodPost, "preview", gin.H{"uri": source.Link + "#direct"})
+	reserved := call(http.MethodPost, "preview", gin.H{"uri": strings.Split(link, "#")[0] + "#direct"})
 	if reserved.Code != 200 || !strings.Contains(reserved.Body.String(), `"tag":"direct-2"`) {
 		t.Fatalf("reserved tag: %s", reserved.Body.String())
 	}
 	db.Model(&srv).Update("config_mode", model.ConfigModeRaw)
-	if w := call(http.MethodPost, "preview", gin.H{"uri": source.Link}); w.Code != 409 {
+	if w := call(http.MethodPost, "preview", gin.H{"uri": link}); w.Code != 409 {
 		t.Fatalf("raw mode: %d", w.Code)
 	}
 }

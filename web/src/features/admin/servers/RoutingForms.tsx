@@ -50,7 +50,7 @@ export function OutboundForm({
   const [form] = Form.useForm()
   const importFormId = useId()
   const [importReady, setImportReady] = useState(false)
-  const [source, setSource] = useState<'manual' | 'external' | 'uri'>('manual')
+  const [source, setSource] = useState<'manual' | 'uri'>('manual')
   const [submitting, setSubmitting] = useState(false)
   const submitLock = useRef(false)
   const submitSessionRef = useRef(0)
@@ -198,12 +198,12 @@ export function OutboundForm({
         <Pills
           label="出站来源"
           active={source}
-          items={[{ key: 'manual', label: '手动配置' }, { key: 'external', label: '外部节点' }, { key: 'uri', label: 'URI 导入' }]}
+          items={[{ key: 'manual', label: '手动配置' }, { key: 'uri', label: 'URI 导入' }]}
           onChange={(value) => { setImportReady(false); setSource(value as typeof source) }}
         />
       </fieldset>}
       {!outbound && source !== 'manual' ? (
-        <OutboundImport key={source} serverId={serverId} source={source} onClose={onClose} onSaved={onSaved} onSavingChange={setSubmitting} formId={importFormId} onReadyChange={setImportReady} />
+        <OutboundImport key={serverId} serverId={serverId} onClose={onClose} onSaved={onSaved} onSavingChange={setSubmitting} formId={importFormId} onReadyChange={setImportReady} />
       ) : <fieldset disabled={submitting} aria-busy={submitting} className="min-w-0 border-0 p-0 m-0">
       <Form form={form} layout="vertical" className="fm-form">
         <FormGroup title="基本">

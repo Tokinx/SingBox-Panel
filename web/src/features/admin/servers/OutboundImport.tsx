@@ -1,22 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Form, Input, Select, Space } from '../../../ui'
-import { createOutbound, errMsg, listOutboundSources, previewOutboundImport } from '../../../api'
-import type { OutboundBody, OutboundSource } from '../../../api'
+import { Alert, Button, Form, Input, Space } from '../../../ui'
+import { createOutbound, errMsg, previewOutboundImport } from '../../../api'
+import type { OutboundBody } from '../../../api'
 import { showConfigApplyResult } from '../../../configApply'
 
-export function OutboundImport({ serverId, source, onClose, onSaved, onSavingChange, formId, onReadyChange }: {
+export function OutboundImport({ serverId, onClose, onSaved, onSavingChange, formId, onReadyChange }: {
   serverId: number
-  source: 'external' | 'uri'
   onClose: () => void
   onSaved: () => void
   onSavingChange?: (saving: boolean) => void
   formId?: string
   onReadyChange?: (ready: boolean) => void
 }) {
-  const [nodes, setNodes] = useState<OutboundSource[]>([])
-  const [loading, setLoading] = useState(false)
-  const [group, setGroup] = useState<string>()
-  const [nodeId, setNodeId] = useState<number>()
   const [uri, setURI] = useState('')
   const [preview, setPreview] = useState<OutboundBody | null>(null)
   const [tag, setTag] = useState('')
@@ -24,32 +19,9 @@ export function OutboundImport({ serverId, source, onClose, onSaved, onSavingCha
   const [parsing, setParsing] = useState(false)
   const [saving, setSaving] = useState(false)
   const request = useRef<AbortController | null>(null)
-  const listRequest = useRef<AbortController | null>(null)
   const saveLock = useRef(false)
 
-  const loadNodes = async (signal: AbortSignal) => {
-    setLoading(true)
-    setError('')
-    try {
-      const rows = await listOutboundSources(serverId, signal)
-      if (!signal.aborted) setNodes(rows)
-    } catch (e) {
-      if (!signal.aborted) setError(errMsg(e))
-    } finally {
-      if (!signal.aborted) setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    const controller = new AbortController()
-    listRequest.current = controller
-    if (source === 'external') void loadNodes(controller.signal)
-    return () => {
-      controller.abort()
-      listRequest.current?.abort()
-      request.current?.abort()
-    }
-  }, [serverId, source])
+  useEffect(() => () => request.current?.abort(), [serverId])
 
   const invalidate = () => {
     request.current?.abort()
@@ -59,14 +31,13 @@ export function OutboundImport({ serverId, source, onClose, onSaved, onSavingCha
     setError('')
   }
 
-  const parse = async (id?: number) => {
+  const parse = async () => {
     invalidate()
     const controller = new AbortController()
     request.current = controller
     setParsing(true)
     try {
-      const body = await previewOutboundImport(serverId,
-        source === 'external' ? { custom_node_id: id } : { uri: uri.trim() }, controller.signal)
+      const body = await previewOutboundImport(serverId, { uri: uri.trim() }, controller.signal)
       if (controller.signal.aborted) return
       setPreview(body)
       setTag(body.tag)
@@ -102,85 +73,21 @@ export function OutboundImport({ serverId, source, onClose, onSaved, onSavingCha
   const canSave = !!preview && !!tag.trim() && !parsing
   useEffect(() => { onReadyChange?.(canSave) }, [canSave, onReadyChange])
 
-  const groups = new Map<string, number>()
-  for (const node of nodes) {
-    const name = node.group.trim()
-    groups.set(name, (groups.get(name) ?? 0) + 1)
-  }
-  const groupNodes = group === undefined ? [] : nodes.filter((node) => node.group.trim() === group)
   const settings = preview?.settings
   return (
     <Form id={formId} layout="vertical" className="fm-form fm-import-form" onFinish={save}>
-      {source === 'external' ? (
-        <>
-          <Form.Item label="节点分组">
-            <Select
-              aria-label="节点分组"
-              showSearch
-              optionFilterProp="label"
-              placeholder="先选择分组"
-              loading={loading}
-              disabled={saving || loading}
-              value={group}
-              notFoundContent="暂无分组，请先添加外部节点"
-              options={[...groups].map(([name, count]) => ({ value: name, label: `${name || '未分组'} · ${count}` }))}
-              onChange={(value: string) => { invalidate(); setNodeId(undefined); setGroup(value) }}
-            />
-          </Form.Item>
-          <Form.Item label="外部节点">
-            <Select
-              aria-label="外部节点"
-              showSearch
-              optionFilterProp="searchText"
-              placeholder={group === undefined ? '请先选择分组' : '搜索此分组的节点'}
-              loading={parsing}
-              disabled={saving || loading || group === undefined}
-              value={nodeId}
-              listHeight={224}
-              notFoundContent="没有匹配的节点"
-              options={groupNodes.map((node) => ({
-                value: node.id,
-                disabled: !!node.unavailable_reason,
-                label: node.name || '未命名节点',
-                searchText: [node.name, node.type, node.server].filter(Boolean).join(' '),
-                title: node.unavailable_reason || undefined,
-                protocol: node.type,
-                reason: node.unavailable_reason,
-              }))}
-              optionRender={(option) => <div>
-                <div className="fm-node-option">
-                  <span className="fm-node-option-name">{option.label}</span>
-                  <small>{option.data.protocol}</small>
-                </div>
-                {option.data.reason && <span className="fm-node-option-reason">不可用：{option.data.reason}</span>}
-              </div>}
-              onChange={(id: number) => { setNodeId(id); void parse(id) }}
-            />
-          </Form.Item>
-          <Button className="fm-import-refresh" type="text" size="small" disabled={saving || loading} onClick={() => {
-            invalidate()
-            setNodeId(undefined)
-            setGroup(undefined)
-            listRequest.current?.abort()
-            const controller = new AbortController()
-            listRequest.current = controller
-            void loadNodes(controller.signal)
-          }}>刷新节点列表</Button>
-        </>
-      ) : (
-        <Form.Item label="节点 URI" extra="一次解析一条节点分享链接。">
-          <Input.TextArea
-            aria-label="节点 URI"
-            autoSize={{ minRows: 3, maxRows: 7 }}
-            placeholder="粘贴节点链接，例如 vless://…"
-            className="mono"
-            value={uri}
-            disabled={saving}
-            onChange={(e) => { invalidate(); setURI(e.target.value) }}
-          />
-          <Button style={{ marginTop: 8 }} loading={parsing} disabled={!uri.trim() || saving} onClick={() => void parse()}>解析链接</Button>
-        </Form.Item>
-      )}
+      <Form.Item label="节点 URI" extra="一次解析一条节点分享链接。">
+        <Input.TextArea
+          aria-label="节点 URI"
+          autoSize={{ minRows: 3, maxRows: 7 }}
+          placeholder="粘贴节点链接，例如 vless://…"
+          className="mono"
+          value={uri}
+          disabled={saving}
+          onChange={(e) => { invalidate(); setURI(e.target.value) }}
+        />
+        <Button style={{ marginTop: 8 }} loading={parsing} disabled={!uri.trim() || saving} onClick={() => void parse()}>解析链接</Button>
+      </Form.Item>
       {error && <Alert type="error" showIcon message={error} style={{ marginBottom: 16 }} />}
       {preview && (
         <>
@@ -192,7 +99,7 @@ export function OutboundImport({ serverId, source, onClose, onSaved, onSavingCha
               <div><dt>安全</dt><dd>{settings?.settings?.tls?.reality?.enabled ? 'REALITY' : settings?.settings?.tls?.enabled ? 'TLS' : '未启用 TLS'}</dd></div>
             </dl>
           </section>
-          <Form.Item label="出站标签" required extra="独立保存，后续不随订阅自动更新。">
+          <Form.Item label="出站标签" required>
             <Input aria-label="出站标签" value={tag} disabled={saving} onChange={(e) => setTag(e.target.value)} />
           </Form.Item>
         </>

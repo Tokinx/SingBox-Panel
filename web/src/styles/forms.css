@@ -80,13 +80,6 @@
   .fm-form .fm-actions .ui-segmented-item-label { padding-inline: 4px; font-size: 13px; }
 }
 
-/* Compact external-node options: connection details live in the preview. */
-.fm-node-option { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.fm-node-option-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fm-node-option small { flex: none; color: var(--console-faint); font-size: 12px; font-weight: 400; }
-.fm-node-option-reason { display: block; margin-top: 3px; color: var(--console-muted); font-size: 12px; line-height: 1.5; white-space: normal; overflow-wrap: anywhere; }
-.ui-select-item:has(.fm-node-option-reason) { opacity: 1; }
-
 /* Dialog forms use framed parameter sections, matching the panel cards. */
 .fm-source-picker { min-width: 0; padding: 0; margin: 0 0 20px; border: 0; }
 .fm-source-picker .ui-pills-row { margin-bottom: 0; }
@@ -108,7 +101,6 @@
 .fm-modal .fm-group-fold[open] > summary { border-bottom: 1px solid var(--console-border); }
 .fm-modal .fm-group-fold > .fm-grid { padding: 20px 16px 0; }
 .fm-import-form > .ui-form-item:last-child { margin-bottom: 0; }
-.fm-import-refresh.ui-btn { padding-inline: 0; color: var(--console-muted); margin-top: -8px; margin-bottom: 12px; }
 .fm-import-preview { margin: 8px 0 20px; border: 1px solid var(--console-border); border-radius: var(--app-radius-pop); overflow: hidden; }
 .fm-import-preview h3 { display: flex; align-items: center; justify-content: space-between; margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--console-border); font-size: 13px; font-weight: 500; }
 .fm-import-preview .ui-kv { grid-template-columns: 90px minmax(0, 1fr); font-size: 13px; }

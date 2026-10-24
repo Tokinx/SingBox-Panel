@@ -2,11 +2,11 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { OutboundImport } from './OutboundImport'
 import { OutboundForm } from './RoutingForms'
-import { createOutbound, listOutboundSources, previewOutboundImport } from '../../../api'
+import { createOutbound, previewOutboundImport } from '../../../api'
 import type { OutboundBody } from '../../../api'
 
 vi.mock('../../../api', () => ({
-  createOutbound: vi.fn(), listOutboundSources: vi.fn(), previewOutboundImport: vi.fn(),
+  createOutbound: vi.fn(), previewOutboundImport: vi.fn(),
   errMsg: (e: Error) => e.message,
 }))
 vi.mock('../../../configApply', () => ({ showConfigApplyResult: vi.fn() }))
@@ -30,7 +30,6 @@ beforeEach(() => {
   })
   Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, writable: true, value: vi.fn() })
   vi.mocked(previewOutboundImport).mockResolvedValue(draft)
-  vi.mocked(listOutboundSources).mockResolvedValue([{ id: 8, name: 'External node', group: 'Asia', type: 'trojan', server: 'node.example.com', server_port: 443 }])
   vi.mocked(createOutbound).mockResolvedValue({ apply_state: 'pending' } as Awaited<ReturnType<typeof createOutbound>>)
 })
 afterEach(() => {
@@ -44,10 +43,10 @@ const parseURI = () => {
   fireEvent.change(screen.getByLabelText('节点 URI'), { target: { value: 'trojan://secret@node.example.com:443' } })
   fireEvent.click(screen.getByRole('button', { name: '解析链接' }))
 }
-describe('outbound imports', () => {
+describe('outbound URI imports', () => {
   it('saves the complete parsed configuration and allows renaming', async () => {
     const onClose = vi.fn(), onSaved = vi.fn()
-    render(<OutboundImport serverId={3} source="uri" onClose={onClose} onSaved={onSaved} />)
+    render(<OutboundImport serverId={3} onClose={onClose} onSaved={onSaved} />)
     expect(saveButton().disabled).toBe(true)
     parseURI()
     await screen.findByLabelText('出站标签')
@@ -60,7 +59,7 @@ describe('outbound imports', () => {
   it('discards an in-flight preview when the URI changes', async () => {
     let resolve!: (value: OutboundBody) => void
     vi.mocked(previewOutboundImport).mockReturnValue(new Promise((done) => { resolve = done }))
-    render(<OutboundImport serverId={3} source="uri" onClose={vi.fn()} onSaved={vi.fn()} />)
+    render(<OutboundImport serverId={3} onClose={vi.fn()} onSaved={vi.fn()} />)
     parseURI()
     fireEvent.change(screen.getByLabelText('节点 URI'), { target: { value: 'socks5://new.example.com:1080' } })
     await act(async () => resolve(draft))
@@ -71,7 +70,7 @@ describe('outbound imports', () => {
   it('keeps the draft and displays the error when saving fails', async () => {
     vi.mocked(createOutbound).mockRejectedValue(new Error('标签已存在'))
     const onClose = vi.fn()
-    render(<OutboundImport serverId={3} source="uri" onClose={onClose} onSaved={vi.fn()} />)
+    render(<OutboundImport serverId={3} onClose={onClose} onSaved={vi.fn()} />)
     parseURI()
     await screen.findByLabelText('出站标签')
     fireEvent.click(saveButton())
@@ -80,48 +79,6 @@ describe('outbound imports', () => {
     expect(onClose).not.toHaveBeenCalled()
     expect(saveButton().disabled).toBe(false)
   })
-  it('loads external nodes and resolves the selected node ID', async () => {
-    render(<OutboundImport serverId={3} source="external" onClose={vi.fn()} onSaved={vi.fn()} />)
-    await waitFor(() => expect((screen.getByRole('combobox', { name: '节点分组' }) as HTMLButtonElement).disabled).toBe(false))
-    fireEvent.click(screen.getByRole('combobox', { name: '节点分组' }))
-    fireEvent.click(await screen.findByText('Asia · 1'))
-    fireEvent.click(screen.getByRole('combobox', { name: '外部节点' }))
-    fireEvent.click(await screen.findByText('External node'))
-    await screen.findByLabelText('出站标签')
-    expect(previewOutboundImport).toHaveBeenCalledWith(3, { custom_node_id: 8 }, expect.any(AbortSignal))
-    fireEvent.click(saveButton())
-    await waitFor(() => expect(createOutbound).toHaveBeenCalledWith(3, draft))
-  })
-  it('clears the previous node and pending preview when changing groups', async () => {
-    vi.mocked(listOutboundSources).mockResolvedValue([
-      { id: 8, name: 'Asia node', group: 'Asia', type: 'trojan' },
-      { id: 9, name: 'Europe node', group: 'Europe', type: 'trojan' },
-      { id: 10, name: 'Ungrouped node', group: '', type: 'socks' },
-    ])
-    let resolve!: (value: OutboundBody) => void
-    vi.mocked(previewOutboundImport).mockReturnValue(new Promise((done) => { resolve = done }))
-    render(<OutboundImport serverId={3} source="external" onClose={vi.fn()} onSaved={vi.fn()} />)
-    expect((screen.getByRole('combobox', { name: '外部节点' }) as HTMLButtonElement).disabled).toBe(true)
-    await waitFor(() => expect((screen.getByRole('combobox', { name: '节点分组' }) as HTMLButtonElement).disabled).toBe(false))
-    fireEvent.click(screen.getByRole('combobox', { name: '节点分组' }))
-    fireEvent.click(await screen.findByText('Asia · 1'))
-    fireEvent.click(screen.getByRole('combobox', { name: '外部节点' }))
-    fireEvent.click(await screen.findByText('Asia node'))
-    fireEvent.click(screen.getByRole('combobox', { name: '节点分组' }))
-    fireEvent.click(await screen.findByText('Europe · 1'))
-    await act(async () => resolve(draft))
-    expect(screen.queryByLabelText('出站标签')).toBeNull()
-    expect(saveButton().disabled).toBe(true)
-    fireEvent.click(screen.getByRole('combobox', { name: '外部节点' }))
-    expect(await screen.findByText('Europe node')).toBeTruthy()
-    expect(screen.queryByText('Asia node')).toBeNull()
-    fireEvent.click(screen.getByRole('combobox', { name: '节点分组' }))
-    fireEvent.click(await screen.findByText('未分组 · 1'))
-    fireEvent.click(screen.getByRole('combobox', { name: '外部节点' }))
-    expect(await screen.findByText('Ungrouped node')).toBeTruthy()
-    expect(createOutbound).not.toHaveBeenCalled()
-  })
-
   it('submits an import from the fixed modal footer', async () => {
     const onClose = vi.fn(), onSaved = vi.fn()
     render(<OutboundForm serverId={3} outbound={null} open onClose={onClose} onSaved={onSaved} />)

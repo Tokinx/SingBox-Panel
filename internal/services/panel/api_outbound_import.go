@@ -41,44 +41,6 @@ func outboundFromClientNode(cn singbox.ClientNode) (outboundReq, error) {
 	return outboundReq{Tag: name, Type: o.Type, Settings: settings}, err
 }
 
-func (a *App) listOutboundSources(c *gin.Context) {
-	sid, ok := uintParam(c, "id")
-	if !ok || !a.requireManagedMode(c, sid) {
-		return
-	}
-	c.Header("Cache-Control", "no-store")
-	var nodes []model.CustomNode
-	if err := a.db.Where("enabled = ? AND hidden_by_subscription_rule = ?", true, false).Order("sort_order, id").Find(&nodes).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	validationTag, err := a.availableOutboundTag(sid, "imported-outbound")
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	rows := make([]gin.H, 0, len(nodes))
-	for i := range nodes {
-		n := &nodes[i]
-		row := gin.H{"id": n.ID, "name": n.Name, "group": n.Group}
-		cn, valid := a.customNodeToNode(n)
-		if !valid {
-			row["unavailable_reason"] = "节点参数无法解析"
-		} else {
-			row["type"], row["server"], row["server_port"] = cn.typ, cn.server, cn.port
-			body, err := outboundFromClientNode(cn.clientNode())
-			if err == nil {
-				err = a.validateOutbound(a.db, sid, 0, validationTag, body.Type, body.Settings)
-			}
-			if err != nil {
-				row["unavailable_reason"] = err.Error()
-			}
-		}
-		rows = append(rows, row)
-	}
-	c.JSON(http.StatusOK, gin.H{"nodes": rows})
-}
-
 func (a *App) availableOutboundTag(serverID uint, name string) (string, error) {
 	base := strings.TrimSpace(strings.NewReplacer("\r", " ", "\n", " ", "\t", " ").Replace(name))
 	if base == "" {
@@ -100,7 +62,7 @@ func (a *App) availableOutboundTag(serverID uint, name string) (string, error) {
 }
 
 // Preview is read-only. Saving uses the normal createOutbound validation and
-// config-apply path; imported nodes are independent snapshots of their source.
+// config-apply path; the URI is parsed into an independent outbound configuration.
 func (a *App) previewOutboundImport(c *gin.Context) {
 	sid, ok := uintParam(c, "id")
 	if !ok || !a.requireManagedMode(c, sid) {
@@ -108,41 +70,24 @@ func (a *App) previewOutboundImport(c *gin.Context) {
 	}
 	c.Header("Cache-Control", "no-store")
 	var req struct {
-		CustomNodeID uint   `json:"custom_node_id"`
-		URI          string `json:"uri"`
+		URI string `json:"uri"`
 	}
 	if !bindJSON(c, &req) {
 		return
 	}
 	req.URI = strings.TrimSpace(req.URI)
-	if (req.CustomNodeID == 0) == (req.URI == "") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "请选择一个外部节点，或填写一条节点 URI"})
+	if req.URI == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请填写一条节点 URI"})
 		return
 	}
-	var cn singbox.ClientNode
-	if req.CustomNodeID != 0 {
-		var source model.CustomNode
-		if err := a.db.Where("enabled = ? AND hidden_by_subscription_rule = ?", true, false).First(&source, req.CustomNodeID).Error; err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "外部节点不存在或已停用"})
-			return
-		}
-		n, valid := a.customNodeToNode(&source)
-		if !valid {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "外部节点参数无法解析"})
-			return
-		}
-		cn = n.clientNode()
-	} else {
-		if len(req.URI) > 65536 || strings.ContainsAny(req.URI, "\r\n") {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "请一次填写一条节点 URI（最多 64 KB）"})
-			return
-		}
-		var err error
-		cn, err = singbox.ParseShareLink(req.URI)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "链接解析失败：" + err.Error()})
-			return
-		}
+	if len(req.URI) > 65536 || strings.ContainsAny(req.URI, "\r\n") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请一次填写一条节点 URI（最多 64 KB）"})
+		return
+	}
+	cn, err := singbox.ParseShareLink(req.URI)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "链接解析失败：" + err.Error()})
+		return
 	}
 	body, err := outboundFromClientNode(cn)
 	if err == nil {
