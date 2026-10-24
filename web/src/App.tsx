@@ -1,7 +1,8 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useAuth } from './store'
-import { AntdAppHolder } from './antdHelper'
+import { DialogHost } from './ui/dialogs'
+import { ToastHost } from './ui/feedback'
 import { RouteErrorBoundary } from './components/RouteErrorBoundary'
 
 // Each screen is loaded only when its route is visited. This keeps the login
@@ -66,7 +67,8 @@ export default function App() {
   const location = useLocation()
   return (
     <>
-      <AntdAppHolder />
+      <DialogHost />
+      <ToastHost />
       <RouteErrorBoundary resetKey={location.pathname}>
         <Suspense fallback={<PageFallback />}>
         <Routes>

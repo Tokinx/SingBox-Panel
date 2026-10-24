@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type DragEvent, type PointerEvent as ReactPointerEvent } from 'react'
-import { Button, Dropdown, Form, Grid, Input, Modal, Segmented, Select, Typography, message } from 'antd'
-import { DownOutlined, EditOutlined, HolderOutlined, MoreOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
+import { Button, Dropdown, Form, Grid, Input, Modal, Segmented, Select, Typography, message } from '../../../ui'
+import { ChevronDown, Pencil, GripVertical, Ellipsis, Plus, Search } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { createServer, deleteServer, errMsg, getOverview, getServersMeta, installSingbox, isCanceledRequest, updateAllAgents, updateServer, updateServerOrder } from '../../../api'
 import type { Server } from '../../../types'
@@ -209,10 +209,10 @@ export default function Servers() {
 
   const onDelete = (s: Server) => {
     Modal.confirm({
-      title: `删除 ${s.name}？`,
+      title: '删除服务器',
       okText: '删除',
       okType: 'danger',
-      content: '仅从面板移除，服务器上的程序和配置不受影响。',
+      content: `确认从面板移除「${s.name}」？服务器上的程序和配置不受影响。`,
       onOk: async () => {
         try {
           await deleteServer(s.id)
@@ -357,9 +357,9 @@ export default function Servers() {
             { key: 'singbox', label: '更新 sing-box', disabled: updatingSingbox, onClick: handleUpdateSingbox },
             { key: 'agent', label: '同步 Agent', disabled: updatingAll, onClick: handleUpdateAllAgents },
           ] }}>
-            <Button loading={updatingSingbox || updatingAll}>批量维护 <DownOutlined style={{ fontSize: 10 }} /></Button>
+            <Button loading={updatingSingbox || updatingAll}>批量维护 <ChevronDown style={{ fontSize: 10 }} /></Button>
           </Dropdown>
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新增服务器</Button>
+          <Button type="primary" icon={<Plus />} onClick={openCreate}>新增服务器</Button>
         </>}
       />
       <Stats items={[
@@ -377,7 +377,7 @@ export default function Servers() {
           { key: 'online', label: '在线', count: online.length },
           { key: 'offline', label: '离线', count: servers.length - online.length },
         ]}
-        actions={<Input allowClear className="srv-search" prefix={<SearchOutlined />} placeholder="搜索" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="搜索服务器" />}
+        actions={<Input allowClear className="srv-search" prefix={<Search />} placeholder="搜索" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="搜索服务器" />}
       />
       <RequestState loading={loading} error={loadError} hasData={servers.length > 0} empty={!loading && !loadError && servers.length === 0} emptyDescription="暂无服务器" onRetry={() => load()}>
       <div className="srv-list" role="list">
@@ -393,7 +393,7 @@ export default function Servers() {
               data-server-id={s.id}
               className={`srv-row${s.online ? '' : ' is-offline'}${draggingID === s.id ? ' is-dragging' : ''}${dropClass}`}
               onClick={(e) => {
-                if ((e.target as Element).closest('button, a, input, [role="button"], .ant-dropdown') || window.getSelection()?.toString()) return
+                if ((e.target as Element).closest('button, a, input, [role="button"], .ui-dropdown') || window.getSelection()?.toString()) return
                 open_(s)
               }}
               onDragOver={(e) => {
@@ -438,7 +438,7 @@ export default function Servers() {
                   pointerDropRef.current = null
                 }}
               >
-                <HolderOutlined />
+                <GripVertical />
               </span>
               <div className="srv-name">
                 <a href={`/admin/servers/${s.id}`} onClick={(e) => { e.preventDefault(); open_(s) }}>{s.name}</a>
@@ -459,14 +459,14 @@ export default function Servers() {
               </div>
               <div className="srv-inbounds"><span className="srv-label">入站 </span>{s.inbounds?.length ?? 0}</div>
               <div className="ui-row-actions">
-                <Button size="small" type="text" icon={<EditOutlined />} aria-label={`编辑 ${s.name}`} onClick={() => openEdit(s)} />
+                <Button size="small" type="text" icon={<Pencil />} aria-label={`编辑 ${s.name}`} onClick={() => openEdit(s)} />
                 <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: [
                   { key: 'up', label: '上移', disabled: !canSort || position <= 0 || sorting, onClick: () => moveServerByKeyboard(s, -1) },
                   { key: 'down', label: '下移', disabled: !canSort || position >= servers.length - 1 || sorting, onClick: () => moveServerByKeyboard(s, 1) },
                   { type: 'divider' },
                   { key: 'delete', label: '删除', danger: true, onClick: () => onDelete(s) },
                 ] }}>
-                  <Button size="small" type="text" icon={<MoreOutlined />} aria-label={`${s.name} 更多操作`} />
+                  <Button size="small" type="text" icon={<Ellipsis />} aria-label={`${s.name} 更多操作`} />
                 </Dropdown>
               </div>
             </div>

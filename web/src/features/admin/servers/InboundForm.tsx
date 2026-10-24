@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Button, Form, Input, InputNumber, Modal, Select, Space, Switch, type FormInstance } from 'antd'
+import { Button, Form, Input, InputNumber, Modal, Select, Space, Switch, type FormInstance } from '../../../ui'
 import { createInbound, updateInbound } from '../../../api'
 import { applyWithToast } from '../../../configApply'
 import type { Inbound, InboundSettings, InboundType } from '../../../types'

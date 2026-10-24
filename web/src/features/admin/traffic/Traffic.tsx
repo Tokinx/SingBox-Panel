@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { message } from 'antd'
+import { message } from '../../../ui'
 import { useSearchParams } from 'react-router-dom'
 import { errMsg, listServers } from '../../../api'
 import type { Server } from '../../../types'

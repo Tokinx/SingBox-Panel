@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
-import { Alert, Button, Spin } from 'antd'
-import { ReloadOutlined } from '@ant-design/icons'
+import { Alert, Button, Spin } from '../ui'
+import { RotateCw } from 'lucide-react'
 import '../styles/settings-user.css'
 
 function Message({ title, detail }: { title: string; detail?: ReactNode }) {
@@ -33,7 +33,7 @@ export function RequestState({
   }
 
   const retry = onRetry
-    ? <Button size="small" type="text" icon={<ReloadOutlined />} onClick={onRetry} aria-label="重试">重试</Button>
+    ? <Button size="small" type="text" icon={<RotateCw />} onClick={onRetry} aria-label="重试">重试</Button>
     : undefined
 
   if (error && !hasData) {

@@ -12,8 +12,8 @@
 .um-stack.mono small { font-size: 11.5px; }
 .um-action-gap { visibility: hidden; pointer-events: none; }
 
-.um-table .ant-table-tbody > tr > td { padding-top: 12px; padding-bottom: 12px; }
-.um-table .ant-table-tbody > tr.ant-table-row:hover > td { background: var(--console-surface); }
+.um-table .ui-table-tbody > tr > td { padding-top: 12px; padding-bottom: 12px; }
+.um-table .ui-table-tbody > tr.ui-table-row:hover > td { background: var(--console-surface); }
 .um-clickable-row { cursor: pointer; }
 
 /* ---------- External nodes ---------- */
@@ -48,14 +48,14 @@
 /* ---------- Modals ---------- */
 .um-group { padding: 16px 0 4px; }
 .um-group + .um-group { margin-top: 12px; border-top: 1px solid var(--console-border); }
-.um-modal .ant-modal-body > .um-group:first-child { padding-top: 4px; }
+.um-modal .ui-modal-body > .um-group:first-child { padding-top: 4px; }
 .um-group-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; font-size: 12.5px; }
 .um-group-head h4, .um-form-group > h4 { margin: 0; font-size: 13px; font-weight: 600; color: var(--console-ink); }
 .um-form-group { margin-top: 4px; padding-top: 16px; border-top: 1px solid var(--console-border); }
 .um-form-group > h4 { margin-bottom: 12px; }
 .um-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; }
 .um-switch-row { display: flex; gap: 32px; }
-.um-switch-row .ant-form-item { margin-bottom: 4px; }
+.um-switch-row .ui-form-item { margin-bottom: 4px; }
 
 .um-mini-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-bottom: 12px; border: 1px solid var(--console-border); border-radius: var(--app-radius); overflow: hidden; }
 .um-mini-stats.is-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -72,14 +72,14 @@
 .um-rule-head, .um-rule-row { display: grid; grid-template-columns: 24px 132px minmax(0, 1fr) minmax(0, 1fr) 84px; gap: 8px; align-items: start; }
 .um-rule-head { padding: 0 0 6px; color: var(--console-faint); font-size: 12px; }
 .um-rule-row { margin-bottom: 8px; }
-.um-rule-row .ant-form-item { margin: 0; min-width: 0; }
+.um-rule-row .ui-form-item { margin: 0; min-width: 0; }
 .um-rule-order { display: grid; place-items: center; height: 32px; color: var(--console-faint); }
 .um-rule-none { display: flex; align-items: center; height: 32px; padding-left: 4px; }
 .um-rule-actions { height: 32px; }
 
 /* ---------- Assign modal ---------- */
-.um-access-assign-modal .ant-modal-body > .request-state-loading { min-height: min(360px, calc(50 * var(--dvh))); }
-.um-access-assign-modal .ant-modal-body { padding-top: 8px; }
+.um-access-assign-modal .ui-modal-body > .request-state-loading { min-height: min(360px, calc(50 * var(--dvh))); }
+.um-access-assign-modal .ui-modal-body { padding-top: 8px; }
 .um-access-note { margin: 0 0 12px; color: var(--console-muted); font-size: 12.5px; }
 .um-access-modal-body { display: flex; flex-direction: column; border: 1px solid var(--console-border); border-radius: var(--app-radius); overflow: hidden; }
 .um-access-modal-group { flex: none; }
@@ -146,9 +146,9 @@
 }
 @media (max-width: 767px) {
   .um-page .ui-pills-row { align-items: stretch; }
-  .um-page .ui-pills-actions:has(.ant-input-affix-wrapper, .ant-select) { flex: 1 1 100%; }
+  .um-page .ui-pills-actions:has(.ui-input-affix-wrapper, .ui-select) { flex: 1 1 100%; }
   .um-search, .um-filter-search, .um-filter-group { flex: 1 1 0; width: auto; min-width: 0; }
-  .um-page .ui-pills-actions > .ant-btn { flex: none; }
+  .um-page .ui-pills-actions > .ui-btn { flex: none; }
   .um-mini-stats, .um-mini-stats.is-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .um-mini-stats > div:nth-child(odd) { border-left: 0; }
   .um-mini-stats > div:nth-child(n + 3) { border-top: 1px solid var(--console-border); }
@@ -171,7 +171,7 @@
   .um-access-footer > span { display: none; }
   .um-access-footer-actions { flex: 1; justify-content: flex-end; }
 }
-.um-detail .ant-typography-copy, .um-detail .ant-typography-copy:hover { color: var(--console-faint); }
+.um-detail .ui-typography-copy, .um-detail .ui-typography-copy:hover { color: var(--console-faint); }
 
 /* Node column: server / external-group chips. */
 .um-chips { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; max-width: 360px; }

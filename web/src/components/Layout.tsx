@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Dropdown } from 'antd'
-import type { MenuProps } from 'antd'
-import { CheckOutlined, DesktopOutlined, DownloadOutlined, DownOutlined, LogoutOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons'
+import { Dropdown } from '../ui'
+import type { MenuProps } from '../ui'
+import { Check, Monitor, Download, ChevronDown, LogOut, Moon, Sun } from 'lucide-react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { listServers, logoutSession } from '../api'
 import { useAuth } from '../store'
@@ -42,7 +42,7 @@ function ServerSwitcher({ id, onPick }: { id: number | null; onPick: (id: number
   const current = servers.find((s) => s.id === id)
   const items: MenuProps['items'] = servers.map((s) => ({
     key: String(s.id),
-    label: <span className="app-switch-item"><i className={`app-dot${s.online ? '' : ' is-off'}`} />{s.name}{s.id === id && <CheckOutlined className="app-switch-check" />}</span>,
+    label: <span className="app-switch-item"><i className={`app-dot${s.online ? '' : ' is-off'}`} />{s.name}{s.id === id && <Check className="app-switch-check" />}</span>,
   }))
   return <>
     <span className="app-crumb-sep" aria-hidden="true">/</span>
@@ -50,7 +50,7 @@ function ServerSwitcher({ id, onPick }: { id: number | null; onPick: (id: number
       <button type="button" className="app-switch" aria-label="切换服务器">
         <i className={`app-dot${current && !current.online ? ' is-off' : ''}`} />
         <span className="app-switch-name">{current?.name ?? (failed ? '服务器' : '…')}</span>
-        <DownOutlined className="app-switch-chev" />
+        <ChevronDown className="app-switch-chev" />
       </button>
     </Dropdown>
   </>
@@ -58,14 +58,14 @@ function ServerSwitcher({ id, onPick }: { id: number | null; onPick: (id: number
 
 function ThemeButton({ scope }: { scope: 'admin' | 'user' }) {
   const { themeId, resolvedThemeId, setTheme } = useThemePreference(scope)
-  const icon = themeId === 'auto' ? <DesktopOutlined /> : resolvedThemeId === 'dark' ? <MoonOutlined /> : <SunOutlined />
+  const icon = themeId === 'auto' ? <Monitor /> : resolvedThemeId === 'dark' ? <Moon /> : <Sun />
   return <Dropdown trigger={['click']} placement="bottomRight" menu={{
     selectable: true,
     selectedKeys: [themeId],
     items: [
-      { key: 'auto', icon: <DesktopOutlined />, label: '跟随系统' },
-      { key: 'blue', icon: <SunOutlined />, label: '浅色' },
-      { key: 'dark', icon: <MoonOutlined />, label: '深色' },
+      { key: 'auto', icon: <Monitor />, label: '跟随系统' },
+      { key: 'blue', icon: <Sun />, label: '浅色' },
+      { key: 'dark', icon: <Moon />, label: '深色' },
     ],
     onClick: ({ key }) => setTheme(parseConsoleTheme(key)),
   }}>
@@ -89,9 +89,9 @@ function AccountBar({ scope }: { scope: 'admin' | 'user' }) {
     <span className="app-account-name" title={`${name} · ${role}`}>{name}</span>
     <span className="app-account-sep" aria-hidden="true" />
     <ThemeButton scope={scope} />
-    {canInstall && <button type="button" className="app-icon-btn" aria-label="安装到桌面" title="安装到桌面" onClick={() => void install().catch(() => undefined)}><DownloadOutlined /></button>}
+    {canInstall && <button type="button" className="app-icon-btn" aria-label="安装到桌面" title="安装到桌面" onClick={() => void install().catch(() => undefined)}><Download /></button>}
     <span className="app-account-sep" aria-hidden="true" />
-    <button type="button" className="app-icon-btn" aria-label="退出登录" title="退出登录" onClick={signOut} disabled={leaving}><LogoutOutlined /></button>
+    <button type="button" className="app-icon-btn" aria-label="退出登录" title="退出登录" onClick={signOut} disabled={leaving}><LogOut /></button>
   </div>
 }
 

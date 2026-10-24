@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { Button, Checkbox, Form, Input, InputNumber, Modal, Segmented, Select, Space, Switch } from 'antd'
+import { Button, Checkbox, Form, Input, InputNumber, Modal, Segmented, Select, Space, Switch } from '../../../ui'
 import {
   createOutbound,
   createRule,

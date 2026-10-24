@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Form, Input, Select, Space } from 'antd'
+import { Alert, Button, Form, Input, Select, Space } from '../../../ui'
 import { createOutbound, errMsg, listOutboundSources, previewOutboundImport } from '../../../api'
 import type { OutboundBody, OutboundSource } from '../../../api'
 import { showConfigApplyResult } from '../../../configApply'

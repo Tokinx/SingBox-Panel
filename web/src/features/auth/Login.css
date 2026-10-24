@@ -43,16 +43,16 @@
   letter-spacing: -0.3px;
 }
 
-.login-card .ant-form-item {
+.login-card .ui-form-item {
   margin-bottom: 18px;
 }
 
-.login-card .ant-input-lg,
-.login-card .ant-input-affix-wrapper-lg {
+.login-card .ui-input-lg,
+.login-card .ui-input-affix-wrapper-lg {
   font-size: 14px;
 }
 
-.login-card button.ant-input-password-icon {
+.login-card button.ui-input-password-icon {
   display: inline-flex;
   width: 28px;
   height: 24px;
@@ -67,11 +67,11 @@
   cursor: pointer;
 }
 
-.login-card button.ant-input-password-icon:hover {
+.login-card button.ui-input-password-icon:hover {
   color: var(--console-ink);
 }
 
-.login-card button.ant-input-password-icon:focus-visible {
+.login-card button.ui-input-password-icon:focus-visible {
   outline: 2px solid var(--console-focus);
   outline-offset: 1px;
 }
@@ -92,9 +92,9 @@
     padding: 28px 20px 22px;
   }
 
-  .login-card .ant-input-lg,
-  .login-card .ant-input-affix-wrapper-lg,
-  .login-card .ant-input-affix-wrapper-lg > input.ant-input {
+  .login-card .ui-input-lg,
+  .login-card .ui-input-affix-wrapper-lg,
+  .login-card .ui-input-affix-wrapper-lg > input.ui-input {
     font-size: 16px;
   }
 }

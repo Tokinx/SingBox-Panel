@@ -3,10 +3,10 @@
 /* ---------- Request state ---------- */
 .request-state { width: 100%; padding: 0; animation: none; }
 .request-state-loading { min-height: 160px; display: flex; align-items: center; justify-content: center; gap: 0; color: var(--console-faint); }
-.request-state-loading .ant-spin-dot-item { background: var(--console-faint); }
+.request-state-loading .ui-spin-dot-item { background: var(--console-faint); }
 .request-state-alert { margin-bottom: 16px; padding: 8px 12px; align-items: center; }
-.request-state-alert .ant-alert-icon { margin-inline-end: 10px; }
-.request-state-alert .ant-alert-action { margin-inline-start: 12px; }
+.request-state-alert .ui-alert-icon { margin-inline-end: 10px; }
+.request-state-alert .ui-alert-action { margin-inline-start: 12px; }
 .request-state-msg { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; font-size: 13px; }
 .request-state-msg > b { font-weight: 600; color: var(--console-ink); }
 .request-state-msg > span { color: var(--console-muted); overflow-wrap: anywhere; }
@@ -49,14 +49,14 @@
 .settings-file .ui-row-actions { flex: none; }
 .settings-restore { padding: 0; }
 .settings-restore .settings-dragger { display: block; padding: 20px 20px 16px; }
-.settings-restore .ant-upload-wrapper .ant-upload-drag { border: 1px dashed var(--console-border-strong); border-radius: var(--app-radius); background: var(--console-surface); }
-.settings-restore .ant-upload-wrapper .ant-upload-drag:not(.ant-upload-disabled):hover { border-color: var(--console-ink); }
-.settings-restore .ant-upload-wrapper .ant-upload-drag .ant-upload-btn { padding: 28px 16px; }
-.settings-restore .ant-upload-drag-icon { margin-bottom: 8px !important; }
-.settings-restore .ant-upload-wrapper .ant-upload-drag p.ant-upload-drag-icon .anticon { color: var(--console-faint); font-size: 32px; }
-.settings-restore .ant-upload-wrapper .ant-upload-drag p.ant-upload-text { margin-bottom: 2px; font-size: 14px; color: var(--console-ink); }
-.settings-restore .ant-upload-wrapper .ant-upload-drag p.ant-upload-hint { color: var(--console-faint); }
-.settings-restore .ant-upload-list { margin-top: 4px; }
+.settings-restore .ui-upload-wrapper .ui-upload-drag { border: 1px dashed var(--console-border-strong); border-radius: var(--app-radius); background: var(--console-surface); }
+.settings-restore .ui-upload-wrapper .ui-upload-drag:not(.ui-upload-disabled):hover { border-color: var(--console-ink); }
+.settings-restore .ui-upload-wrapper .ui-upload-drag .ui-upload-btn { padding: 28px 16px; }
+.settings-restore .ui-upload-drag-icon { margin-bottom: 8px !important; }
+.settings-restore .ui-upload-wrapper .ui-upload-drag p.ui-upload-drag-icon .anticon { color: var(--console-faint); font-size: 32px; }
+.settings-restore .ui-upload-wrapper .ui-upload-drag p.ui-upload-text { margin-bottom: 2px; font-size: 14px; color: var(--console-ink); }
+.settings-restore .ui-upload-wrapper .ui-upload-drag p.ui-upload-hint { color: var(--console-faint); }
+.settings-restore .ui-upload-list { margin-top: 4px; }
 .settings-restore .settings-card-foot .settings-note { color: var(--console-muted); }
 
 /* ---------- User subscription page ---------- */
@@ -89,10 +89,10 @@
 .sub-qr-box { padding: 12px; border: 1px solid var(--console-border); border-radius: var(--app-radius); background: #fff; line-height: 0; }
 .sub-params { grid-template-columns: 120px minmax(0, 1fr); }
 .sub-params dt, .sub-params dd { padding: 9px 16px; font-size: 13px; }
-.sub-params .ant-typography { color: var(--console-ink); word-break: break-all; }
-.sub-detail .ant-typography-copy, .settings-page .ant-typography-copy { color: var(--console-faint) !important; }
-.sub-detail .ant-typography-copy:hover, .settings-page .ant-typography-copy:hover { color: var(--console-ink) !important; }
-.sub-detail .ant-typography-copy-success { color: var(--console-success) !important; }
+.sub-params .ui-typography { color: var(--console-ink); word-break: break-all; }
+.sub-detail .ui-typography-copy, .settings-page .ui-typography-copy { color: var(--console-faint) !important; }
+.sub-detail .ui-typography-copy:hover, .settings-page .ui-typography-copy:hover { color: var(--console-ink) !important; }
+.sub-detail .ui-typography-copy-success { color: var(--console-success) !important; }
 .sub-link { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border: 1px solid var(--console-border); border-radius: var(--app-radius); background: var(--console-surface); }
 .sub-link-text { flex: 1; min-width: 0; color: var(--console-muted); word-break: break-all; max-height: 88px; overflow-y: auto; }
 
@@ -111,10 +111,10 @@
 
 /* Install a specific release (update / reinstall / rollback). */
 .settings-release-label { font-size: 13px; color: var(--console-muted); }
-.settings-release-select.ant-select { min-width: 220px; }
+.settings-release-select.ui-select { min-width: 220px; }
 .settings-release-option { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 .settings-release-option .ui-tag { height: 18px; padding: 0 6px; font-size: 11px; }
 @media (max-width: 767px) {
   .settings-release-picker .settings-actions { width: 100%; }
-  .settings-release-select.ant-select { flex: 1; min-width: 0; }
+  .settings-release-select.ui-select { flex: 1; min-width: 0; }
 }

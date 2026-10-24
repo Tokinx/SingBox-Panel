@@ -1,4 +1,4 @@
-import { message } from './antdHelper'
+import { message } from './ui/feedback'
 import { errMsg, type ConfigApplyResult } from './api'
 
 export function isConfigApplyResult(value: unknown): value is ConfigApplyResult {

@@ -115,7 +115,7 @@ describe('outbound imports', () => {
     render(<OutboundForm serverId={3} outbound={null} open onClose={onClose} onSaved={onSaved} />)
     fireEvent.click(screen.getByRole('tab', { name: 'URI 导入' }))
     expect(saveButton().disabled).toBe(true)
-    expect(saveButton().closest('.ant-modal-footer')).not.toBeNull()
+    expect(saveButton().closest('.ui-modal-footer')).not.toBeNull()
     parseURI()
     await screen.findByLabelText('出站标签')
     await waitFor(() => expect(saveButton().disabled).toBe(false))

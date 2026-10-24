@@ -1,5 +1,5 @@
-import { Button, Dropdown } from 'antd'
-import { DownOutlined, ReloadOutlined } from '@ant-design/icons'
+import { Button, Dropdown } from '../../../ui'
+import { ChevronDown, RotateCw } from 'lucide-react'
 import type { Server } from '../../../types'
 import { PageHeader, Status } from '../../../ui/Page'
 
@@ -38,7 +38,7 @@ export function ServerOverviewCard({
       {server.os && <span>{server.os}</span>}
     </>}
     actions={<>
-      <Button icon={<ReloadOutlined />} loading={refreshing} onClick={onRefresh} aria-label="刷新状态" title="刷新状态" />
+      <Button icon={<RotateCw />} loading={refreshing} onClick={onRefresh} aria-label="刷新状态" title="刷新状态" />
       <Button loading={exportLoading} onClick={onExport}>导出订阅</Button>
       <Button onClick={onEditConfig}>配置文件</Button>
       <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: [
@@ -51,7 +51,7 @@ export function ServerOverviewCard({
         { key: 'uninstall-singbox', label: '卸载 sing-box', danger: true, disabled: !server.online || !server.singbox_installed || !!busy, onClick: onUninstallSingbox },
         { key: 'uninstall-agent', label: '卸载 Agent', danger: true, disabled: !server.online || !!busy, onClick: onUninstallAgent },
       ] }}>
-        <Button loading={!!busy}>维护 <DownOutlined style={{ fontSize: 10 }} /></Button>
+        <Button loading={!!busy}>维护 <ChevronDown style={{ fontSize: 10 }} /></Button>
       </Dropdown>
     </>}
   />

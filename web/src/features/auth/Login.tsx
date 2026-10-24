@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import { Button, Form, Input, message } from 'antd'
-import { EyeInvisibleOutlined, EyeOutlined } from '@ant-design/icons'
+import { Button, Form, Input, message } from '../../ui'
 import { useNavigate } from 'react-router-dom'
 import { errMsg, login } from '../../api'
 import { useAuth } from '../../store'
@@ -42,11 +41,7 @@ export default function Login() {
               placeholder="请输入密码"
               size="large"
               autoComplete="current-password"
-              iconRender={(visible) => (
-                <button type="button" aria-label={visible ? '隐藏密码' : '显示密码'}>
-                  {visible ? <EyeOutlined /> : <EyeInvisibleOutlined />}
-                </button>
-              )}
+
             />
           </Form.Item>
           <Button className="login-submit" type="primary" htmlType="submit" block size="large" loading={loading}>

@@ -1,0 +1,32 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@custom-variant dark (&:is(.dark *));
+@theme inline {
+ --color-background: var(--console-container);
+ --color-foreground: var(--console-ink);
+ --color-card: var(--console-container);
+ --color-card-foreground: var(--console-ink);
+ --color-popover: var(--console-container);
+ --color-popover-foreground: var(--console-ink);
+ --color-primary: var(--console-primary);
+ --color-primary-foreground: var(--console-on-primary);
+ --color-secondary: var(--console-surface);
+ --color-secondary-foreground: var(--console-ink);
+ --color-muted: var(--console-surface);
+ --color-muted-foreground: var(--console-muted);
+ --color-accent: var(--console-hover);
+ --color-accent-foreground: var(--console-ink);
+ --color-destructive: var(--console-error);
+ --color-destructive-foreground: #ffffff;
+ --color-border: var(--console-border);
+ --color-input: var(--console-border-strong);
+ --color-ring: var(--console-border-hover);
+ --radius-sm: 4px;
+ --radius-md: 6px;
+ --radius-lg: 8px;
+ --radius-xl: 12px;
+}
+@layer base {
+ * { @apply border-border; }
+ body { @apply bg-background text-foreground; }
+}

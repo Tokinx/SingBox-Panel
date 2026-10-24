@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Form, Input, Modal, Select, Table, type FormInstance } from 'antd'
+import { Form, Input, Modal, Select, Table, type FormInstance } from '../../../ui'
 import type { ImportSummary, NodeFormats } from '../../../api'
 import { NodeFormatsModalContent } from './NodeFormatsModal'
 import '../../../styles/forms.css'

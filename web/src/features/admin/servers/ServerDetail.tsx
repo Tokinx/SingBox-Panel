@@ -15,15 +15,15 @@ import {
   Tag,
   Typography,
   message,
-} from 'antd'
+} from '../../../ui'
 import {
-  CopyOutlined,
-  DeleteOutlined,
-  EditOutlined,
-  HolderOutlined,
-  PlusOutlined,
-  ReloadOutlined,
-} from '@ant-design/icons'
+  Copy,
+  Trash2,
+  Pencil,
+  GripVertical,
+  Plus,
+  RotateCw,
+} from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   applyRawConfig,
@@ -477,7 +477,7 @@ export default function ServerDetail() {
             </pre>
             <Button
               size="small"
-              icon={<CopyOutlined />}
+              icon={<Copy />}
               style={{ position: 'absolute', top: 8, right: 8 }}
               onClick={() =>
                 copyToClipboard(command)
@@ -612,9 +612,10 @@ export default function ServerDetail() {
   const onDeleteInbound = (ib: Inbound) => {
     const targetSID = sid
     return Modal.confirm({
-      title: `删除入站 ${ib.tag}?`,
+      title: '删除入站',
+      content: `确认删除「${ib.tag}」？`,
       okType: 'danger',
-      okText: '确定',
+      okText: '删除',
       cancelText: '取消',
       centered: true,
       // Close the confirm immediately; the delete runs in the background behind
@@ -629,9 +630,10 @@ export default function ServerDetail() {
   const onDeleteOutbound = (o: Outbound) => {
     const targetSID = sid
     return Modal.confirm({
-      title: `删除出站 ${o.tag}?`,
+      title: '删除出站',
+      content: `确认删除「${o.tag}」？`,
       okType: 'danger',
-      okText: '确定',
+      okText: '删除',
       cancelText: '取消',
       centered: true,
       onOk: () => {
@@ -644,9 +646,10 @@ export default function ServerDetail() {
   const onDeleteRule = (r: RouteRule) => {
     const targetSID = sid
     return Modal.confirm({
-      title: `确认删除该路由规则?`,
+      title: '删除路由规则',
+      content: '确认删除该路由规则？',
       okType: 'danger',
-      okText: '确定',
+      okText: '删除',
       cancelText: '取消',
       centered: true,
       onOk: () => {
@@ -757,15 +760,15 @@ export default function ServerDetail() {
   const memPct = server.mem_total ? Math.round((server.mem_used / server.mem_total) * 100) : null
   const goSection = (key: string) => navigate(key === 'inbounds' ? `/admin/servers/${sid}` : `/admin/servers/${sid}/${key}`)
   const addButton: Record<DetailSection, ReactNode> = {
-    inbounds: <Button type="primary" icon={<PlusOutlined />} disabled={rawMode} onClick={() => { setEditing(null); setFormOpen(true) }}>新增入站</Button>,
-    outbounds: <Button type="primary" icon={<PlusOutlined />} disabled={rawMode} onClick={() => { setObEditing(null); setObOpen(true) }}>新增出站</Button>,
-    rules: <Button type="primary" icon={<PlusOutlined />} disabled={rawMode} onClick={() => { setRuleEditing(null); setRuleOpen(true) }}>新增规则</Button>,
-    rulesets: <Button type="primary" icon={<PlusOutlined />} disabled={rawMode} onClick={() => setRuleSetCreate((n) => n + 1)}>新增规则集</Button>,
+    inbounds: <Button type="primary" icon={<Plus />} disabled={rawMode} onClick={() => { setEditing(null); setFormOpen(true) }}>新增入站</Button>,
+    outbounds: <Button type="primary" icon={<Plus />} disabled={rawMode} onClick={() => { setObEditing(null); setObOpen(true) }}>新增出站</Button>,
+    rules: <Button type="primary" icon={<Plus />} disabled={rawMode} onClick={() => { setRuleEditing(null); setRuleOpen(true) }}>新增规则</Button>,
+    rulesets: <Button type="primary" icon={<Plus />} disabled={rawMode} onClick={() => setRuleSetCreate((n) => n + 1)}>新增规则集</Button>,
   }
   const rowActions = (onEdit: () => void, onDelete: () => void, label: string) => (
     <span className="ui-row-actions">
-      <Button size="small" type="text" icon={<EditOutlined />} aria-label={`编辑 ${label}`} disabled={rawMode} onClick={onEdit} />
-      <Button size="small" type="text" icon={<DeleteOutlined />} aria-label={`删除 ${label}`} disabled={rawMode} onClick={onDelete} />
+      <Button size="small" type="text" icon={<Pencil />} aria-label={`编辑 ${label}`} disabled={rawMode} onClick={onEdit} />
+      <Button size="small" type="text" icon={<Trash2 />} aria-label={`删除 ${label}`} disabled={rawMode} onClick={onDelete} />
     </span>
   )
 
@@ -818,7 +821,7 @@ export default function ServerDetail() {
                           ? <span title={t.note}><Status tone="warn">仅解析</Status></span>
                           : <span title={t.error}><Status tone="error">不通</Status></span>}
                 </span>
-                <Button size="small" type="text" icon={<ReloadOutlined />} loading={isTesting} onClick={() => void runTest(o)} aria-label={`测试 ${o.tag} 连通性`} />
+                <Button size="small" type="text" icon={<RotateCw />} loading={isTesting} onClick={() => void runTest(o)} aria-label={`测试 ${o.tag} 连通性`} />
               </span>
             )
           },
@@ -900,7 +903,7 @@ export default function ServerDetail() {
                 onPointerUp={finishRulePointerDrag}
                 onPointerCancel={cancelRulePointerDrag}
               >
-                <HolderOutlined />
+                <GripVertical />
               </button>
             ),
           },

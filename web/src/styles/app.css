@@ -101,66 +101,9 @@ a { color: inherit; }
 .ui-kv dt { color: var(--console-muted); }
 .ui-kv dd { min-width: 0; overflow-wrap: anywhere; }
 .ui-row-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 2px; }
-.ui-row-actions .ant-btn { color: var(--console-faint); }
-.ui-row-actions .ant-btn:not(:disabled):hover { color: var(--console-ink); background: var(--console-hover); }
+.ui-row-actions .ui-btn { color: var(--console-faint); }
+.ui-row-actions .ui-btn:not(:disabled):hover { color: var(--console-ink); background: var(--console-hover); }
 .ui-empty { padding: 48px 16px; text-align: center; color: var(--console-faint); }
-
-/* ---------- Ant Design surfaces ---------- */
-:root .ant-btn { box-shadow: none; }
-:root .ant-btn-icon { display: inline-flex; align-items: center; }
-:root .ant-table-wrapper .ant-table { border: 1px solid var(--console-border); border-radius: var(--app-radius); background: var(--console-container); }
-:root .ant-table-wrapper .ant-table-container { border-radius: var(--app-radius); overflow: hidden; }
-:root .ant-table-wrapper .ant-table-thead > tr > th { font-size: 12.5px; font-weight: 500; padding-block: 10px; }
-:root .ant-table-wrapper .ant-table-thead > tr > th::before { display: none; }
-:root .ant-table-wrapper .ant-table-tbody > tr:last-child > td { border-bottom: 0; }
-:root .ant-table-wrapper .ant-table-placeholder .ant-table-cell { color: var(--console-faint); }
-/* Dialogs and popup menus share the panel's quiet, outlined surfaces. */
-:root .ant-modal .ant-modal-content { padding: 0; border: 1px solid var(--console-border); border-radius: var(--app-radius); background: var(--console-container); box-shadow: 0 16px 48px rgb(var(--console-shadow) / 16%); }
-:root .ant-modal:not(.ant-modal-confirm) .ant-modal-content { display: flex; flex-direction: column; max-height: min(calc(86 * var(--dvh)), 800px); overflow: hidden; }
-:root .ant-modal .ant-modal-header { flex: none; margin: 0; padding: 14px 52px 14px 20px; border-bottom: 1px solid var(--console-border); background: transparent; }
-:root .ant-modal .ant-modal-title { font-size: 16px; font-weight: 600; line-height: 24px; letter-spacing: -.2px; }
-:root .ant-modal .ant-modal-close { top: 10px; inset-inline-end: 12px; color: var(--console-faint); border-radius: var(--app-radius-control); }
-:root .ant-modal .ant-modal-close:hover { color: var(--console-ink); background: var(--console-hover); }
-:root .ant-modal .ant-modal-body { min-height: 0; padding: 20px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
-:root .ant-modal .ant-modal-footer { flex: none; margin: 0; padding: 12px 20px; border-top: 1px solid var(--console-border); background: var(--console-surface); }
-:root .ant-modal .ant-modal-footer .ant-btn { min-width: 80px; height: 40px; padding-inline: 18px; }
-:root .ant-modal-confirm .ant-modal-content { padding: 24px; }
-:root .ant-modal-confirm .ant-modal-body { padding: 0; }
-:root .ant-modal-mask { background: rgb(0 0 0 / 44%); backdrop-filter: none; }
-:root .ant-dropdown .ant-dropdown-menu, :root .ant-select-dropdown, :root .ant-picker-dropdown .ant-picker-panel-container, :root .ant-popover .ant-popover-inner { padding: 6px; border: 1px solid var(--console-border); border-radius: var(--app-radius-pop); background: var(--console-container); box-shadow: 0 8px 24px rgb(var(--console-shadow) / 10%); }
-:root .ant-popover .ant-popover-inner { padding: 16px; }
-:root .ant-dropdown .ant-dropdown-menu-item, :root .ant-select-dropdown .ant-select-item { min-height: 32px; padding: 6px 10px; border-radius: var(--app-radius-control); font-size: 13px; line-height: 20px; }
-:root .ant-select-dropdown .ant-select-item-option-selected:not(.ant-select-item-option-disabled) { font-weight: 500; background: var(--console-selected); }
-:root .ant-select-dropdown .ant-select-item-option-active:not(.ant-select-item-option-disabled), :root .ant-dropdown .ant-dropdown-menu-item:hover { background: var(--console-hover); }
-:root .ant-modal .ant-input, :root .ant-modal .ant-input-affix-wrapper, :root .ant-modal .ant-input-number, :root .ant-modal .ant-select:not(.ant-select-customize-input) .ant-select-selector, :root .ant-modal .ant-picker { background: var(--console-container); border-color: var(--console-border-strong); border-radius: var(--app-radius-control); box-shadow: none; }
-:root .ant-modal .ant-input:not(textarea), :root .ant-modal .ant-input-affix-wrapper, :root .ant-modal .ant-input-number, :root .ant-modal .ant-select-single:not(.ant-select-customize-input), :root .ant-modal .ant-picker { min-height: 40px; }
-:root .ant-modal .ant-input-affix-wrapper .ant-input { min-height: auto; }
-:root .ant-modal .ant-input-number-input { height: 38px; }
-:root .ant-modal .ant-input:hover, :root .ant-modal .ant-input:focus, :root .ant-modal .ant-input-affix-wrapper:hover, :root .ant-modal .ant-input-affix-wrapper-focused, :root .ant-modal .ant-input-number:hover, :root .ant-modal .ant-input-number-focused, :root .ant-modal .ant-select:not(.ant-select-disabled):hover .ant-select-selector, :root .ant-modal .ant-select-focused:not(.ant-select-disabled) .ant-select-selector { border-color: var(--console-border-hover); }
-:root .ant-modal .ant-form-item-has-error :is(.ant-input, .ant-input-affix-wrapper, .ant-input-number, .ant-select-selector, .ant-picker) { border-color: var(--console-error) !important; }
-:root .ant-modal :is(.ant-input-disabled, .ant-input-affix-wrapper-disabled, .ant-input-number-disabled), :root .ant-modal .ant-select-disabled .ant-select-selector { background: var(--console-surface) !important; color: var(--console-faint); cursor: not-allowed; }
-:root .ant-modal .ant-btn-default { background: var(--console-container); border-color: var(--console-border-strong); }
-:root .ant-modal .ui-pill.is-active { background: var(--console-container); box-shadow: none; outline: 1px solid var(--console-border); }
-:root .ant-modal .ant-form-item-label > label { font-size: 14px; font-weight: 500; }
-:root .ant-modal .ant-form-item-required::before { color: var(--console-faint) !important; }
-:root .ant-modal .ant-form-item-explain, :root .ant-modal .ant-form-item-extra { margin-top: 6px; font-size: 12px; }
-:root .ant-modal .ant-form-item-extra { color: var(--console-faint); }
-:root .ant-modal .ant-segmented { background: var(--console-surface); border-color: var(--console-border); }
-:root .ant-modal .ant-segmented .ant-segmented-item-selected { background: var(--console-container); box-shadow: none; outline: 1px solid var(--console-border); }
-:root .ant-modal .ant-collapse { border-color: var(--console-border); background: transparent; border-radius: var(--app-radius-pop); }
-:root .ant-modal .ant-collapse-content { border-color: var(--console-border); background: transparent; }
-:root[data-console-theme='dark'] :is(.ant-modal, .ant-select-dropdown, .ant-dropdown, .ant-picker-dropdown, .ant-popover) { --console-container: #111111; --console-elevated: #111111; --console-surface: #191919; --console-border: #2b2b2b; --console-border-strong: #363636; --console-hover: #202020; --console-selected: #252525; }
-:root .ant-form-item .ant-form-item-label > label { font-size: 13px; font-weight: 500; color: var(--console-ink); }
-:root .ant-form-vertical .ant-form-item-label { padding-bottom: 6px; }
-:root .ant-form-item { margin-bottom: 18px; }
-:root .ant-alert { border-radius: var(--app-radius-pop); }
-:root .ant-tabs-tab { font-size: 13.5px; }
-:root .ant-tag { border-radius: 4px; }
-:root .ant-segmented { padding: 2px; border: 1px solid var(--console-border); border-radius: var(--app-radius-pop); }
-:root .ant-segmented .ant-segmented-item { border-radius: var(--app-radius-control); }
-:root .ant-segmented .ant-segmented-item-label { min-height: 26px; line-height: 26px; }
-:root .ant-segmented .ant-segmented-item-selected { box-shadow: 0 1px 2px rgb(0 0 0 / 8%), 0 0 0 1px var(--console-border); }
-:root .ant-empty-description { color: var(--console-faint); }
 
 /* ---------- Responsive ---------- */
 @media (max-width: 767px) {
@@ -179,11 +122,14 @@ a { color: inherit; }
   .ui-stat > b { font-size: 18px; }
   .ui-kv { grid-template-columns: 96px minmax(0, 1fr); }
   .ui-kv dt, .ui-kv dd { padding: 10px 14px; }
-  :root .ant-modal { max-width: calc(100vw - 24px); }
-  :root .ant-modal .ant-modal-header { padding: 14px 48px 14px 18px; }
-  :root .ant-modal .ant-modal-close { top: 10px; inset-inline-end: 10px; }
-  :root .ant-modal .ant-modal-body { padding: 18px; }
-  :root .ant-modal .ant-modal-footer { padding: 12px 18px; }
+  :root .ui-modal { max-width: calc(100vw - 24px); }
+  :root .ui-modal .ui-modal-header { padding: 14px 48px 14px 18px; }
+  :root .ui-modal .ui-modal-close { top: 10px; inset-inline-end: 10px; }
+  :root .ui-modal:not(.ui-modal-confirm) .ui-modal-body { padding: 18px; }
+  :root .ui-modal-confirm .ui-modal-confirm-title { padding-inline: 18px; }
+  :root .ui-modal-confirm .ui-modal-confirm-content { padding: 18px; }
+  :root .ui-modal-confirm .ui-modal-confirm-btns { padding-inline: 18px; }
+  :root .ui-modal .ui-modal-footer { padding: 12px 18px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
@@ -192,4 +138,4 @@ html[data-standalone='true'] .app-header { padding-top: env(safe-area-inset-top)
 
 .ui-dialog-heading { display: flex; flex-direction: column; gap: 2px; }
 .ui-dialog-heading small { color: var(--console-faint); font-size: 12px; font-weight: 400; line-height: 18px; letter-spacing: 0; }
-:root .ant-modal .ant-select-single .ant-select-selector { align-items: center; }
+:root .ui-modal .ui-select-single .ui-select-selector { align-items: center; }

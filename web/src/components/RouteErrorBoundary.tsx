@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
-import { Button } from 'antd'
+import { Button } from '../ui'
 import '../styles/settings-user.css'
 
 interface Props {

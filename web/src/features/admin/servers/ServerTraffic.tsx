@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type React from 'react'
-import { Button, Grid, Segmented, Table, message } from 'antd'
-import { ReloadOutlined } from '@ant-design/icons'
+import { Button, Grid, Segmented, Table, message } from '../../../ui'
+import { RotateCw } from 'lucide-react'
 import { errMsg, getServerTraffic, isCanceledRequest } from '../../../api'
 import type { TrafficPoint, TrafficPortSeries, TrafficRange, TrafficSeries } from '../../../types'
 import { formatBytes } from '../../../util'
@@ -383,7 +383,7 @@ export default function ServerTraffic({ serverId, titleExtra }: { serverId: numb
             {titleExtra}
             <Segmented<TrafficRange> className="tr-range" options={RANGE_OPTIONS} value={range} onChange={setRange} />
             <Button
-              icon={<ReloadOutlined />}
+              icon={<RotateCw />}
               loading={loading}
               onClick={() => void load()}
               title="刷新"

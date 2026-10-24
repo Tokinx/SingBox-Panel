@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Form, Input, Modal, Segmented, Table, message } from 'antd'
-import type { ColumnsType } from 'antd/es/table'
-import { ApartmentOutlined, DeleteOutlined, EditOutlined, HistoryOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
+import { Button, Form, Input, Modal, Segmented, Table, message } from '../../../ui'
+import type { ColumnsType } from '../../../ui'
+import { Network, Trash2, Pencil, History, Plus, Search } from 'lucide-react'
 import dayjs from 'dayjs'
 import { createUser, deleteUser, errMsg, getUserSubFetches, getUserTraffic, listCustomNodes, listServers, listUsers, updateUser } from '../../../api'
 import type { CustomNode, SubscriptionFetch } from '../../../api'
@@ -298,12 +298,12 @@ export default function Users() {
     }
   }
 
-  const addUserButton = <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>新增用户</Button>
+  const addUserButton = <Button type="primary" icon={<Plus />} onClick={openCreate}>新增用户</Button>
 
   const removeUser = (user: User) => {
     Modal.confirm({
-      title: `删除用户 ${user.email}？`,
-      content: '删除后无法恢复。',
+      title: '删除用户',
+      content: `确认删除「${user.email}」？删除后无法恢复。`,
       okText: '删除',
       okType: 'danger',
       onOk: async () => {
@@ -405,12 +405,12 @@ export default function Users() {
       fixed: 'right',
       render: (_, u) => (
         <span className="ui-row-actions">
-          <Button size="small" type="text" icon={<EditOutlined />} title="编辑" aria-label={`编辑 ${u.email}`} onClick={() => openEdit(u)} />
-          <Button size="small" type="text" icon={<ApartmentOutlined />} title="分配节点" aria-label={`分配节点 ${u.email}`} onClick={(e) => openAssign(u, e.currentTarget)} />
-          <Button size="small" type="text" icon={<HistoryOutlined />} title="使用记录" aria-label={`使用记录 ${u.email}`} onClick={() => setHistoryUser(u)} />
+          <Button size="small" type="text" icon={<Pencil />} title="编辑" aria-label={`编辑 ${u.email}`} onClick={() => openEdit(u)} />
+          <Button size="small" type="text" icon={<Network />} title="分配节点" aria-label={`分配节点 ${u.email}`} onClick={(e) => openAssign(u, e.currentTarget)} />
+          <Button size="small" type="text" icon={<History />} title="使用记录" aria-label={`使用记录 ${u.email}`} onClick={() => setHistoryUser(u)} />
           {u.role !== 'admin' ? (
-            <Button size="small" type="text" icon={<DeleteOutlined />} title="删除" aria-label={`删除 ${u.email}`} onClick={() => removeUser(u)} />
-          ) : <Button size="small" type="text" icon={<DeleteOutlined />} className="um-action-gap" tabIndex={-1} aria-hidden />}
+            <Button size="small" type="text" icon={<Trash2 />} title="删除" aria-label={`删除 ${u.email}`} onClick={() => removeUser(u)} />
+          ) : <Button size="small" type="text" icon={<Trash2 />} className="um-action-gap" tabIndex={-1} aria-hidden />}
         </span>
       ),
     },
@@ -425,7 +425,7 @@ export default function Users() {
           <Input
             allowClear
             className="um-search"
-            prefix={<SearchOutlined />}
+            prefix={<Search />}
             placeholder="搜索用户"
             aria-label="搜索用户"
             value={search}

@@ -1,4 +1,4 @@
-import { Checkbox } from 'antd'
+import { Checkbox } from '../ui'
 import type { Server } from '../types'
 import '../styles/users.css'
 

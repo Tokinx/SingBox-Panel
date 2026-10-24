@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Modal, Popconfirm, Select, Tooltip, Typography, Upload, message } from 'antd'
-import type { UploadFile } from 'antd'
-import { DeleteOutlined, DownloadOutlined, InboxOutlined, LinkOutlined, ReloadOutlined } from '@ant-design/icons'
+import { Alert, Button, Modal, Popconfirm, Select, Tooltip, Typography, Upload, message } from '../../../ui'
+import type { UploadFile } from '../../../ui'
+import { Trash2, Download, Inbox, Link, RotateCw } from 'lucide-react'
 import {
   listPanelReleases,
   deleteOneDriveBackup,
@@ -515,7 +515,7 @@ export default function Settings() {
             <span className="settings-row-meta mono">.tar.gz</span>
           </div>
           <div className="settings-actions">
-            <Button icon={<DownloadOutlined />} loading={backing} onClick={doBackup}>下载</Button>
+            <Button icon={<Download />} loading={backing} onClick={doBackup}>下载</Button>
           </div>
         </div>
         <div className="settings-row">
@@ -545,7 +545,7 @@ export default function Settings() {
               <Typography.Text className="settings-auth-code mono" copyable={{ text: authPending.user_code }}>{authPending.user_code}</Typography.Text>
             </div>
             <div className="settings-actions">
-              <Button icon={<LinkOutlined />} href={authLink} target="_blank" rel="noreferrer">打开授权页面</Button>
+              <Button icon={<Link />} href={authLink} target="_blank" rel="noreferrer">打开授权页面</Button>
             </div>
           </div>
         )}
@@ -559,7 +559,7 @@ export default function Settings() {
             <h2>云端备份{cloud.files?.length ? <span className="settings-count">{cloud.files.length}</span> : null}</h2>
             <div className="ui-section-actions">
               <Tooltip title="刷新">
-                <Button type="text" icon={<ReloadOutlined />} aria-label="刷新云端备份" onClick={loadCloud} loading={cloudLoading} />
+                <Button type="text" icon={<RotateCw />} aria-label="刷新云端备份" onClick={loadCloud} loading={cloudLoading} />
               </Tooltip>
             </div>
           </header>
@@ -575,7 +575,7 @@ export default function Settings() {
                 <div className="ui-row-actions">
                   <Button type="text" size="small" loading={cloudRestoring} disabled={restoring} onClick={() => doCloudRestore(file.id, file.name)}>恢复</Button>
                   <Tooltip title="下载">
-                    <Button type="text" size="small" icon={<DownloadOutlined />} aria-label={`下载 ${file.name}`} onClick={() => doCloudDownload(file.id, file.name)} />
+                    <Button type="text" size="small" icon={<Download />} aria-label={`下载 ${file.name}`} onClick={() => doCloudDownload(file.id, file.name)} />
                   </Tooltip>
                   <Popconfirm
                     title="删除这份云端备份？"
@@ -584,7 +584,7 @@ export default function Settings() {
                     okButtonProps={{ danger: true }}
                     onConfirm={() => doCloudDelete(file.id)}
                   >
-                    <Button type="text" size="small" icon={<DeleteOutlined />} aria-label={`删除 ${file.name}`} />
+                    <Button type="text" size="small" icon={<Trash2 />} aria-label={`删除 ${file.name}`} />
                   </Popconfirm>
                 </div>
               </div>
@@ -608,9 +608,9 @@ export default function Settings() {
         onRemove={() => setRestoreFile(null)}
         disabled={restoring || cloudRestoring}
       >
-        <p className="ant-upload-drag-icon"><InboxOutlined /></p>
-        <p className="ant-upload-text">点击或拖拽备份文件</p>
-        <p className="ant-upload-hint mono">.tar.gz</p>
+        <p className="ui-upload-drag-icon"><Inbox /></p>
+        <p className="ui-upload-text">点击或拖拽备份文件</p>
+        <p className="ui-upload-hint mono">.tar.gz</p>
       </Upload.Dragger>
       <div className="settings-card-foot">
         <span className="settings-note">将覆盖全部数据并重启面板</span>
@@ -627,7 +627,7 @@ export default function Settings() {
     <div className="settings-page">
       <PageHeader
         title="设置"
-        actions={<Button icon={<ReloadOutlined />} loading={loading} onClick={refreshAll} disabled={updating}>刷新</Button>}
+        actions={<Button icon={<RotateCw />} loading={loading} onClick={refreshAll} disabled={updating}>刷新</Button>}
       />
       <Pills label="设置分类" items={VIEWS} active={view} onChange={(key) => setView(key as SettingsView)} />
       <div className="settings-view">

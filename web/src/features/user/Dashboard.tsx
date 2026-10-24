@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Form, Grid, Input, Modal, Typography, message } from 'antd'
-import { CopyOutlined, RightOutlined } from '@ant-design/icons'
+import { Button, Form, Grid, Input, Modal, Typography, message } from '../../ui'
+import { Copy, ChevronRight } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { changePassword, errMsg, getMe, getUserNodes, resetSub } from '../../api'
 import type { UserNode } from '../../api'
@@ -192,7 +192,7 @@ export default function Dashboard() {
         </span>
       </div>
       <span className="ui-tag sub-node-type">{n.type}</span>
-      <RightOutlined className="sub-node-chev" aria-hidden="true" />
+      <ChevronRight className="sub-node-chev" aria-hidden="true" />
     </div>
   )
 
@@ -217,7 +217,7 @@ export default function Dashboard() {
               <button key={spec.kind} type="button" className="sub-client" onClick={() => void copySub(spec)} aria-label={`复制 ${spec.label} 订阅链接`}>
                 <ClientLogo spec={spec} />
                 <span className="sub-client-name">{spec.label}</span>
-                <span className="sub-client-copy"><CopyOutlined /> 复制</span>
+                <span className="sub-client-copy"><Copy /> 复制</span>
               </button>
             ))}
           </div>

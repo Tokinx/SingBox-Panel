@@ -2,10 +2,10 @@
 .sd-up { color: var(--console-warning); font-weight: 600; }
 .sd-strong { font-weight: 500; color: var(--console-ink); }
 .sd-raw { margin: -12px 0 24px; }
-.sd-page :is(.ant-table-tbody > tr.is-disabled > td) { color: var(--console-faint); }
+.sd-page :is(.ui-table-tbody > tr.is-disabled > td) { color: var(--console-faint); }
 .sd-test { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .sd-test-result { display: inline-flex; min-width: 76px; }
-.sd-test .ant-btn { color: var(--console-faint); }
+.sd-test .ui-btn { color: var(--console-faint); }
 .sd-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .sd-chip { display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%; padding: 2px 8px; border: 1px solid var(--console-border); border-radius: 6px; font-family: var(--app-mono); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
 .sd-chip > span { font-family: var(--app-font); color: var(--console-faint); }
@@ -13,4 +13,4 @@
 .sd-drag.rule-drag-handle:hover:not(:disabled) { color: var(--console-ink); background: var(--console-hover); }
 .sd-drag.rule-drag-handle:focus-visible { outline: 2px solid var(--console-focus); }
 .sd-final { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding: 10px 16px; border: 1px dashed var(--console-border-strong); border-radius: var(--app-radius); color: var(--console-muted); font-size: 13px; }
-.sd-final .ant-select { min-width: 160px; font-family: var(--app-mono); }
+.sd-final .ui-select { min-width: 160px; font-family: var(--app-mono); }

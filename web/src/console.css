@@ -44,31 +44,31 @@
   -webkit-font-smoothing: antialiased;
 }
 
-.console-app .ant-card {
+.console-app .ui-card {
   box-shadow: 0 3px 14px rgb(var(--console-shadow) / 3%);
   transition: border-color 200ms ease, box-shadow 200ms ease;
 }
 
-.console-app .ant-card-head-title {
+.console-app .ui-card-head-title {
   font-weight: 600;
 }
 
-.console-app .ant-statistic-content {
+.console-app .ui-statistic-content {
   letter-spacing: -0.8px;
   font-variant-numeric: tabular-nums;
 }
 
-.console-app .ant-statistic-content-prefix {
+.console-app .ui-statistic-content-prefix {
   margin-right: 10px;
   color: var(--console-muted);
   font-size: 20px;
 }
 
-.console-app .ant-btn {
+.console-app .ui-btn {
   transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
-.console-app .ant-btn:not(:disabled):not(.ant-btn-loading):active {
+.console-app .ui-btn:not(:disabled):not(.ui-btn-loading):active {
   transform: translateY(1px);
 }
 
@@ -109,46 +109,46 @@ not live data updates or individual log rows.
   -webkit-font-smoothing: auto;
 }
 
-:root[data-console-theme='blue'] .console-app .ant-card {
+:root[data-console-theme='blue'] .console-app .ui-card {
   box-shadow: none;
 }
 
-:root[data-console-theme='blue'] .console-app .ant-statistic-content-prefix {
+:root[data-console-theme='blue'] .console-app .ui-statistic-content-prefix {
   color: var(--console-ink);
 }
 
 /* Pastel label text stays readable against the browser-like gray surfaces. */
-:root[data-console-theme='dark'] .ant-tag:where(
-  .ant-tag-blue, .ant-tag-geekblue, .ant-tag-processing,
-  .ant-tag-purple, .ant-tag-magenta, .ant-tag-cyan,
-  .ant-tag-green, .ant-tag-success, .ant-tag-lime,
-  .ant-tag-orange, .ant-tag-gold, .ant-tag-warning,
-  .ant-tag-red, .ant-tag-error, .ant-tag-volcano
+:root[data-console-theme='dark'] .ui-tag:where(
+  .ui-tag-blue, .ui-tag-geekblue, .ui-tag-processing,
+  .ui-tag-purple, .ui-tag-magenta, .ui-tag-cyan,
+  .ui-tag-green, .ui-tag-success, .ui-tag-lime,
+  .ui-tag-orange, .ui-tag-gold, .ui-tag-warning,
+  .ui-tag-red, .ui-tag-error, .ui-tag-volcano
 ) {
   color: var(--console-tag-ink);
   background: color-mix(in srgb, var(--console-tag-ink) 10%, var(--console-container));
   border-color: color-mix(in srgb, var(--console-tag-ink) 30%, var(--console-border));
 }
 
-.ant-tag-blue, .ant-tag-geekblue, .ant-tag-processing { --console-tag-ink: var(--console-link); }
-.ant-tag-green, .ant-tag-success { --console-tag-ink: var(--console-success); }
-.ant-tag-red, .ant-tag-error { --console-tag-ink: var(--console-error); }
-.ant-tag-gold, .ant-tag-warning { --console-tag-ink: var(--console-warning); }
-.ant-tag-cyan { --console-tag-ink: var(--console-upload); }
-.ant-tag-purple { --console-tag-ink: #d0b4f1; }
-.ant-tag-magenta { --console-tag-ink: #edb6d2; }
-.ant-tag-orange, .ant-tag-volcano { --console-tag-ink: #efbd8b; }
-.ant-tag-lime { --console-tag-ink: #c6d7a0; }
+.ui-tag-blue, .ui-tag-geekblue, .ui-tag-processing { --console-tag-ink: var(--console-link); }
+.ui-tag-green, .ui-tag-success { --console-tag-ink: var(--console-success); }
+.ui-tag-red, .ui-tag-error { --console-tag-ink: var(--console-error); }
+.ui-tag-gold, .ui-tag-warning { --console-tag-ink: var(--console-warning); }
+.ui-tag-cyan { --console-tag-ink: var(--console-upload); }
+.ui-tag-purple { --console-tag-ink: #d0b4f1; }
+.ui-tag-magenta { --console-tag-ink: #edb6d2; }
+.ui-tag-orange, .ui-tag-volcano { --console-tag-ink: #efbd8b; }
+.ui-tag-lime { --console-tag-ink: #c6d7a0; }
 
-:root[data-console-theme='dark'] .ant-tag.ant-tag-borderless {
+:root[data-console-theme='dark'] .ui-tag.ui-tag-borderless {
   border-color: transparent;
 }
 
-:root[data-console-theme='dark'] .ant-switch-checked .ant-switch-inner {
+:root[data-console-theme='dark'] .ui-switch-checked .ui-switch-inner {
   color: var(--console-on-primary);
 }
 
-/* Custom log syntax and status colors complement Ant Design's dark palette. */
+/* Custom log syntax and status colors complement the shared dark palette. */
 
 @keyframes console-card-enter {
   from { opacity: 0; transform: translateY(12px); }
@@ -158,7 +158,7 @@ not live data updates or individual log rows.
 /* Reserve room while assignment data arrives, and retain it during exit. */
 
 @media (hover: hover) and (pointer: fine) {
-  .console-app .ant-card:hover {
+  .console-app .ui-card:hover {
     border-color: var(--console-border-hover);
     box-shadow: 0 6px 24px rgb(var(--console-shadow) / 5%);
   }

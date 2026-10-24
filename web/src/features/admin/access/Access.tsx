@@ -16,21 +16,21 @@ import {
   Table,
   Typography,
   message,
-} from 'antd'
-import type { ColumnsType } from 'antd/es/table'
+} from '../../../ui'
+import type { ColumnsType } from '../../../ui'
 import {
-  DeleteOutlined,
-  DownOutlined,
-  EditOutlined,
-  EyeOutlined,
-  HolderOutlined,
-  PlusOutlined,
-  ReloadOutlined,
-  RightOutlined,
-  SearchOutlined,
-  UndoOutlined,
-  UpOutlined,
-} from '@ant-design/icons'
+  Trash2,
+  ChevronDown,
+  Pencil,
+  Eye,
+  GripVertical,
+  Plus,
+  RotateCw,
+  ChevronRight,
+  Search,
+  Undo2,
+  ChevronUp,
+} from 'lucide-react'
 import {
   batchSetCustomNodeGroup,
   createCustomNodeSubscription,
@@ -630,7 +630,7 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
             aria-label={`${expanded ? '收起' : '展开'} ${group.label}`}
             aria-expanded={expanded}
           >
-            {expanded ? <DownOutlined /> : <RightOutlined />}
+            {expanded ? <ChevronDown /> : <ChevronRight />}
           </button>
           <Checkbox
             checked={groupSelectedCount === group.items.length && group.items.length > 0}
@@ -767,7 +767,7 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
                     onPointerUp={finishTouchDrag}
                     onPointerCancel={cancelTouchDrag}
                   >
-                    <HolderOutlined />
+                    <GripVertical />
                   </button>
                 <span className="um-access-order-number">{index + 1}</span>
                 <div className="um-access-order-content">
@@ -818,7 +818,7 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
         <div className="um-access-footer">
           <span className={isDirty ? 'is-dirty' : ''}>{isDirty ? '有未保存更改' : '已同步'}</span>
           <div className="um-access-footer-actions">
-            <Button icon={<UndoOutlined />} disabled={!isDirty || saving} onClick={discardChanges}>撤销</Button>
+            <Button icon={<Undo2 />} disabled={!isDirty || saving} onClick={discardChanges}>撤销</Button>
             <Button onClick={handleClose}>取消</Button>
             <Button type="primary" loading={saving} disabled={!isDirty || accessLoading} onClick={() => void save()}>保存</Button>
           </div>
@@ -844,7 +844,7 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
             { key: 'order', label: '排序', count: nodeOrder.length },
           ]}
           actions={view !== 'order' && allGroupKeys.length > 1 ? (
-            <Button size="small" type="text" icon={allCollapsed ? <DownOutlined /> : <RightOutlined />} onClick={toggleAllGroups}>
+            <Button size="small" type="text" icon={allCollapsed ? <ChevronDown /> : <ChevronRight />} onClick={toggleAllGroups}>
               {allCollapsed ? '全部展开' : '全部收起'}
             </Button>
           ) : null}
@@ -941,8 +941,8 @@ const MobileNodeCard = memo(function MobileNodeCard({
       <div className="um-mcard-top">
         <span className="um-mcard-name">{nodeDisplayName(node)}</span>
         <span className="ui-row-actions">
-          <Button size="small" type="text" icon={<EditOutlined />} aria-label={`编辑 ${node.name || '节点'}`} onClick={() => onEdit(node)} />
-          <Button size="small" type="text" icon={<DeleteOutlined />} aria-label={`删除 ${node.name || '节点'}`} onClick={() => onRemove(node)} />
+          <Button size="small" type="text" icon={<Pencil />} aria-label={`编辑 ${node.name || '节点'}`} onClick={() => onEdit(node)} />
+          <Button size="small" type="text" icon={<Trash2 />} aria-label={`删除 ${node.name || '节点'}`} onClick={() => onRemove(node)} />
         </span>
       </div>
       <div className="um-mcard-meta">
@@ -1146,8 +1146,8 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
 
   const removeSubscription = (subscription: CustomNodeSubscription) => {
     Modal.confirm({
-      title: `删除订阅「${subscription.name}」？`,
-      content: `将同时删除其下 ${subscription.node_count} 个节点。`,
+      title: '删除订阅',
+      content: `确认删除「${subscription.name}」？将同时删除其下 ${subscription.node_count} 个节点。`,
       okType: 'danger',
       okText: '删除',
       onOk: async () => {
@@ -1255,7 +1255,8 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
 
   const removeNode = (n: CustomNode) => {
     Modal.confirm({
-      title: `删除节点「${n.name || n.link.slice(0, 24)}」？`,
+      title: '删除节点',
+      content: `确认删除「${n.name || n.link.slice(0, 24)}」？`,
       okText: '删除',
       okType: 'danger',
       onOk: async () => {
@@ -1385,10 +1386,7 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
                   filterOption={(input, option) => (option?.value ?? '').toLowerCase().includes(input.toLowerCase())}
                   placeholder="分组名"
                   style={{ width: '100%' }}
-                  // Render the dropdown inside the popover, otherwise clicking an
-                  // option is seen as a "click outside" and closes the popover
-                  // before the selection registers.
-                  getPopupContainer={(trigger) => trigger.parentElement ?? document.body}
+
                 />
                 <div className="um-quick-group-actions">
                   <Button size="small" onClick={closeQuickGroup}>取消</Button>
@@ -1399,7 +1397,7 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
           >
             <button type="button" className={`um-group-button${v && v.trim() ? '' : ' is-empty'}`} aria-label={`修改分组：${v?.trim() || '未分组'}`}>
               <span>{v && v.trim() ? v.trim() : '未分组'}</span>
-              <DownOutlined />
+              <ChevronDown />
             </button>
           </Popover>
         </span>
@@ -1428,9 +1426,9 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
       align: 'right',
       render: (_: unknown, n: CustomNode) => (
         <span className="ui-row-actions custom-node-row-action">
-          <Button size="small" type="text" icon={<EyeOutlined />} title="详情" aria-label={`查看 ${n.name || '节点'}`} onClick={() => setDetailNode(n)} />
-          <Button size="small" type="text" icon={<EditOutlined />} title="编辑" aria-label={`编辑 ${n.name || '节点'}`} onClick={() => openNodeEdit(n)} />
-          <Button size="small" type="text" icon={<DeleteOutlined />} title="删除" aria-label={`删除 ${n.name || '节点'}`} onClick={() => removeNode(n)} />
+          <Button size="small" type="text" icon={<Eye />} title="详情" aria-label={`查看 ${n.name || '节点'}`} onClick={() => setDetailNode(n)} />
+          <Button size="small" type="text" icon={<Pencil />} title="编辑" aria-label={`编辑 ${n.name || '节点'}`} onClick={() => openNodeEdit(n)} />
+          <Button size="small" type="text" icon={<Trash2 />} title="删除" aria-label={`删除 ${n.name || '节点'}`} onClick={() => removeNode(n)} />
         </span>
       ),
     },
@@ -1445,14 +1443,14 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
       <Button
         size="small"
         type="text"
-        icon={<ReloadOutlined />}
+        icon={<RotateCw />}
         title="立即同步"
         aria-label={`同步 ${subscription.name}`}
         loading={syncingSubscriptionID === subscription.id}
         onClick={() => void syncSubscription(subscription)}
       />
-      <Button size="small" type="text" icon={<EditOutlined />} title="编辑" aria-label={`编辑 ${subscription.name}`} onClick={() => openSubscriptionEdit(subscription)} />
-      <Button size="small" type="text" icon={<DeleteOutlined />} title="删除" aria-label={`删除 ${subscription.name}`} onClick={() => removeSubscription(subscription)} />
+      <Button size="small" type="text" icon={<Pencil />} title="编辑" aria-label={`编辑 ${subscription.name}`} onClick={() => openSubscriptionEdit(subscription)} />
+      <Button size="small" type="text" icon={<Trash2 />} title="删除" aria-label={`删除 ${subscription.name}`} onClick={() => removeSubscription(subscription)} />
     </span>
   )
 
@@ -1525,7 +1523,7 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
       />
       <Input
         allowClear
-        prefix={<SearchOutlined />}
+        prefix={<Search />}
         value={nodeSearch}
         onChange={(event) => setNodeSearch(event.target.value)}
         placeholder="搜索节点"
@@ -1536,8 +1534,8 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
   )
 
   const addButton = section === 'subscriptions'
-    ? <Button type="primary" icon={<PlusOutlined />} onClick={openSubscriptionCreate}>新增订阅</Button>
-    : <Button type="primary" icon={<PlusOutlined />} onClick={openNodeCreate}>新增节点</Button>
+    ? <Button type="primary" icon={<Plus />} onClick={openSubscriptionCreate}>新增订阅</Button>
+    : <Button type="primary" icon={<Plus />} onClick={openNodeCreate}>新增节点</Button>
 
   return (
     <>
@@ -1707,13 +1705,13 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
                         <span className="um-rule-none faint">—</span>
                       )}
                       <div className="um-rule-actions ui-row-actions">
-                        <Button type="text" size="small" icon={<UpOutlined />} title="上移" aria-label="上移规则" disabled={index === 0} onClick={() => move(index, index - 1)} />
-                        <Button type="text" size="small" icon={<DownOutlined />} title="下移" aria-label="下移规则" disabled={index === fields.length - 1} onClick={() => move(index, index + 1)} />
-                        <Button type="text" size="small" icon={<DeleteOutlined />} title="删除" aria-label="删除规则" onClick={() => remove(field.name)} />
+                        <Button type="text" size="small" icon={<ChevronUp />} title="上移" aria-label="上移规则" disabled={index === 0} onClick={() => move(index, index - 1)} />
+                        <Button type="text" size="small" icon={<ChevronDown />} title="下移" aria-label="下移规则" disabled={index === fields.length - 1} onClick={() => move(index, index + 1)} />
+                        <Button type="text" size="small" icon={<Trash2 />} title="删除" aria-label="删除规则" onClick={() => remove(field.name)} />
                       </div>
                     </div>
                   })}
-                  <Button type="dashed" icon={<PlusOutlined />} onClick={() => add({ action: 'rename', pattern: '', replacement: '', match_mode: 'text' })} disabled={fields.length >= 50} block>
+                  <Button type="dashed" icon={<Plus />} onClick={() => add({ action: 'rename', pattern: '', replacement: '', match_mode: 'text' })} disabled={fields.length >= 50} block>
                     {fields.length >= 50 ? '已达 50 条上限' : '添加规则'}
                   </Button>
                 </div>

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode, UIEvent } from 'react'
-import { Button, Input, Select, Switch, message } from 'antd'
+import { Button, Input, Select, Switch, message } from '../../../ui'
 import {
-  CopyOutlined,
-  DownloadOutlined,
-  ReloadOutlined,
-  SearchOutlined,
-  VerticalAlignTopOutlined,
-} from '@ant-design/icons'
+  Copy,
+  Download,
+  RotateCw,
+  Search,
+  ArrowUpToLine,
+} from 'lucide-react'
 import { errMsg, isCanceledRequest, listServers, serverLogs, streamLogs } from '../../../api'
 import type { Server } from '../../../types'
 import { useSSE } from '../../../useSSE'
@@ -573,7 +573,7 @@ export default function Logs({ serverId }: { serverId?: number } = {}) {
       <PageHeader
         title="日志"
         actions={
-          <Button icon={<ReloadOutlined />} loading={loading} onClick={() => load()}>刷新</Button>
+          <Button icon={<RotateCw />} loading={loading} onClick={() => load()}>刷新</Button>
         }
       />
 
@@ -594,7 +594,7 @@ export default function Logs({ serverId }: { serverId?: number } = {}) {
         />
         <Input
           className="lg-search"
-          prefix={<SearchOutlined />}
+          prefix={<Search />}
           placeholder="搜索"
           aria-label="搜索日志"
           value={keyword}
@@ -624,7 +624,7 @@ export default function Logs({ serverId }: { serverId?: number } = {}) {
             <Button
               size="small"
               type="text"
-              icon={<DownloadOutlined />}
+              icon={<Download />}
               disabled={!filteredLines.length}
               onClick={downloadLogs}
               aria-label="下载日志"
@@ -682,7 +682,7 @@ export default function Logs({ serverId }: { serverId?: number } = {}) {
                       title="复制该行"
                       aria-label="复制该行日志"
                     >
-                      <CopyOutlined />
+                      <Copy />
                     </button>
                   </div>
                 )
@@ -694,7 +694,7 @@ export default function Logs({ serverId }: { serverId?: number } = {}) {
                 className="lg-jump-latest"
                 type="primary"
                 size="small"
-                icon={<VerticalAlignTopOutlined />}
+                icon={<ArrowUpToLine />}
                 onClick={() => scrollToLatest(true)}
               >
                 回到最新

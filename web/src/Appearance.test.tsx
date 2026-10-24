@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { theme } from 'antd'
-import { MemoryRouter } from 'react-router-dom'
+import { getConsolePalette } from './theme'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Appearance from './Appearance'
 import { THEME_STORAGE_KEY, USER_THEME_STORAGE_KEY, ThemePreferenceProvider, useThemePreference } from './themePreference'
@@ -9,14 +9,14 @@ const auth = vi.hoisted(() => ({ role: 'admin' }))
 vi.mock('./store', () => ({ useAuth: (select: (state: { user: { role: string } }) => unknown) => select({ user: { role: auth.role } }) }))
 vi.mock('./App', () => ({
   default: function ThemeProbe() {
-    const { token } = theme.useToken()
-    const { setTheme } = useThemePreference(auth.role === 'admin' ? 'admin' : 'user')
+    const { setTheme, resolvedThemeId } = useThemePreference(auth.role === 'admin' ? 'admin' : 'user')
+    const { colors: token } = getConsolePalette(useLocation().pathname === '/login' ? 'blue' : resolvedThemeId)
     return <>
-      <output data-testid="primary">{token.colorPrimary}</output>
-      <output data-testid="selection">{token.controlItemBgActive}</output>
-      <output data-testid="container">{token.colorBgContainer}</output>
-      <output data-testid="popup">{token.colorBgElevated}</output>
-      <output data-testid="error-background">{token.colorErrorBg}</output>
+      <output data-testid="primary">{token.primary}</output>
+      <output data-testid="selection">{token.selected}</output>
+      <output data-testid="container">{token.container}</output>
+      <output data-testid="popup">{token.elevated}</output>
+      <output data-testid="error-background">{token.error}</output>
       <button onClick={() => setTheme('auto')}>选择自动</button>
       <button onClick={() => setTheme('dark')}>选择夜间</button>
       <button onClick={() => setTheme('blue')}>选择日间</button>
@@ -64,7 +64,7 @@ describe('theme scope', () => {
     const dayErrorBackground = screen.getByTestId('error-background').textContent
 
     fireEvent.click(screen.getByRole('button', { name: '选择夜间' }))
-    expect(screen.getByTestId('primary').textContent).toBe('#cccccc')
+    expect(screen.getByTestId('primary').textContent).toBe('#ececec')
     expect(document.documentElement.dataset.consoleTheme).toBe('dark')
     expect(document.documentElement.style.getPropertyValue('--console-layout')).toBe('#1e1e1e')
     expect(document.documentElement.style.getPropertyValue('--console-container')).toBe('#1e1e1e')
@@ -105,8 +105,8 @@ describe('theme scope', () => {
     render(page('/login'))
     expect(screen.getByTestId('primary').textContent).toBe('#111111')
     expect(screen.getByTestId('container').textContent).toBe('#ffffff')
-    expect(document.documentElement.dataset.consoleTheme).toBeUndefined()
-    expect(document.documentElement.style.getPropertyValue('--console-primary')).toBe('')
-    expect(document.documentElement.style.getPropertyValue('--console-container')).toBe('')
+    expect(document.documentElement.dataset.consoleTheme).toBe('blue')
+    expect(document.documentElement.style.getPropertyValue('--console-primary')).toBe('#111111')
+    expect(document.documentElement.style.getPropertyValue('--console-container')).toBe('#ffffff')
   })
 })

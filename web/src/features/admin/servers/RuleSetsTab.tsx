@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Button, Form, Input, Modal, Segmented, Select, Table, message } from 'antd'
-import { DeleteOutlined, EditOutlined } from '@ant-design/icons'
+import { Button, Form, Input, Modal, Segmented, Select, Table, message } from '../../../ui'
+import { Trash2, Pencil } from 'lucide-react'
 import { createRuleSet, deleteRuleSet, updateRuleSet } from '../../../api'
 import { showConfigApplyResult } from '../../../configApply'
 import type { Outbound, RuleSet } from '../../../types'
@@ -92,8 +92,9 @@ export const RuleSetsTab: React.FC<RuleSetsTabProps> = ({ serverId, ruleSets, ou
 
   const confirmDeleteRS = (rs: RuleSet) => {
     Modal.confirm({
-      title: `确定删除规则集 ${rs.tag}？`,
-      okText: '确定',
+      title: '删除规则集',
+      content: `确认删除「${rs.tag}」？`,
+      okText: '删除',
       cancelText: '取消',
       okType: 'danger',
       centered: true,
@@ -145,8 +146,8 @@ export const RuleSetsTab: React.FC<RuleSetsTabProps> = ({ serverId, ruleSets, ou
       align: 'right' as const,
       render: (_: any, record: RuleSet) => (
         <span className="ui-row-actions">
-          <Button type="text" size="small" disabled={rawMode} icon={<EditOutlined />} aria-label={`编辑规则集 ${record.tag}`} onClick={() => openEditModal(record)} />
-          <Button type="text" size="small" disabled={rawMode} icon={<DeleteOutlined />} aria-label={`删除规则集 ${record.tag}`} onClick={() => confirmDeleteRS(record)} />
+          <Button type="text" size="small" disabled={rawMode} icon={<Pencil />} aria-label={`编辑规则集 ${record.tag}`} onClick={() => openEditModal(record)} />
+          <Button type="text" size="small" disabled={rawMode} icon={<Trash2 />} aria-label={`删除规则集 ${record.tag}`} onClick={() => confirmDeleteRS(record)} />
         </span>
       ),
     },

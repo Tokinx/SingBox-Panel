@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { FormInstance } from 'antd'
+import type { FormInstance } from '../../../ui'
 import type { Inbound } from '../../../types'
 import { assembleSettings, scrollToFirstError, toForm } from './InboundForm'
 

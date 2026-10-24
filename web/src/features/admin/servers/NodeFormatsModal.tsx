@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Modal, Tooltip, Typography, message } from 'antd'
-import { CheckOutlined, CopyOutlined, EyeOutlined } from '@ant-design/icons'
+import { Button, Modal, Tooltip, Typography, message } from '../../../ui'
+import { Check, Copy, Eye } from 'lucide-react'
 import type { NodeFormats } from '../../../api'
 import { copyToClipboard } from '../../../util'
 import '../../../styles/forms.css'
@@ -59,13 +59,13 @@ export function NodeFormatsModalContent({ data }: { data: NodeFormats }) {
                   {item.server ? <span className="fm-node-addr mono">{item.server}:{item.port}</span> : null}
                 </div>
                 <div className="fm-node-actions">
-                  <Button size="small" type="text" icon={<EyeOutlined />} aria-label={`查看 ${displayTag} 详情`} onClick={() => setDetailItem(item)}>详情</Button>
+                  <Button size="small" type="text" icon={<Eye />} aria-label={`查看 ${displayTag} 详情`} onClick={() => setDetailItem(item)}>详情</Button>
                   {buttons.map((button) => button.value ? (
                     <Button
                       key={button.key}
                       size="small"
                       className={copiedKey === button.key ? 'is-copied' : undefined}
-                      icon={copiedKey === button.key ? <CheckOutlined /> : <CopyOutlined />}
+                      icon={copiedKey === button.key ? <Check /> : <Copy />}
                       aria-label={`复制 ${displayTag} ${button.label}`}
                       onClick={() => copy(button.value, button.key, `${displayTag} ${button.label}`)}
                     >
@@ -73,7 +73,7 @@ export function NodeFormatsModalContent({ data }: { data: NodeFormats }) {
                     </Button>
                   ) : (
                     <Tooltip key={button.key} title={`${button.label} 不支持该协议`}>
-                      <Button size="small" disabled icon={<CopyOutlined />}>{button.label}</Button>
+                      <Button size="small" disabled icon={<Copy />}>{button.label}</Button>
                     </Tooltip>
                   ))}
                 </div>
