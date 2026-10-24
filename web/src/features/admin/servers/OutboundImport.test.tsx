@@ -68,11 +68,43 @@ describe('outbound imports', () => {
   it('loads external nodes and resolves the selected node ID', async () => {
     render(<OutboundImport serverId={3} source="external" onClose={vi.fn()} onSaved={vi.fn()} />)
     await waitFor(() => expect(listOutboundSources).toHaveBeenCalled())
-    fireEvent.mouseDown(screen.getByRole('combobox'))
-    fireEvent.click(await screen.findByText('Asia · External node · trojan · node.example.com:443'))
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: '节点分组' }))
+    fireEvent.click(await screen.findByText('Asia · 1'))
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: '外部节点' }))
+    fireEvent.click(await screen.findByText('External node'))
     await screen.findByLabelText('出站标签')
     expect(previewOutboundImport).toHaveBeenCalledWith(3, { custom_node_id: 8 }, expect.any(AbortSignal))
     fireEvent.click(saveButton())
     await waitFor(() => expect(createOutbound).toHaveBeenCalledWith(3, draft))
   })
+  it('clears the previous node and pending preview when changing groups', async () => {
+    vi.mocked(listOutboundSources).mockResolvedValue([
+      { id: 8, name: 'Asia node', group: 'Asia', type: 'trojan' },
+      { id: 9, name: 'Europe node', group: 'Europe', type: 'trojan' },
+      { id: 10, name: 'Ungrouped node', group: '', type: 'socks' },
+    ])
+    let resolve!: (value: OutboundBody) => void
+    vi.mocked(previewOutboundImport).mockReturnValue(new Promise((done) => { resolve = done }))
+    render(<OutboundImport serverId={3} source="external" onClose={vi.fn()} onSaved={vi.fn()} />)
+    expect((screen.getByRole('combobox', { name: '外部节点' }) as HTMLInputElement).disabled).toBe(true)
+    await waitFor(() => expect((screen.getByRole('combobox', { name: '节点分组' }) as HTMLInputElement).disabled).toBe(false))
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: '节点分组' }))
+    fireEvent.click(await screen.findByText('Asia · 1'))
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: '外部节点' }))
+    fireEvent.click(await screen.findByText('Asia node'))
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: '节点分组' }))
+    fireEvent.click(await screen.findByText('Europe · 1'))
+    await act(async () => resolve(draft))
+    expect(screen.queryByLabelText('出站标签')).toBeNull()
+    expect(saveButton().disabled).toBe(true)
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: '外部节点' }))
+    expect(await screen.findByText('Europe node')).toBeTruthy()
+    expect(screen.queryByText('Asia node')).toBeNull()
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: '节点分组' }))
+    fireEvent.click(await screen.findByText('未分组 · 1'))
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: '外部节点' }))
+    expect(await screen.findByText('Ungrouped node')).toBeTruthy()
+    expect(createOutbound).not.toHaveBeenCalled()
+  })
+
 })

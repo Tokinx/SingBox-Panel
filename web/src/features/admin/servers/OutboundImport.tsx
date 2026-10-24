@@ -13,6 +13,7 @@ export function OutboundImport({ serverId, source, onClose, onSaved, onSavingCha
 }) {
   const [nodes, setNodes] = useState<OutboundSource[]>([])
   const [loading, setLoading] = useState(false)
+  const [group, setGroup] = useState<string>()
   const [nodeId, setNodeId] = useState<number>()
   const [uri, setURI] = useState('')
   const [preview, setPreview] = useState<OutboundBody | null>(null)
@@ -96,36 +97,68 @@ export function OutboundImport({ serverId, source, onClose, onSaved, onSavingCha
     }
   }
 
+  const groups = new Map<string, number>()
+  for (const node of nodes) {
+    const name = node.group.trim()
+    groups.set(name, (groups.get(name) ?? 0) + 1)
+  }
+  const groupNodes = group === undefined ? [] : nodes.filter((node) => node.group.trim() === group)
   const settings = preview?.settings
   return (
     <Form layout="vertical" onFinish={save} style={{ marginTop: 20 }}>
       {source === 'external' ? (
-        <Form.Item label="外部节点" extra="可选择已添加的外部节点，包括订阅同步的节点。">
-          <Select
-            aria-label="外部节点"
-            showSearch
-            optionFilterProp="label"
-            placeholder="搜索节点名称、分组或地址"
-            loading={loading || parsing}
-            disabled={saving}
-            value={nodeId}
-            notFoundContent={loading ? '正在加载…' : '暂无可用外部节点，请先在外部节点页面添加'}
-            options={nodes.map((node) => ({
-              value: node.id,
-              disabled: !!node.unavailable_reason,
-              label: [node.group, node.name, node.type, node.server && `${node.server}:${node.server_port}`, node.unavailable_reason].filter(Boolean).join(' · '),
-            }))}
-            onChange={(id: number) => { setNodeId(id); void parse(id) }}
-          />
-          <Button type="link" disabled={saving || loading} onClick={() => {
+        <>
+          <Form.Item label="节点分组">
+            <Select
+              aria-label="节点分组"
+              showSearch
+              optionFilterProp="label"
+              placeholder="先选择分组"
+              loading={loading}
+              disabled={saving || loading}
+              value={group}
+              notFoundContent="暂无分组，请先添加外部节点"
+              options={[...groups].map(([name, count]) => ({ value: name, label: `${name || '未分组'} · ${count}` }))}
+              onChange={(value: string) => { invalidate(); setNodeId(undefined); setGroup(value) }}
+            />
+          </Form.Item>
+          <Form.Item label="外部节点">
+            <Select
+              aria-label="外部节点"
+              showSearch
+              optionFilterProp="searchText"
+              placeholder={group === undefined ? '请先选择分组' : '搜索此分组的节点'}
+              loading={parsing}
+              disabled={saving || loading || group === undefined}
+              value={nodeId}
+              listHeight={224}
+              notFoundContent="没有匹配的节点"
+              options={groupNodes.map((node) => ({
+                value: node.id,
+                disabled: !!node.unavailable_reason,
+                label: node.name || '未命名节点',
+                searchText: [node.name, node.type, node.server].filter(Boolean).join(' '),
+                title: node.unavailable_reason || `${node.type} · ${node.server}:${node.server_port}`,
+                protocol: node.type,
+                reason: node.unavailable_reason,
+              }))}
+              optionRender={(option) => <div className="fm-node-option">
+                <span className="fm-node-option-name">{option.label}</span>
+                <small>{option.data.reason ? '不可用' : option.data.protocol}</small>
+              </div>}
+              onChange={(id: number) => { setNodeId(id); void parse(id) }}
+            />
+          </Form.Item>
+          <Button type="text" size="small" disabled={saving || loading} onClick={() => {
             invalidate()
             setNodeId(undefined)
+            setGroup(undefined)
             listRequest.current?.abort()
             const controller = new AbortController()
             listRequest.current = controller
             void loadNodes(controller.signal)
           }}>刷新节点列表</Button>
-        </Form.Item>
+        </>
       ) : (
         <Form.Item label="节点 URI" extra="每次导入一条节点分享链接；订阅地址请先在外部节点页面添加。">
           <Input.TextArea

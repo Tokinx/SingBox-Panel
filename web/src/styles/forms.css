@@ -85,3 +85,8 @@
 @media (max-width: 767px) {
   .fm-form .fm-actions .ant-segmented-item-label { padding-inline: 4px; font-size: 13px; }
 }
+
+/* Compact external-node options: connection details live in the preview. */
+.fm-node-option { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.fm-node-option-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fm-node-option small { flex: none; color: var(--console-faint); font-size: 12px; font-weight: 400; }
