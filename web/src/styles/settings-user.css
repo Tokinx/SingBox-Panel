@@ -3,10 +3,7 @@
 /* ---------- Request state ---------- */
 .request-state { width: 100%; padding: 0; animation: none; }
 .request-state-loading { min-height: 160px; display: flex; align-items: center; justify-content: center; gap: 0; color: var(--console-faint); }
-.request-state-loading .ui-spin-dot-item { background: var(--console-faint); }
 .request-state-alert { margin-bottom: 16px; padding: 8px 12px; align-items: center; }
-.request-state-alert .ui-alert-icon { margin-inline-end: 10px; }
-.request-state-alert .ui-alert-action { margin-inline-start: 12px; }
 .request-state-msg { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; font-size: 13px; }
 .request-state-msg > b { font-weight: 600; color: var(--console-ink); }
 .request-state-msg > span { color: var(--console-muted); overflow-wrap: anywhere; }
@@ -51,12 +48,10 @@
 .settings-restore .settings-dragger { display: block; padding: 20px 20px 16px; }
 .settings-restore .ui-upload-wrapper .ui-upload-drag { border: 1px dashed var(--console-border-strong); border-radius: var(--app-radius); background: var(--console-surface); }
 .settings-restore .ui-upload-wrapper .ui-upload-drag:not(.ui-upload-disabled):hover { border-color: var(--console-ink); }
-.settings-restore .ui-upload-wrapper .ui-upload-drag .ui-upload-btn { padding: 28px 16px; }
 .settings-restore .ui-upload-drag-icon { margin-bottom: 8px !important; }
 .settings-restore .ui-upload-wrapper .ui-upload-drag p.ui-upload-drag-icon .lucide { color: var(--console-faint); font-size: 32px; }
 .settings-restore .ui-upload-wrapper .ui-upload-drag p.ui-upload-text { margin-bottom: 2px; font-size: 14px; color: var(--console-ink); }
 .settings-restore .ui-upload-wrapper .ui-upload-drag p.ui-upload-hint { color: var(--console-faint); }
-.settings-restore .ui-upload-list { margin-top: 4px; }
 .settings-restore .settings-card-foot .settings-note { color: var(--console-muted); }
 
 /* ---------- User subscription page ---------- */

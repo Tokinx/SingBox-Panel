@@ -15,10 +15,6 @@ body {
   overflow-x: clip;
 }
 
-/* Page action buttons: desktop row, phone 2-col grid with primary full-width. */
-
-/* User dashboard node cards */
-
 /* Apple-style spinner (12 fading spokes), used by the route-loading fallback. */
 .app-spinner {
   position: relative;
@@ -49,8 +45,6 @@ body {
   100% { opacity: 0.25; }
 }
 
-/* Node assignment modal (server nodes + other nodes) */
-
 /* External-node table controls and normalized flag rendering. */
 
 .custom-node-name {
@@ -72,13 +66,6 @@ body {
   position: relative;
   display: block;
   gap: 0;
-}
-
-/* External subscription import: parse first, then confirm the exact nodes. */
-
-/* Keep modals within the viewport on phones. */
-.ui-modal {
-  max-width: calc(100vw - 16px);
 }
 
 /* Long code / preformatted blocks scroll instead of overflowing the page. */
@@ -104,30 +91,7 @@ pre {
   opacity: 0.45;
 }
 
-/* The users page tables scroll with the wheel/trackpad only; scrollbars are
-   hidden. Native bars cover regular tables, and the virtual-list bar is a
-   separate element the table renders once a table switches to virtual mode. */
-
-/* Tighter rows for the user / other-nodes tables (denser than compact tables). */
-
-@media (max-width: 767px) {
-}
-
-/* The date+time popup is ~457px wide (288px date panel + 3 time columns), which
-   overflows a phone and pushes the prev-month/prev-year controls and the first
-   date column off-screen. Let it shrink and scroll inside the viewport. */
-@media (max-width: 480px) {
-  .ui-picker-dropdown {
-    max-width: calc(100vw - 16px);
-    left: 8px !important;
-  }
-  .ui-picker-dropdown .ui-picker-panel-container {
-    max-width: calc(100vw - 16px);
-    overflow-x: auto;
-  }
-}
-
-/* Structured sing-box log viewer */
+/* Shared request-state layout. */
 .request-state {
   width: 100%;
   padding: 12px 0;
@@ -167,9 +131,3 @@ pre {
   white-space: nowrap !important;
   border: 0 !important;
 }
-
-/* Sorted column: keep the sort arrows but not the column highlight. */
-
-/* 外部节点 page: the two panels stack full width; no fixed card height. */
-
-/* Servers page: one card per node. */

@@ -52,30 +52,6 @@
   font-size: 14px;
 }
 
-.login-card button.ui-input-password-icon {
-  display: inline-flex;
-  width: 28px;
-  height: 24px;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--console-faint);
-  font-size: 15px;
-  cursor: pointer;
-}
-
-.login-card button.ui-input-password-icon:hover {
-  color: var(--console-ink);
-}
-
-.login-card button.ui-input-password-icon:focus-visible {
-  outline: 2px solid var(--console-focus);
-  outline-offset: 1px;
-}
-
 .login-card .login-submit {
   margin-top: 8px;
   font-size: 14px;
