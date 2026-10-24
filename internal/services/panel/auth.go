@@ -1,6 +1,7 @@
 package panel
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
@@ -115,8 +116,20 @@ func (a *Auth) Middleware() gin.HandlerFunc {
 		c.Set("uid", claims.UID)
 		c.Set("role", u.Role)
 		c.Set("username", u.Email)
+		c.Set("session_claims", claims)
 		c.Next()
 	}
+}
+
+// sessionActive rechecks a long-lived request against the current account.
+// A valid signature alone does not survive logout, password rotation or expiry.
+func (a *Auth) sessionActive(ctx context.Context, claims *Claims) bool {
+	if a == nil || a.db == nil || claims == nil || claims.ExpiresAt == nil || !time.Now().Before(claims.ExpiresAt.Time) {
+		return false
+	}
+	var user model.User
+	return a.db.WithContext(ctx).Select("id", "role", "token_version", "enabled", "expire_at").First(&user, claims.UID).Error == nil &&
+		userActive(&user) && user.Role == claims.Role && user.TokenVersion == claims.Ver
 }
 
 // AdminOnly rejects non-admin sessions.

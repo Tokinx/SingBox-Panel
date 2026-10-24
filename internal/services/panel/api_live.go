@@ -105,6 +105,13 @@ func (a *App) expireLogSession(serverID uint, sessionID string, deadline time.Ti
 // The browser receives real-time events via SSE (fetch + ReadableStream);
 // EventSource is not used because it cannot send custom Authorization headers.
 func (a *App) handleTrafficSSE(c *gin.Context) {
+	value, _ := c.Get("session_claims")
+	claims, _ := value.(*Claims)
+	ctx := c.Request.Context()
+	if !a.auth.sessionActive(ctx, claims) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "session revoked"})
+		return
+	}
 	serverID, ok := uintParam(c, "id")
 	if !ok {
 		return
@@ -132,7 +139,12 @@ func (a *App) handleTrafficSSE(c *gin.Context) {
 
 	// Send initial backlog so the chart isn't empty on connect.
 	for _, evt := range backlog {
-		_, _ = io.WriteString(c.Writer, evt.SSE())
+		if !a.auth.sessionActive(ctx, claims) {
+			return
+		}
+		if _, err := io.WriteString(c.Writer, evt.SSE()); err != nil {
+			return
+		}
 	}
 	flusher.Flush()
 
@@ -140,19 +152,29 @@ func (a *App) handleTrafficSSE(c *gin.Context) {
 	heartbeat := time.NewTicker(15 * time.Second)
 	defer heartbeat.Stop()
 
-	ctx := c.Request.Context()
+	expires := time.NewTimer(time.Until(claims.ExpiresAt.Time))
+	defer expires.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-expires.C:
+			return
 		case evt, ok := <-sub.ch:
-			if !ok {
+			if !ok || !a.auth.sessionActive(ctx, claims) {
 				return
 			}
-			_, _ = io.WriteString(c.Writer, evt.SSE())
+			if _, err := io.WriteString(c.Writer, evt.SSE()); err != nil {
+				return
+			}
 			flusher.Flush()
 		case <-heartbeat.C:
-			_, _ = io.WriteString(c.Writer, ": heartbeat\n\n")
+			if !a.auth.sessionActive(ctx, claims) {
+				return
+			}
+			if _, err := io.WriteString(c.Writer, ": heartbeat\n\n"); err != nil {
+				return
+			}
 			flusher.Flush()
 		}
 	}
