@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import {
   Alert,
@@ -98,7 +98,12 @@ export default function ServerDetail() {
   const [cfgText, setCfgText] = useState('')
   const [cfgLoading, setCfgLoading] = useState(false)
   const [cfgSaving, setCfgSaving] = useState(false)
-  const [cfgServerID, setCfgServerID] = useState<number | null>(null)
+  const [cfgSessionID, setCfgSessionID] = useState(0)
+  const cfgSessionRef = useRef<{
+    serverID: number
+    request: AbortController | null
+    saving: boolean
+  } | null>(null)
 
   // 节点格式弹窗状态
   const [fmtOpen, setFmtOpen] = useState(false)
@@ -144,6 +149,21 @@ export default function ServerDetail() {
 
   const releaseScopedController = (controller: AbortController) => {
     scopedControllersRef.current.delete(controller)
+  }
+
+  const invalidateConfigEditor = useCallback(() => {
+    const session = cfgSessionRef.current
+    cfgSessionRef.current = null
+    session?.request?.abort()
+  }, [])
+
+  useLayoutEffect(() => invalidateConfigEditor, [sid, invalidateConfigEditor])
+
+  const closeConfigEditor = () => {
+    invalidateConfigEditor()
+    setCfgOpen(false)
+    setCfgLoading(false)
+    setCfgSaving(false)
   }
 
   const load = useCallback(async () => {
@@ -309,7 +329,6 @@ export default function ServerDetail() {
     setRuleSets([])
     setRefreshing(false)
     setCfgOpen(false)
-    setCfgServerID(null)
     setCfgText('')
     setCfgLoading(false)
     setCfgSaving(false)
@@ -687,14 +706,21 @@ export default function ServerDetail() {
 
   const openConfigEditor = async () => {
     const targetSID = sid
-    const controller = scopedController()
-    setCfgServerID(targetSID)
+    if (currentSIDRef.current !== targetSID) return
+    invalidateConfigEditor()
+    const controller = new AbortController()
+    const session = { serverID: targetSID, request: controller as AbortController | null, saving: false }
+    cfgSessionRef.current = session
+    const isCurrentSession = () => cfgSessionRef.current === session && currentSIDRef.current === targetSID
+    // Each opening gets a new Modal instance, including its internal submit lock.
+    setCfgSessionID((value) => value + 1)
     setCfgOpen(true)
     setCfgLoading(true)
+    setCfgSaving(false)
     setCfgText('')
     try {
       const cfg = await remoteConfig(targetSID, controller.signal)
-      if (currentSIDRef.current !== targetSID) return
+      if (!isCurrentSession()) return
       let text = cfg.raw || ''
       try {
         text = JSON.stringify(JSON.parse(text), null, 2)
@@ -703,26 +729,30 @@ export default function ServerDetail() {
       }
       setCfgText(cfg.exists ? text : '')
     } catch (e) {
-      if (!controller.signal.aborted && currentSIDRef.current === targetSID) message.error(errMsg(e))
+      if (isCurrentSession() && !isCanceledRequest(e)) message.error(errMsg(e))
     } finally {
-      releaseScopedController(controller)
-      if (currentSIDRef.current === targetSID) setCfgLoading(false)
+      if (isCurrentSession()) {
+        session.request = null
+        setCfgLoading(false)
+      }
     }
   }
 
   const saveConfig = async () => {
-    if (cfgSaving) return
-    const targetSID = cfgServerID
-    if (!targetSID || targetSID !== sid || currentSIDRef.current !== targetSID) {
+    const session = cfgSessionRef.current
+    if (!session || session.saving || session.request) return
+    const targetSID = session.serverID
+    if (targetSID !== sid || currentSIDRef.current !== targetSID) {
       message.error('服务器已切换，请重新打开配置编辑器')
-      setCfgOpen(false)
-      setCfgServerID(null)
+      closeConfigEditor()
       return
     }
+    const isCurrentSession = () => cfgSessionRef.current === session && currentSIDRef.current === targetSID
+    session.saving = true
     setCfgSaving(true)
     try {
       const result = await applyRawConfig(targetSID, cfgText)
-      if (currentSIDRef.current !== targetSID) return
+      if (!isCurrentSession()) return
       if (result.config_mode === 'managed') {
         message.success('已校验、下发并自动进入面板管理')
       } else if (result.summary.skipped?.length) {
@@ -733,13 +763,15 @@ export default function ServerDetail() {
       for (const warning of result.warnings ?? []) {
         message.warning({ content: `安全提醒：${warning}`, duration: 10 })
       }
-      setCfgOpen(false)
-      setCfgServerID(null)
+      closeConfigEditor()
       void load().catch(() => {})
     } catch (e) {
-      if (currentSIDRef.current === targetSID) message.error(errMsg(e))
+      if (isCurrentSession()) message.error(errMsg(e))
     } finally {
-      if (currentSIDRef.current === targetSID) setCfgSaving(false)
+      if (isCurrentSession()) {
+        session.saving = false
+        setCfgSaving(false)
+      }
     }
   }
 
@@ -1032,15 +1064,13 @@ export default function ServerDetail() {
       />
 
       <ConfigEditorModal
+        key={cfgSessionID}
         open={cfgOpen}
         loading={cfgLoading}
         saving={cfgSaving}
         text={cfgText}
         onText={setCfgText}
-        onCancel={() => {
-          setCfgOpen(false)
-          setCfgServerID(null)
-        }}
+        onCancel={closeConfigEditor}
         onSave={saveConfig}
       />
 

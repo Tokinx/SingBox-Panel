@@ -107,7 +107,7 @@ export function ConfigEditorModal({
   onSave: () => void
 }) {
   return (
-    <Modal className="fm-modal" title="编辑配置" open={open} onCancel={onCancel} onOk={onSave} okText="校验并下发" confirmLoading={saving} width={MODAL_LG} destroyOnHidden>
+    <Modal className="fm-modal" title="编辑配置" open={open} onCancel={onCancel} onOk={onSave} okText="校验并下发" okButtonProps={{ disabled: loading }} confirmLoading={saving} width={MODAL_LG} destroyOnHidden>
       {loading ? (
         <div className="fm-loading">读取中…</div>
       ) : (
@@ -116,6 +116,7 @@ export function ConfigEditorModal({
           aria-label="config.json"
           spellCheck={false}
           value={text}
+          disabled={saving}
           onChange={(event) => onText(event.target.value)}
           autoSize={false} rows={18}
           placeholder="粘贴完整 config.json"
