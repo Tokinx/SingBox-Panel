@@ -117,12 +117,12 @@ a { color: inherit; }
 /* Dialogs and popup menus share the panel's quiet, outlined surfaces. */
 :root .ant-modal .ant-modal-content { padding: 0; border: 1px solid var(--console-border); border-radius: var(--app-radius); background: var(--console-container); box-shadow: 0 16px 48px rgb(var(--console-shadow) / 16%); }
 :root .ant-modal:not(.ant-modal-confirm) .ant-modal-content { display: flex; flex-direction: column; max-height: min(calc(86 * var(--dvh)), 800px); overflow: hidden; }
-:root .ant-modal .ant-modal-header { flex: none; margin: 0; padding: 20px 56px 20px 24px; border-bottom: 1px solid var(--console-border); background: transparent; }
-:root .ant-modal .ant-modal-title { font-size: 20px; font-weight: 600; line-height: 28px; letter-spacing: -.4px; }
-:root .ant-modal .ant-modal-close { top: 16px; inset-inline-end: 16px; color: var(--console-faint); border-radius: var(--app-radius-control); }
+:root .ant-modal .ant-modal-header { flex: none; margin: 0; padding: 14px 52px 14px 20px; border-bottom: 1px solid var(--console-border); background: transparent; }
+:root .ant-modal .ant-modal-title { font-size: 16px; font-weight: 600; line-height: 24px; letter-spacing: -.2px; }
+:root .ant-modal .ant-modal-close { top: 10px; inset-inline-end: 12px; color: var(--console-faint); border-radius: var(--app-radius-control); }
 :root .ant-modal .ant-modal-close:hover { color: var(--console-ink); background: var(--console-hover); }
-:root .ant-modal .ant-modal-body { min-height: 0; padding: 24px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
-:root .ant-modal .ant-modal-footer { flex: none; margin: 0; padding: 16px 24px; border-top: 1px solid var(--console-border); background: var(--console-surface); }
+:root .ant-modal .ant-modal-body { min-height: 0; padding: 20px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+:root .ant-modal .ant-modal-footer { flex: none; margin: 0; padding: 12px 20px; border-top: 1px solid var(--console-border); background: var(--console-surface); }
 :root .ant-modal .ant-modal-footer .ant-btn { min-width: 80px; height: 40px; padding-inline: 18px; }
 :root .ant-modal-confirm .ant-modal-content { padding: 24px; }
 :root .ant-modal-confirm .ant-modal-body { padding: 0; }
@@ -180,16 +180,16 @@ a { color: inherit; }
   .ui-kv { grid-template-columns: 96px minmax(0, 1fr); }
   .ui-kv dt, .ui-kv dd { padding: 10px 14px; }
   :root .ant-modal { max-width: calc(100vw - 24px); }
-  :root .ant-modal .ant-modal-header { padding: 16px 48px 16px 18px; }
-  :root .ant-modal .ant-modal-close { top: 12px; inset-inline-end: 12px; }
+  :root .ant-modal .ant-modal-header { padding: 14px 48px 14px 18px; }
+  :root .ant-modal .ant-modal-close { top: 10px; inset-inline-end: 10px; }
   :root .ant-modal .ant-modal-body { padding: 18px; }
-  :root .ant-modal .ant-modal-footer { padding: 14px 18px; }
+  :root .ant-modal .ant-modal-footer { padding: 12px 18px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
 html[data-standalone='true'] .app-header { padding-top: env(safe-area-inset-top); }
 
-.ui-dialog-heading { display: flex; flex-direction: column; gap: 4px; }
-.ui-dialog-heading small { color: var(--console-faint); font-size: 13px; font-weight: 400; line-height: 20px; letter-spacing: 0; }
+.ui-dialog-heading { display: flex; flex-direction: column; gap: 2px; }
+.ui-dialog-heading small { color: var(--console-faint); font-size: 12px; font-weight: 400; line-height: 18px; letter-spacing: 0; }
 :root .ant-modal .ant-select-single .ant-select-selector { align-items: center; }
