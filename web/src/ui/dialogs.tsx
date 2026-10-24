@@ -6,7 +6,6 @@ import {
   AlertDialogContent,
   AlertDialogTitle,
   AlertDialogDescription,
-  AlertDialogCancel,
 } from '@/components/ui/alert-dialog'
 import {
   Popover as PopoverRoot,
@@ -42,7 +41,6 @@ type ModalProps = {
   destroyOnClose?: boolean
   destroyOnHidden?: boolean
   centered?: boolean
-  mousePosition?: unknown
   maskClosable?: boolean
   closable?: boolean
   keyboard?: boolean

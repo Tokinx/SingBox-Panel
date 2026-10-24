@@ -171,12 +171,9 @@ export default function Users() {
   const [editing, setEditing] = useState<User | null>(null)
   const [assignUser, setAssignUser] = useState<User | null>(null)
   const [assignOpen, setAssignOpen] = useState(false)
-  const [assignOrigin, setAssignOrigin] = useState<{ x: number; y: number }>()
   const [historyUser, setHistoryUser] = useState<User | null>(null)
   const [search, setSearch] = useState('')
-  const openAssign = (user: User, button: HTMLElement) => {
-    const rect = button.getBoundingClientRect()
-    setAssignOrigin({ x: rect.left + rect.width / 2 + window.scrollX, y: rect.top + rect.height / 2 + window.scrollY })
+  const openAssign = (user: User) => {
     setAssignUser(user)
     setAssignOpen(true)
   }
@@ -406,7 +403,7 @@ export default function Users() {
       render: (_, u) => (
         <span className="ui-row-actions">
           <Button size="small" type="text" icon={<Pencil />} title="编辑" aria-label={`编辑 ${u.email}`} onClick={() => openEdit(u)} />
-          <Button size="small" type="text" icon={<Network />} title="分配节点" aria-label={`分配节点 ${u.email}`} onClick={(e) => openAssign(u, e.currentTarget)} />
+          <Button size="small" type="text" icon={<Network />} title="分配节点" aria-label={`分配节点 ${u.email}`} onClick={() => openAssign(u)} />
           <Button size="small" type="text" icon={<History />} title="使用记录" aria-label={`使用记录 ${u.email}`} onClick={() => setHistoryUser(u)} />
           {u.role !== 'admin' ? (
             <Button size="small" type="text" icon={<Trash2 />} title="删除" aria-label={`删除 ${u.email}`} onClick={() => removeUser(u)} />
@@ -453,7 +450,6 @@ export default function Users() {
         userEmail={assignUser?.email}
         nodes={nodes}
         open={assignOpen}
-        mousePosition={assignOrigin}
         onClose={() => setAssignOpen(false)}
         onSaved={() => {
           load()

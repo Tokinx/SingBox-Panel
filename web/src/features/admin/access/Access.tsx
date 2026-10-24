@@ -176,14 +176,13 @@ const AccessItem = memo(function AccessItem({ item, checked, disabled, onToggle 
 // AssignModal is a controlled dialog that edits one user's node assignment.
 // It is opened from a row in the users table (open + userId), so the admin no
 // longer has to first pick a user from a separate panel.
-export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, mousePosition }: {
+export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }: {
   userId?: number
   userEmail?: string
   nodes: CustomNode[]
   open: boolean
   onClose: () => void
   onSaved: () => void
-  mousePosition?: { x: number; y: number }
 }) {
   const screens = Grid.useBreakpoint()
   const isMobile = !screens.md
@@ -808,7 +807,6 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved, 
     <Modal
       title={userEmail ? `节点分配 · ${userEmail}` : '节点分配'}
       className="um-access-assign-modal um-modal"
-      mousePosition={mousePosition}
       open={open}
       onCancel={handleClose}
       width={MODAL_LG}
@@ -1304,8 +1302,7 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
     }
   }
 
-  // A wide, searchable group selector above the table is easier to use than
-  // Ant Table's narrow column-filter popover, especially with many groups.
+  // Keep group filtering searchable above the table, especially with many groups.
   const groupFilterOptions = useMemo(() => {
     const opts = groupOptions.map((g) => ({ label: g.label, value: g.value }))
     const ungrouped = nodes.filter((n) => !(n.group || '').trim()).length
