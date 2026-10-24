@@ -26,7 +26,7 @@ type ledgerEntry struct {
 	inbound string
 	user    string
 	// counted is the highest observed total; baseline is the part of it that
-	// predates the agent and is never attributed.
+	// predates the first successful node sample and is never attributed.
 	counted  [2]uint64
 	baseline [2]uint64
 	// userCounted is the attributed part already credited to user or excluded
@@ -99,7 +99,16 @@ func (s *trafficSampler) observeConnection(id, inbound, user string, total [2]ui
 		if total[i] > entry.counted[i] {
 			delta[i] = total[i] - entry.counted[i]
 			entry.counted[i] = total[i]
+			if !s.haveSample {
+				// The stream can start before Clash, or update an entry first seen
+				// by an earlier stream event. Keep advancing its baseline until the
+				// node counter baseline exists; none of these bytes may be billed.
+				entry.baseline[i] += delta[i]
+			}
 		}
+	}
+	if !s.haveSample {
+		return
 	}
 	if entry.inbound == "" {
 		return

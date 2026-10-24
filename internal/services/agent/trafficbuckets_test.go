@@ -32,6 +32,7 @@ func TestOfflineTrafficKeepsUTCResetBoundary(t *testing.T) {
 func TestLateUserIdentityPreservesOriginalBucket(t *testing.T) {
 	s := newTrafficSampler()
 	reset := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	s.ingest("api", clashTrafficResponse{}, reset.Add(-2*time.Minute))
 	s.observeConnection("c", "in", "", [2]uint64{100, 200}, false, reset.Add(-time.Minute))
 	s.observeConnection("c", "in", "alice", [2]uint64{120, 240}, false, reset.Add(time.Minute))
 	report := s.accountingSnapshot().Report

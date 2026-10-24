@@ -179,6 +179,8 @@ func fakeStatsService(t *testing.T, handler http.HandlerFunc) (*statsStream, *tr
 	host := strings.TrimPrefix(server.URL, "http://")
 	address, port, _ := strings.Cut(host, ":")
 	sampler := newTrafficSampler()
+	// User attribution tests exercise an already-established node window.
+	sampler.ingest("e", clashTrafficResponse{}, time.Now().Add(-time.Minute))
 	stream := newStatsStream(sampler)
 	stream.readConfig = func() ([]byte, error) {
 		return []byte(`{"services":[{"type":"api","tag":"panel-stats","listen":"` + address + `","listen_port":` + port + `,"secret":"sec"}]}`), nil
@@ -299,6 +301,7 @@ func TestLedgerBaselinesConnectionsOlderThanAgent(t *testing.T) {
 	sampler := newTrafficSampler()
 	t0 := time.Unix(1_700_000_000, 0)
 	sampler.startedAt = t0
+	sampler.ingest("e", clashTrafficResponse{}, t0)
 	session := newStreamSession(t0)
 	sampler.applyStreamEvents(session, connectionEvents{Reset: true, Events: []connectionEvent{
 		{Type: connectionEventNew, ID: "old", Connection: &streamConnection{ID: "old", Inbound: "in", User: "u", CreatedAt: t0.Add(-time.Hour).UnixMilli(), UplinkTotal: 9000, DownlinkTotal: 9000}},

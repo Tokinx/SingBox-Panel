@@ -38,9 +38,11 @@ type trafficSampler struct {
 
 	// ledger is the single per-connection account fed by both the Clash poll
 	// and the sing-box API connection stream (see trafficledger.go).
-	ledger          map[string]*ledgerEntry
-	tombstones      map[string]*ledgerEntry
-	tombstoneOrder  []string
+	ledger         map[string]*ledgerEntry
+	tombstones     map[string]*ledgerEntry
+	tombstoneOrder []string
+	// startedAt is advanced to the first successful node sample so connection
+	// replays use the same accounting boundary as the cumulative node counters.
 	startedAt       time.Time
 	haveConnections bool
 	portWindow      map[string][2]uint64
@@ -294,6 +296,9 @@ func (s *trafficSampler) ingestAt(endpoint string, counters clashTrafficResponse
 		// totals restart. Connection ids are global UUIDs, so the ledger and
 		// unsent deltas stay valid.
 		s.haveSample = false
+	}
+	if !s.haveSample {
+		s.startedAt = now
 	}
 
 	uploadRate := uint64(0)

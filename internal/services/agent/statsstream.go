@@ -469,8 +469,11 @@ func (s *trafficSampler) applyStreamEvents(session *streamSession, events connec
 			s.observeConnection(id, "", "", totals, false, now)
 		case connectionEventClosed:
 			if event.Connection != nil {
+				// A final snapshot can arrive without its NEW event. Apply the
+				// same startup cutoff as NEW replays when its ledger entry is absent.
+				baseline := time.UnixMilli(event.Connection.CreatedAt).Before(s.startedAt)
 				s.observeConnection(id, event.Connection.Inbound, event.Connection.User,
-					streamTotals(event.Connection), false, now)
+					streamTotals(event.Connection), baseline, now)
 			} else if totals, known := session.totals[id]; known {
 				s.observeConnection(id, "", "", totals, false, now)
 			}
