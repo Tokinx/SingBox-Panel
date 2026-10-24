@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type React from 'react'
-import { Button, Grid, Segmented, Table, message } from '../../../ui'
+import { Button, Grid, Segmented, Select, Table, message } from '../../../ui'
 import { RotateCw } from 'lucide-react'
 import { errMsg, getServerTraffic, isCanceledRequest } from '../../../api'
 import type { TrafficPoint, TrafficPortSeries, TrafficRange, TrafficSeries } from '../../../types'
@@ -384,7 +384,11 @@ export default function ServerTraffic({ serverId, titleExtra }: { serverId: numb
         actions={
           <div className="tr-actions">
             {titleExtra}
-            <Segmented<TrafficRange> className="tr-range" options={RANGE_OPTIONS} value={range} onChange={setRange} />
+            {compact ? (
+              <Select aria-label="历史统计范围" style={{ width: 138 }} options={RANGE_OPTIONS} value={range} onChange={setRange} />
+            ) : (
+              <Segmented<TrafficRange> className="tr-range" aria-label="历史统计范围" options={RANGE_OPTIONS} value={range} onChange={setRange} />
+            )}
             <Button
               icon={<RotateCw />}
               loading={loading}

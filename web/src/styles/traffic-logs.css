@@ -135,9 +135,6 @@
 @media (max-width: 767px) {
   .tr-page .ui-page-actions, .tr-actions { width: 100%; }
   .tr-server-select { flex: 1 1 0; width: auto; min-width: 0; }
-  .tr-range { order: 3; width: 100%; }
-  .tr-range .ui-segmented-item { flex: 1 1 0; min-width: 0; }
-  .tr-range .ui-segmented-item-label { padding-inline: 4px; }
   .tr-panel { padding: 14px 14px 8px; }
   .tr-chart svg { height: 220px; }
 
