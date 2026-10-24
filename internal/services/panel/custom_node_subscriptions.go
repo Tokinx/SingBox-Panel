@@ -257,7 +257,11 @@ func (m *customNodeSubscriptionManager) sync(ctx context.Context, id uint) (cust
 	defer unlockAudience()
 	err = m.db.Transaction(func(tx *gorm.DB) error {
 		var existing []model.CustomNode
-		if err := tx.Where("subscription_id = ?", source.ID).Find(&existing).Error; err != nil {
+		if err := tx.Where("subscription_id = ?", source.ID).Order("id").Find(&existing).Error; err != nil {
+			return err
+		}
+		matchedDesired, matchedOrder, err := matchSubscriptionNodeKeys(existing, desired, order)
+		if err != nil {
 			return err
 		}
 		// A saved subscription is normally assigned as a complete set.  Keep
@@ -276,8 +280,8 @@ func (m *customNodeSubscriptionManager) sync(ctx context.Context, id uint) (cust
 		for i := range existing {
 			byKey[existing[i].SubscriptionKey] = &existing[i]
 		}
-		for _, key := range order {
-			want := desired[key]
+		for _, key := range matchedOrder {
+			want := matchedDesired[key]
 			if current := byKey[key]; current != nil {
 				updates := map[string]any{
 					"name": want.Name, "source_name": want.SourceName, "group": want.Group, "link": want.Link,
