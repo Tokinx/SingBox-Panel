@@ -13,6 +13,7 @@ import { buildOutboundBody, TLS_REQUIRED_OUT, TRANSPORT_OUT, transportHost } fro
 import { FormGroup, scrollToFirstError } from './InboundForm'
 import '../../../styles/forms.css'
 import { MODAL_MD } from '../../../ui/modal'
+import { OutboundImport } from './OutboundImport'
 
 const OUT_TYPES: { value: OutboundType; label: string }[] = [
   { value: 'shadowsocks', label: 'Shadowsocks' },
@@ -46,6 +47,7 @@ export function OutboundForm({
   onSaved: () => void
 }) {
   const [form] = Form.useForm()
+  const [source, setSource] = useState<'manual' | 'external' | 'uri'>('manual')
   const [submitting, setSubmitting] = useState(false)
   const submitLock = useRef(false)
   const type: OutboundType = Form.useWatch('type', form) ?? 'shadowsocks'
@@ -57,6 +59,7 @@ export function OutboundForm({
 
   useEffect(() => {
     if (!open) return
+    setSource('manual')
     // Reset first: keys omitted below would otherwise leak from the previously
     // opened outbound (e.g. a credential typed for a different landing).
     form.resetFields()
@@ -162,13 +165,28 @@ export function OutboundForm({
       title={outbound ? '编辑出站' : '新增出站'}
       open={open}
       onOk={submit}
-      onCancel={onClose}
+      onCancel={() => { if (!submitting) onClose() }}
+      closable={!submitting}
+      maskClosable={!submitting}
+      keyboard={!submitting}
+      footer={!outbound && source !== 'manual' ? null : undefined}
       confirmLoading={submitting}
       width={MODAL_MD}
       centered
       destroyOnHidden
     >
-      <Form form={form} layout="vertical" className="fm-form">
+      {!outbound && <Segmented
+        block
+        aria-label="出站来源"
+        value={source}
+        disabled={submitting}
+        options={[{ value: 'manual', label: '手动填写' }, { value: 'external', label: '外部节点' }, { value: 'uri', label: 'URI 导入' }]}
+        onChange={(value) => setSource(value as typeof source)}
+        style={{ marginBottom: 16 }}
+      />}
+      {!outbound && source !== 'manual' ? (
+        <OutboundImport key={source} serverId={serverId} source={source} onClose={onClose} onSaved={onSaved} onSavingChange={setSubmitting} />
+      ) : <Form form={form} layout="vertical" className="fm-form">
         <FormGroup title="基本">
           <Form.Item name="tag" label="标签" rules={[{ required: true }]}>
             <Input placeholder="hk-out" />
@@ -461,7 +479,7 @@ export function OutboundForm({
             </div>
           </FormGroup>
         )}
-      </Form>
+      </Form>}
     </Modal>
   )
 }

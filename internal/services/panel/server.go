@@ -172,6 +172,8 @@ func (a *App) routes() *gin.Engine {
 		admin.PUT("/servers/:id/inbounds/:inboundID", a.updateInbound)
 		admin.DELETE("/servers/:id/inbounds/:inboundID", a.deleteInbound)
 
+		admin.GET("/servers/:id/outbound-sources", a.listOutboundSources)
+		admin.POST("/servers/:id/outbound-preview", a.previewOutboundImport)
 		admin.GET("/servers/:id/outbounds", a.listOutbounds)
 		admin.POST("/servers/:id/outbounds", a.createOutbound)
 		admin.PUT("/servers/:id/outbounds/:outboundID", a.updateOutbound)
