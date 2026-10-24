@@ -166,7 +166,7 @@ export function OutboundForm({
   return (
     <Modal
       className="fm-modal"
-      title={outbound ? '编辑出站' : '新增出站'}
+      title={<div className="ui-dialog-heading"><span>{outbound ? '编辑出站' : '新增出站'}</span><small>连接目标与转发方式</small></div>}
       open={open}
       onOk={submit}
       onCancel={() => { if (!submitting) onClose() }}
@@ -186,7 +186,7 @@ export function OutboundForm({
         <Pills
           label="出站来源"
           active={source}
-          items={[{ key: 'manual', label: '手动填写' }, { key: 'external', label: '外部节点' }, { key: 'uri', label: 'URI 导入' }]}
+          items={[{ key: 'manual', label: '手动配置' }, { key: 'external', label: '外部节点' }, { key: 'uri', label: 'URI 导入' }]}
           onChange={(value) => { setImportReady(false); setSource(value as typeof source) }}
         />
       </fieldset>}

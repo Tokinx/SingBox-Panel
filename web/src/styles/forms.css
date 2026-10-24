@@ -97,12 +97,22 @@
 .fm-source-picker .ui-pill.is-active { box-shadow: none; outline: 1px solid var(--console-border); }
 .fm-source-picker:disabled { opacity: .6; }
 .fm-source-picker:disabled .ui-pill { cursor: not-allowed; }
-.fm-modal .fm-group { padding: 0; margin-bottom: 20px; }
+.fm-modal .fm-grid { grid-template-columns: minmax(0, 1fr); }
+.fm-modal .fm-group { padding: 0; margin-bottom: 16px; }
 .fm-modal .fm-group:last-child { margin-bottom: 0; }
-.fm-modal .fm-group + .fm-group { border: 1px solid var(--console-border); border-radius: var(--app-radius-pop); overflow: hidden; }
-.fm-modal .fm-group + .fm-group > .fm-group-title { margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--console-border); font-weight: 500; }
-.fm-modal .fm-group + .fm-group > .fm-grid { padding: 16px 16px 0; }
-.fm-modal .fm-form .ant-space-compact > .ant-btn { min-height: 36px; }
+.fm-modal .fm-group-basic > .fm-group-title { display: none; }
+.fm-modal .fm-group-fold { border: 1px solid var(--console-border-strong); border-radius: var(--app-radius-pop); overflow: hidden; }
+.fm-modal .fm-group-fold > summary.fm-group-title { display: flex; align-items: center; justify-content: flex-start; gap: 10px; min-height: 48px; margin: 0; padding: 0 16px; font-size: 14px; font-weight: 500; list-style: none; cursor: pointer; user-select: none; }
+.fm-modal .fm-group-fold > summary::-webkit-details-marker { display: none; }
+.fm-modal .fm-group-fold > summary::before { content: ''; width: 6px; height: 6px; flex: none; border-right: 1.5px solid var(--console-faint); border-bottom: 1.5px solid var(--console-faint); transform: rotate(-45deg); }
+.fm-modal .fm-group-fold[open] > summary::before { transform: rotate(45deg); }
+.fm-modal .fm-group-fold > summary:hover { background: var(--console-surface); }
+.fm-modal .fm-group-fold > summary:focus-visible { outline: 2px solid var(--console-focus); outline-offset: -3px; }
+.fm-modal .fm-group-fold > summary small { margin-left: auto; }
+.fm-modal .fm-group-fold[open] > summary { border-bottom: 1px solid var(--console-border); }
+.fm-modal .fm-group-fold > .fm-grid { padding: 20px 16px 0; }
+.fm-modal .fm-form .ant-space-compact > .ant-btn { min-height: 40px; }
+.fm-modal .fm-form .ant-input-number.mono .ant-input-number-input { height: 38px; }
 .fm-import-form > .ant-form-item:last-child { margin-bottom: 0; }
 .fm-import-refresh.ant-btn { padding-inline: 0; color: var(--console-muted); margin-top: -8px; margin-bottom: 12px; }
 .fm-import-preview { margin: 8px 0 20px; border: 1px solid var(--console-border); border-radius: var(--app-radius-pop); overflow: hidden; }

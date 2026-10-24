@@ -365,7 +365,7 @@ export default function InboundForm({
   return (
     <Modal
       className="fm-modal"
-      title={inbound ? '编辑入站' : '新增入站'}
+      title={<div className="ui-dialog-heading"><span>{inbound ? '编辑入站' : '新增入站'}</span><small>监听协议与访问认证</small></div>}
       open={open}
       onOk={submit}
       onCancel={onClose}
@@ -767,17 +767,26 @@ export default function InboundForm({
 }
 
 export function FormGroup({ title, extra, children }: { title: ReactNode; extra?: ReactNode; children: ReactNode }) {
-  return (
-    <section className="fm-group">
+  if (title === '基本' || title === '动作') {
+    return <section className="fm-group fm-group-basic">
       <h3 className="fm-group-title">{title}{extra && <small>{extra}</small>}</h3>
       <div className="fm-grid">{children}</div>
     </section>
-  )
+  }
+  return <details className="fm-group fm-group-fold" open={title === '认证' || title === 'TLS' || title === '匹配条件'}>
+    <summary className="fm-group-title">{title}{extra && <small>{extra}</small>}</summary>
+    <div className="fm-grid">{children}</div>
+  </details>
 }
 
 // Validation failed: bring the first invalid field into view inside the
 // scrolling modal body.
 export function scrollToFirstError(form: FormInstance, err: unknown) {
   const name = (err as { errorFields?: { name: (string | number)[] }[] })?.errorFields?.[0]?.name
-  if (name) form.scrollToField(name, { block: 'center', behavior: 'smooth' })
+  if (name) {
+    // Fields remain mounted inside collapsed sections. Reveal them before
+    // scrolling, including validation errors that have not painted yet.
+    document.querySelectorAll<HTMLDetailsElement>('details.fm-group').forEach((group) => { group.open = true })
+    form.scrollToField(name, { block: 'center', behavior: 'smooth' })
+  }
 }

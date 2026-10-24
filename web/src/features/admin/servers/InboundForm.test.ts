@@ -78,6 +78,16 @@ describe('scrollToFirstError', () => {
     expect(scrollToField).toHaveBeenCalledWith(['reality_handshake_server'], expect.objectContaining({ block: 'center' }))
   })
 
+  it('reveals collapsed parameter sections before scrolling to an invalid field', () => {
+    const group = document.createElement('details')
+    group.className = 'fm-group'
+    document.body.append(group)
+    const scrollToField = vi.fn(() => expect(group.open).toBe(true))
+    scrollToFirstError({ scrollToField } as unknown as FormInstance, { errorFields: [{ name: ['uuid'] }] })
+    expect(scrollToField).toHaveBeenCalledOnce()
+    group.remove()
+  })
+
   it('ignores non-validation errors', () => {
     const scrollToField = vi.fn()
     scrollToFirstError({ scrollToField } as unknown as FormInstance, new Error('network'))
