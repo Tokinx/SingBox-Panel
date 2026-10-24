@@ -423,36 +423,10 @@ func (a *App) deleteServer(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	var users []model.User
-	if err := tx.Find(&users).Error; err != nil {
+	if err := removeServerUserAssignments(tx, id, inboundIDs); err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
-	}
-	inboundSet := map[uint]bool{}
-	for _, inboundID := range inboundIDs {
-		inboundSet[inboundID] = true
-	}
-	for i := range users {
-		servers := users[i].ServerIDs[:0]
-		for _, serverID := range users[i].ServerIDs {
-			if serverID != id {
-				servers = append(servers, serverID)
-			}
-		}
-		inbounds := users[i].InboundIDs[:0]
-		for _, inboundID := range users[i].InboundIDs {
-			if !inboundSet[inboundID] {
-				inbounds = append(inbounds, inboundID)
-			}
-		}
-		users[i].ServerIDs = servers
-		users[i].InboundIDs = inbounds
-		if err := tx.Select("ServerIDs", "InboundIDs").Save(&users[i]).Error; err != nil {
-			tx.Rollback()
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
 	}
 	if err := tx.Delete(&model.Server{}, id).Error; err != nil {
 		tx.Rollback()
