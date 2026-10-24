@@ -12,6 +12,11 @@ import (
 // counting a replayed connection twice.
 const maxTrafficTombstones = 4096
 
+// User usage is stored hourly by the panel. Bound the identity-discovery
+// window even for long-lived anonymous connections and nodes without the
+// sing-box user statistics API.
+const maxUnassignedTrafficHours = 24
+
 // ledgerEntry is the accounting state of one sing-box connection. Both the
 // Clash poll and the API connection stream report cumulative per-connection
 // totals for the same connection ids; the ledger counts only the part of an
@@ -24,9 +29,9 @@ type ledgerEntry struct {
 	// predates the agent and is never attributed.
 	counted  [2]uint64
 	baseline [2]uint64
-	// userCounted is the attributed part already credited to user. A user that
-	// becomes known after the first bytes were counted is credited the
-	// remainder once.
+	// userCounted is the attributed part already credited to user or excluded
+	// after its identity-discovery window expired. A user that becomes known
+	// later is credited only the remaining, timestamped part once.
 	userCounted [2]uint64
 	firstSeen   time.Time
 	unassigned  map[int64][2]uint64
@@ -35,6 +40,35 @@ type ledgerEntry struct {
 type userTrafficKey struct {
 	inbound string
 	user    string
+}
+
+func (entry *ledgerEntry) pruneUnassigned(now time.Time) {
+	cutoff := now.UTC().Truncate(time.Hour).Add(-(maxUnassignedTrafficHours - 1) * time.Hour).Unix()
+	discard := func(hour int64) {
+		value := entry.unassigned[hour]
+		entry.userCounted[0] += value[0]
+		entry.userCounted[1] += value[1]
+		delete(entry.unassigned, hour)
+	}
+	for hour := range entry.unassigned {
+		if hour < cutoff {
+			discard(hour)
+		}
+	}
+	// The age cutoff alone is insufficient if the source clock moved backwards.
+	for len(entry.unassigned) > maxUnassignedTrafficHours {
+		var oldest int64
+		first := true
+		for hour := range entry.unassigned {
+			if first || hour < oldest {
+				oldest, first = hour, false
+			}
+		}
+		discard(oldest)
+	}
+	if len(entry.unassigned) == 0 {
+		entry.unassigned = nil
+	}
 }
 
 // observeConnection records a cumulative total for one connection and
@@ -87,14 +121,16 @@ func (s *trafficSampler) observeConnection(id, inbound, user string, total [2]ui
 			if entry.unassigned == nil {
 				entry.unassigned = make(map[int64][2]uint64)
 			}
-			key := now.UTC().Truncate(time.Minute).Unix()
+			key := now.UTC().Truncate(time.Hour).Unix()
 			v := entry.unassigned[key]
 			v[0] += delta[0]
 			v[1] += delta[1]
 			entry.unassigned[key] = v
 		}
+		entry.pruneUnassigned(now)
 		return
 	}
+	entry.pruneUnassigned(now)
 	var userDelta [2]uint64
 	for i := range userDelta {
 		attributed := entry.counted[i] - entry.baseline[i]
