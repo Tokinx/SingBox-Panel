@@ -24,7 +24,11 @@ import (
 const maxTrafficResponseSize = 16 << 20
 
 type trafficSampler struct {
-	mu sync.Mutex
+	mu                sync.Mutex
+	buckets           map[int64]*collectedTrafficBucket
+	accountingSession string
+	reportSequence    uint64
+	report            *protocol.TrafficReport
 
 	endpoint     string
 	lastUpload   uint64
@@ -305,6 +309,13 @@ func (s *trafficSampler) ingestAt(endpoint string, counters clashTrafficResponse
 	if sampleSeconds <= 0 {
 		sampleSeconds = 1
 	}
+	b := s.bucket(now)
+	if s.haveSample {
+		b.Upload += counterDelta(counters.UploadTotal, s.lastUpload)
+		b.Download += counterDelta(counters.DownloadTotal, s.lastDownload)
+	}
+	b.UploadRate = max(b.UploadRate, uploadRate)
+	b.DownloadRate = max(b.DownloadRate, downloadRate)
 
 	// The Clash API exposes per-connection counters and the inbound tag in
 	// metadata.type, for example "vless/vless-in". Every observation goes
@@ -337,6 +348,11 @@ func (s *trafficSampler) ingestAt(endpoint string, counters clashTrafficResponse
 			delta.DownloadRate = rate
 		}
 		s.pendingPorts[inbound] = delta
+		port := b.ports[inbound]
+		port.Inbound = inbound
+		port.UploadRate = max(port.UploadRate, uint64(float64(sample[0])/sampleSeconds))
+		port.DownloadRate = max(port.DownloadRate, uint64(float64(sample[1])/sampleSeconds))
+		b.ports[inbound] = port
 	}
 	clear(s.portWindow)
 	s.haveConnections = true
@@ -355,6 +371,7 @@ func (s *trafficSampler) ingestAt(endpoint string, counters clashTrafficResponse
 		s.peakDownload = downloadRate
 	}
 	s.tcpConnections, s.udpConnections = hostConnectionCounts()
+	b.TCPConnections, b.UDPConnections = s.tcpConnections, s.udpConnections
 
 }
 
@@ -398,13 +415,14 @@ func (s *trafficSampler) summarySnapshot() *protocol.TrafficSnapshot {
 		return nil
 	}
 	return &protocol.TrafficSnapshot{
-		UploadTotal:    s.lastUpload,
-		DownloadTotal:  s.lastDownload,
-		UploadRate:     s.uploadRate,
-		DownloadRate:   s.downloadRate,
-		TCPConnections: s.tcpConnections,
-		UDPConnections: s.udpConnections,
-		SampledAt:      s.lastSample.Unix(),
+		AccountingVersion: 2,
+		UploadTotal:       s.lastUpload,
+		DownloadTotal:     s.lastDownload,
+		UploadRate:        s.uploadRate,
+		DownloadRate:      s.downloadRate,
+		TCPConnections:    s.tcpConnections,
+		UDPConnections:    s.udpConnections,
+		SampledAt:         s.lastSample.Unix(),
 	}
 }
 

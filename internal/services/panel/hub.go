@@ -359,12 +359,27 @@ func (h *Hub) handleEvent(ac *agentConn, env protocol.Envelope) {
 		if env.Decode(&e) == nil && e.Traffic != nil {
 			if err := h.traffic.record(serverID, e.Traffic); err != nil {
 				log.Printf("traffic: record server %d: %v", serverID, err)
+				return
+			}
+			if report := e.Traffic.Report; e.Traffic.AccountingVersion >= 2 && report != nil {
+				ack, err := protocol.NewEnvelope(protocol.EvtTrafficAck, "", protocol.TrafficAck{Session: report.Session, Sequence: report.Sequence})
+				if err == nil {
+					select {
+					case ac.send <- ack:
+					default:
+					} // the Agent will retry an unacknowledged batch
+				}
 			}
 			// The live stream only needs node and port data; per-user deltas
 			// stay out of its in-memory backlog.
 			live := *e.Traffic
 			live.Users = nil
-			h.live.publishTraffic(serverID, &live)
+			live.Report = nil
+			if live.Unavailable {
+				h.live.publishTraffic(serverID, nil)
+			} else {
+				h.live.publishTraffic(serverID, &live)
+			}
 		}
 	case protocol.EvtProgress:
 		var e protocol.ProgressEvt

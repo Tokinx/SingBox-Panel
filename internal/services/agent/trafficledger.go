@@ -29,6 +29,7 @@ type ledgerEntry struct {
 	// remainder once.
 	userCounted [2]uint64
 	firstSeen   time.Time
+	unassigned  map[int64][2]uint64
 }
 
 type userTrafficKey struct {
@@ -79,8 +80,19 @@ func (s *trafficSampler) observeConnection(id, inbound, user string, total [2]ui
 		port.Upload += delta[0]
 		port.Download += delta[1]
 		s.pendingPorts[entry.inbound] = port
+		s.addPortBucket(now, entry.inbound, delta)
 	}
 	if entry.user == "" {
+		if delta[0] != 0 || delta[1] != 0 {
+			if entry.unassigned == nil {
+				entry.unassigned = make(map[int64][2]uint64)
+			}
+			key := now.UTC().Truncate(time.Minute).Unix()
+			v := entry.unassigned[key]
+			v[0] += delta[0]
+			v[1] += delta[1]
+			entry.unassigned[key] = v
+		}
 		return
 	}
 	var userDelta [2]uint64
@@ -101,6 +113,19 @@ func (s *trafficSampler) observeConnection(id, inbound, user string, total [2]ui
 	pending.Upload += userDelta[0]
 	pending.Download += userDelta[1]
 	s.pendingUsers[key] = pending
+	// A user may become known after Clash already counted its bytes. Attribute
+	// those bytes to their original collection buckets, not the discovery time.
+	remaining := userDelta
+	for bucket, value := range entry.unassigned {
+		credit := [2]uint64{min(value[0], remaining[0]), min(value[1], remaining[1])}
+		s.addUserBucket(time.Unix(bucket, 0), key, credit)
+		remaining[0] -= credit[0]
+		remaining[1] -= credit[1]
+	}
+	entry.unassigned = nil
+	if remaining[0] != 0 || remaining[1] != 0 {
+		s.addUserBucket(now, key, remaining)
+	}
 }
 
 // closeConnection moves an active entry to the bounded tombstone set, so a

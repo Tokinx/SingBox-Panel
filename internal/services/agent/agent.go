@@ -45,6 +45,7 @@ func New(cfg Config) *Agent {
 	a.client.Register = a.register
 	a.client.Heartbeat = a.heartbeat
 	a.client.OnCommand = a.onCommand
+	a.client.OnTrafficAck = a.traffic.acknowledgeReport
 	a.client.OnConnected = func() {
 		if err := markAgentReady(a.cfg.AgentVersion); err != nil {
 			log.Printf("agent: write readiness marker: %v", err)
@@ -93,17 +94,14 @@ func (a *Agent) reportTraffic() {
 	if !a.trafficReportInFlight.CompareAndSwap(false, true) {
 		return
 	}
-	snap := a.traffic.snapshot()
+	snap := a.traffic.accountingSnapshot()
 	if snap == nil {
 		a.trafficReportInFlight.Store(false)
 		return
 	}
-	if !a.client.sendEvent(protocol.EvtTraffic, protocol.TrafficEvt{Traffic: snap}, func(written bool) {
-		if written {
-			// Clear only the snapshot actually written, preserving newer samples.
-			// The write receipt does not promise panel-side persistence.
-			a.traffic.acknowledge(snap)
-		}
+	if !a.client.sendEvent(protocol.EvtTraffic, protocol.TrafficEvt{Traffic: snap}, func(_ bool) {
+		// A socket receipt only releases the queue slot. The batch is retained
+		// until a matching traffic_ack confirms database commit on the panel.
 		a.trafficReportInFlight.Store(false)
 	}) {
 		a.trafficReportInFlight.Store(false)

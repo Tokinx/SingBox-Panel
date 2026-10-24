@@ -158,6 +158,9 @@ func (w *trafficWriter) dropServer(serverID uint) {
 
 // record persists node counters immediately and buffers bucket history.
 func (w *trafficWriter) record(serverID uint, snapshot *protocol.TrafficSnapshot) error {
+	if snapshot != nil && snapshot.AccountingVersion >= 2 {
+		return recordTimestampedTraffic(w.db, serverID, snapshot, time.Now())
+	}
 	w.mu.Lock()
 	delete(w.dropped, serverID)
 	w.mu.Unlock()

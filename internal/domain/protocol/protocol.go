@@ -30,6 +30,7 @@ const (
 	CmdStreamLogs       MessageType = "stream_logs"
 	CmdUninstallSingbox MessageType = "uninstall_singbox"
 	CmdUninstallAgent   MessageType = "uninstall_agent"
+	EvtTrafficAck       MessageType = "traffic_ack"
 
 	// Agent -> Panel events.
 	EvtRegister      MessageType = "register"
@@ -180,13 +181,18 @@ type HeartbeatEvt struct {
 // TrafficSnapshot contains sing-box's cumulative node counters and the
 // per-inbound deltas observed since the previous Agent sample.
 type TrafficSnapshot struct {
-	UploadTotal    uint64 `json:"upload_total"`
-	DownloadTotal  uint64 `json:"download_total"`
-	UploadRate     uint64 `json:"upload_rate"`
-	DownloadRate   uint64 `json:"download_rate"`
-	TCPConnections int    `json:"tcp_connections"`
-	UDPConnections int    `json:"udp_connections"`
-	SampledAt      int64  `json:"sampled_at"`
+	// Version 2 accounts only timestamped, acknowledged batches. Heartbeat
+	// counters are live telemetry, never an additional source of billable bytes.
+	AccountingVersion int            `json:"accounting_version,omitempty"`
+	Unavailable       bool           `json:"unavailable,omitempty"`
+	Report            *TrafficReport `json:"report,omitempty"`
+	UploadTotal       uint64         `json:"upload_total"`
+	DownloadTotal     uint64         `json:"download_total"`
+	UploadRate        uint64         `json:"upload_rate"`
+	DownloadRate      uint64         `json:"download_rate"`
+	TCPConnections    int            `json:"tcp_connections"`
+	UDPConnections    int            `json:"udp_connections"`
+	SampledAt         int64          `json:"sampled_at"`
 	// PeakUploadRate/PeakDownloadRate are the highest one-second rates the
 	// Agent observed since the previous acknowledged report. UploadRate and
 	// DownloadRate remain the latest instantaneous values for live charts.
@@ -197,6 +203,33 @@ type TrafficSnapshot struct {
 	// Users are per (inbound, authenticated user) byte deltas, reported only by
 	// Agents that read the sing-box API service. Older Agents omit them.
 	Users []UserTrafficSnapshot `json:"users,omitempty"`
+}
+
+// TrafficReport is immutable until acknowledged. Sequence starts at 1 for
+// each Agent process session; resends carry the same session and sequence.
+type TrafficReport struct {
+	Session  string              `json:"session"`
+	Sequence uint64              `json:"sequence"`
+	Buckets  []TrafficTimeBucket `json:"buckets"`
+}
+
+type TrafficAck struct {
+	Session  string `json:"session"`
+	Sequence uint64 `json:"sequence"`
+}
+
+// TrafficTimeBucket keeps collection time even when the control connection
+// stays offline across UTC midnight or a monthly reset boundary.
+type TrafficTimeBucket struct {
+	Time           int64                 `json:"time"`
+	Upload         uint64                `json:"upload"`
+	Download       uint64                `json:"download"`
+	UploadRate     uint64                `json:"upload_rate"`
+	DownloadRate   uint64                `json:"download_rate"`
+	TCPConnections int                   `json:"tcp_connections"`
+	UDPConnections int                   `json:"udp_connections"`
+	Ports          []PortTrafficSnapshot `json:"ports,omitempty"`
+	Users          []UserTrafficSnapshot `json:"users,omitempty"`
 }
 
 // UserTrafficSnapshot is a delta for one authenticated proxy user on one

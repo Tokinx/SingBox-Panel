@@ -43,9 +43,10 @@ type Client struct {
 	heartbeatInterval time.Duration
 
 	// Callbacks wired by the Agent orchestrator.
-	Register  func() protocol.RegisterEvt
-	Heartbeat func() protocol.HeartbeatEvt
-	OnCommand func(ctx context.Context, env protocol.Envelope) protocol.CommandResultEvt
+	Register     func() protocol.RegisterEvt
+	Heartbeat    func() protocol.HeartbeatEvt
+	OnCommand    func(ctx context.Context, env protocol.Envelope) protocol.CommandResultEvt
+	OnTrafficAck func(protocol.TrafficAck)
 	// OnConnected runs after registration has been written successfully. The
 	// self-updater uses it as a local readiness signal for automatic rollback.
 	OnConnected    func()
@@ -419,6 +420,13 @@ func (c *Client) readLoop(ctx context.Context, conn *websocket.Conn) error {
 
 		var env protocol.Envelope
 		if err := json.Unmarshal(data, &env); err != nil {
+			continue
+		}
+		if env.Type == protocol.EvtTrafficAck {
+			var ack protocol.TrafficAck
+			if env.Decode(&ack) == nil && c.OnTrafficAck != nil {
+				c.OnTrafficAck(ack)
+			}
 			continue
 		}
 		if c.OnCommand == nil {

@@ -343,6 +343,11 @@ var applicationMigrations = []schemaMigration{
 		name:    "persistent proxy traffic identities",
 		up:      migrateUserTrafficIdentities,
 	},
+	{
+		version: 26,
+		name:    "acknowledged timestamped traffic reports",
+		up:      func(tx *gorm.DB) error { return tx.AutoMigrate(&model.TrafficReportCursor{}) },
+	},
 }
 
 // migrationReplaySafe records whether an interrupted attempt of each migration
@@ -387,6 +392,7 @@ var migrationReplaySafe = map[uint]bool{
 	23: true,  // AutoMigrate
 	24: true,  // AutoMigrate
 	25: true,  // AutoMigrate plus insert-only legacy traffic identity bindings
+	26: true,  // AutoMigrate of report receipts
 }
 
 // runSchemaMigrations applies every pending migration in order. If any

@@ -93,59 +93,71 @@ func TestTrafficSummaryDoesNotCarryPortDeltas(t *testing.T) {
 	}
 }
 
-func TestTrafficReportsWaitForWriteCompletionAndPreserveNewSamples(t *testing.T) {
+func TestTrafficReportsWaitForPanelAcknowledgement(t *testing.T) {
 	sampler := newTrafficSampler()
+	now := time.Now().UTC()
 	sampler.available, sampler.haveSample = true, true
-	sampler.lastSample = time.Now()
-	sampler.pendingPorts["in"] = protocol.PortTrafficSnapshot{Inbound: "in", Upload: 100}
-	userKey := userTrafficKey{inbound: "in", user: "alice"}
-	sampler.pendingUsers[userKey] = protocol.UserTrafficSnapshot{Inbound: "in", User: "alice", Upload: 100}
+	sampler.lastSample = now
+	sampler.bucket(now).Upload = 100
+	sampler.addPortBucket(now, "in", [2]uint64{100, 0})
+	sampler.addUserBucket(now, userTrafficKey{"in", "alice"}, [2]uint64{100, 0})
 	client := NewClient("https://panel.example.com", "token", false)
 	client.activeSession.Store(1)
 	a := &Agent{client: client, traffic: sampler}
-	nextReport := func() sessionEnvelope {
+	nextReport := func() (sessionEnvelope, *protocol.TrafficReport) {
 		t.Helper()
 		select {
-		case report := <-client.send:
-			return report
+		case queued := <-client.send:
+			var event protocol.TrafficEvt
+			if err := json.Unmarshal(queued.env.Payload, &event); err != nil {
+				t.Fatal(err)
+			}
+			if event.Traffic.Report == nil {
+				t.Fatal("missing timestamped report")
+			}
+			return queued, event.Traffic.Report
 		default:
 			t.Fatal("traffic report was not queued")
-			return sessionEnvelope{}
+			return sessionEnvelope{}, nil
 		}
 	}
-
 	a.reportTraffic()
-	first := nextReport()
-	if snapshot := sampler.snapshot(); snapshot.Ports[0].Upload != 100 || snapshot.Users[0].Upload != 100 {
-		t.Fatalf("enqueue consumed unsent deltas: %+v", snapshot)
-	}
+	first, report := nextReport()
 	a.reportTraffic()
 	if len(client.send) != 0 {
-		t.Fatal("a second report duplicated the in-flight deltas")
+		t.Fatal("two simultaneous socket writes")
 	}
 	first.complete(false)
 	a.reportTraffic()
-	retry := nextReport()
-	var event protocol.TrafficEvt
-	if err := json.Unmarshal(retry.env.Payload, &event); err != nil {
-		t.Fatal(err)
-	}
-	if event.Traffic.Ports[0].Upload != 100 || event.Traffic.Users[0].Upload != 100 {
-		t.Fatalf("failed write lost pending deltas: %+v", event.Traffic)
+	retry, repeated := nextReport()
+	if repeated.Session != report.Session || repeated.Sequence != report.Sequence || repeated.Buckets[0].Upload != 100 {
+		t.Fatal("failed write did not preserve the immutable batch")
 	}
 	sampler.mu.Lock()
-	sampler.pendingPorts["in"] = protocol.PortTrafficSnapshot{Inbound: "in", Upload: 150}
-	sampler.pendingUsers[userKey] = protocol.UserTrafficSnapshot{Inbound: "in", User: "alice", Upload: 150}
+	sampler.bucket(now).Upload += 50
 	sampler.mu.Unlock()
 	retry.complete(true)
-	if snapshot := sampler.snapshot(); snapshot.Ports[0].Upload != 50 || snapshot.Users[0].Upload != 50 {
-		t.Fatalf("write receipt consumed newer samples: %+v", snapshot)
+	a.reportTraffic()
+	written, repeated := nextReport()
+	if repeated.Sequence != report.Sequence {
+		t.Fatal("socket write drained unacknowledged usage")
 	}
-
+	written.complete(true)
+	sampler.acknowledgeReport(protocol.TrafficAck{Session: report.Session, Sequence: report.Sequence + 1})
+	if sampler.report == nil {
+		t.Fatal("unmatched receipt drained report")
+	}
+	sampler.acknowledgeReport(protocol.TrafficAck{Session: report.Session, Sequence: report.Sequence})
+	a.reportTraffic()
+	newer, next := nextReport()
+	if next.Sequence != report.Sequence+1 || next.Buckets[0].Upload != 50 {
+		t.Fatal("receipt removed newer traffic")
+	}
+	newer.complete(false)
 	client.activeSession.Store(0)
 	a.reportTraffic()
 	if a.trafficReportInFlight.Load() {
-		t.Fatal("offline enqueue left the report permanently in flight")
+		t.Fatal("offline enqueue stuck in flight")
 	}
 }
 
