@@ -71,7 +71,7 @@ describe('theme scope', () => {
     expect(screen.getByTestId('container').textContent).toBe('#1e1e1e')
     expect(screen.getByTestId('popup').textContent).toBe('#2a2a2a')
     expect(screen.getByTestId('selection').textContent).toBe('#333333')
-    // Derived semantic colors must also change through Ant Design's dark algorithm.
+    // Semantic colors come from the same palette as the document CSS variables.
     expect(screen.getByTestId('error-background').textContent).not.toBe(dayErrorBackground)
 
     fireEvent.click(screen.getByRole('button', { name: '选择日间' }))

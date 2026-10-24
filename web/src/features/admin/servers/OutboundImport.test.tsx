@@ -17,14 +17,28 @@ const draft: OutboundBody = {
     transport: { type: 'ws', path: '/ws', max_early_data: 2048, headers: { Origin: 'https://cdn.example.com' } },
   } },
 }
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView')
 beforeEach(() => {
   vi.resetAllMocks()
   vi.stubGlobal('matchMedia', () => ({ matches: false, addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+  // jsdom has no layout engine; Radix/cmdk still subscribe to resize and
+  // request that the active option scroll into view.
+  vi.stubGlobal('ResizeObserver', class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  })
+  Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, writable: true, value: vi.fn() })
   vi.mocked(previewOutboundImport).mockResolvedValue(draft)
   vi.mocked(listOutboundSources).mockResolvedValue([{ id: 8, name: 'External node', group: 'Asia', type: 'trojan', server: 'node.example.com', server_port: 443 }])
   vi.mocked(createOutbound).mockResolvedValue({ apply_state: 'pending' } as Awaited<ReturnType<typeof createOutbound>>)
 })
-afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+  if (originalScrollIntoView) Object.defineProperty(Element.prototype, 'scrollIntoView', originalScrollIntoView)
+  else Reflect.deleteProperty(Element.prototype, 'scrollIntoView')
+})
 const saveButton = () => screen.getByRole('button', { name: '保存出站' }) as HTMLButtonElement
 const parseURI = () => {
   fireEvent.change(screen.getByLabelText('节点 URI'), { target: { value: 'trojan://secret@node.example.com:443' } })
@@ -68,10 +82,10 @@ describe('outbound imports', () => {
   })
   it('loads external nodes and resolves the selected node ID', async () => {
     render(<OutboundImport serverId={3} source="external" onClose={vi.fn()} onSaved={vi.fn()} />)
-    await waitFor(() => expect(listOutboundSources).toHaveBeenCalled())
-    fireEvent.mouseDown(screen.getByRole('combobox', { name: '节点分组' }))
+    await waitFor(() => expect((screen.getByRole('combobox', { name: '节点分组' }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole('combobox', { name: '节点分组' }))
     fireEvent.click(await screen.findByText('Asia · 1'))
-    fireEvent.mouseDown(screen.getByRole('combobox', { name: '外部节点' }))
+    fireEvent.click(screen.getByRole('combobox', { name: '外部节点' }))
     fireEvent.click(await screen.findByText('External node'))
     await screen.findByLabelText('出站标签')
     expect(previewOutboundImport).toHaveBeenCalledWith(3, { custom_node_id: 8 }, expect.any(AbortSignal))
@@ -87,30 +101,28 @@ describe('outbound imports', () => {
     let resolve!: (value: OutboundBody) => void
     vi.mocked(previewOutboundImport).mockReturnValue(new Promise((done) => { resolve = done }))
     render(<OutboundImport serverId={3} source="external" onClose={vi.fn()} onSaved={vi.fn()} />)
-    expect((screen.getByRole('combobox', { name: '外部节点' }) as HTMLInputElement).disabled).toBe(true)
-    await waitFor(() => expect((screen.getByRole('combobox', { name: '节点分组' }) as HTMLInputElement).disabled).toBe(false))
-    fireEvent.mouseDown(screen.getByRole('combobox', { name: '节点分组' }))
+    expect((screen.getByRole('combobox', { name: '外部节点' }) as HTMLButtonElement).disabled).toBe(true)
+    await waitFor(() => expect((screen.getByRole('combobox', { name: '节点分组' }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole('combobox', { name: '节点分组' }))
     fireEvent.click(await screen.findByText('Asia · 1'))
-    fireEvent.mouseDown(screen.getByRole('combobox', { name: '外部节点' }))
+    fireEvent.click(screen.getByRole('combobox', { name: '外部节点' }))
     fireEvent.click(await screen.findByText('Asia node'))
-    fireEvent.mouseDown(screen.getByRole('combobox', { name: '节点分组' }))
+    fireEvent.click(screen.getByRole('combobox', { name: '节点分组' }))
     fireEvent.click(await screen.findByText('Europe · 1'))
     await act(async () => resolve(draft))
     expect(screen.queryByLabelText('出站标签')).toBeNull()
     expect(saveButton().disabled).toBe(true)
-    fireEvent.mouseDown(screen.getByRole('combobox', { name: '外部节点' }))
+    fireEvent.click(screen.getByRole('combobox', { name: '外部节点' }))
     expect(await screen.findByText('Europe node')).toBeTruthy()
     expect(screen.queryByText('Asia node')).toBeNull()
-    fireEvent.mouseDown(screen.getByRole('combobox', { name: '节点分组' }))
+    fireEvent.click(screen.getByRole('combobox', { name: '节点分组' }))
     fireEvent.click(await screen.findByText('未分组 · 1'))
-    fireEvent.mouseDown(screen.getByRole('combobox', { name: '外部节点' }))
+    fireEvent.click(screen.getByRole('combobox', { name: '外部节点' }))
     expect(await screen.findByText('Ungrouped node')).toBeTruthy()
     expect(createOutbound).not.toHaveBeenCalled()
   })
 
   it('submits an import from the fixed modal footer', async () => {
-    const getStyle = window.getComputedStyle
-    vi.spyOn(window, 'getComputedStyle').mockImplementation((element) => getStyle(element))
     const onClose = vi.fn(), onSaved = vi.fn()
     render(<OutboundForm serverId={3} outbound={null} open onClose={onClose} onSaved={onSaved} />)
     fireEvent.click(screen.getByRole('tab', { name: 'URI 导入' }))
