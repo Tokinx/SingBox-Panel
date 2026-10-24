@@ -123,11 +123,6 @@ a { color: inherit; }
   .ui-kv dt, .ui-kv dd { padding: 10px 14px; }
   :root .ui-modal { max-width: calc(100vw - 24px); }
   :root .ui-modal .ui-modal-header { padding: 14px 48px 14px 18px; }
-  :root .ui-modal .ui-modal-close { top: 10px; inset-inline-end: 10px; }
-  :root .ui-modal:not(.ui-modal-confirm) .ui-modal-body { padding: 18px; }
-  :root .ui-modal-confirm .ui-modal-confirm-title { padding-inline: 18px; }
-  :root .ui-modal-confirm .ui-modal-confirm-content { padding: 18px; }
-  :root .ui-modal-confirm .ui-modal-confirm-btns { padding-inline: 18px; }
   :root .ui-modal .ui-modal-footer { padding: 12px 18px; }
 }
 @media (prefers-reduced-motion: reduce) {

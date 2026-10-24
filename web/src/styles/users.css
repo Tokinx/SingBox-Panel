@@ -27,7 +27,7 @@
 .um-group-label { color: var(--console-muted); }
 .um-group-button { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 26px; padding: 0 8px; margin-left: -8px; border: 0; border-radius: 6px; background: transparent; color: var(--console-ink); font: inherit; font-size: 13px; cursor: pointer; }
 .um-group-button > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.um-group-button .anticon { font-size: 9px; color: var(--console-faint); }
+.um-group-button .lucide { font-size: 9px; color: var(--console-faint); }
 .um-group-button.is-empty { color: var(--console-faint); }
 .um-group-button:hover { background: var(--console-hover); }
 .um-group-button:focus-visible { outline: 2px solid var(--console-focus); outline-offset: 1px; }

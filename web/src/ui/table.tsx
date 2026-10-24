@@ -176,7 +176,18 @@ function TableRoot<T extends object>({
                   <TableHead
                     className="ui-table-cell"
                     key={column.key ?? i}
-                    style={{ textAlign: column.align }}
+                    style={{
+                      textAlign: column.align,
+                      ...(column.fixed
+                        ? {
+                            position: 'sticky',
+                            right: column.fixed === 'right' ? 0 : undefined,
+                            left: column.fixed === 'left' ? 0 : undefined,
+                            background: 'var(--console-surface)',
+                            zIndex: 2,
+                          }
+                        : {}),
+                    }}
                   >
                     {column.sorter ? (
                       <button

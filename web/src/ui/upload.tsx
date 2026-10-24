@@ -1,5 +1,6 @@
 import React, { useId, useRef } from 'react'
 import { UploadCloud, X } from 'lucide-react'
+import { cn } from '@/lib/utils'
 export type UploadFile = {
   uid: string
   name: string
@@ -49,10 +50,10 @@ function Dragger({
     })
   }
   return (
-    <div className={className}>
+    <div className={cn('ui-upload-wrapper', className)}>
       <label
         htmlFor={id}
-        className="ui-upload-drag"
+        className={cn('ui-upload-drag', disabled && 'ui-upload-disabled')}
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
           event.preventDefault()

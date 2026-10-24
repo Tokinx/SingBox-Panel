@@ -18,3 +18,5 @@
 - 外部节点先选分组再选节点；列表以名称为主、协议为辅，地址等连接参数在选中后的详情中展示。
 
 - 前端基础组件使用 shadcn/ui（Radix + Tailwind），表单使用 React Hook Form，图标使用 Lucide，通知使用 Sonner。不要重新引入 Ant Design 或仅用样式覆盖模拟迁移。
+
+- 不对 `html`、`body` 或应用根节点设置 CSS `zoom` / 整页 `transform: scale`；Radix 浮层与触发控件必须使用同一浏览器坐标空间。弹窗统一居中，不混用旧版 `top` 偏移。

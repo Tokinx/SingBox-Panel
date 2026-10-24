@@ -53,7 +53,7 @@
 .settings-restore .ui-upload-wrapper .ui-upload-drag:not(.ui-upload-disabled):hover { border-color: var(--console-ink); }
 .settings-restore .ui-upload-wrapper .ui-upload-drag .ui-upload-btn { padding: 28px 16px; }
 .settings-restore .ui-upload-drag-icon { margin-bottom: 8px !important; }
-.settings-restore .ui-upload-wrapper .ui-upload-drag p.ui-upload-drag-icon .anticon { color: var(--console-faint); font-size: 32px; }
+.settings-restore .ui-upload-wrapper .ui-upload-drag p.ui-upload-drag-icon .lucide { color: var(--console-faint); font-size: 32px; }
 .settings-restore .ui-upload-wrapper .ui-upload-drag p.ui-upload-text { margin-bottom: 2px; font-size: 14px; color: var(--console-ink); }
 .settings-restore .ui-upload-wrapper .ui-upload-drag p.ui-upload-hint { color: var(--console-faint); }
 .settings-restore .ui-upload-list { margin-top: 4px; }

@@ -113,6 +113,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           `ui-btn-${type}`,
           (danger || type === 'danger') && 'ui-btn-dangerous',
           size === 'small' && 'ui-btn-sm',
+          size === 'large' && 'ui-btn-lg',
           block && 'w-full',
           type === 'dashed' && 'border-dashed',
           !children && 'ui-btn-icon-only',
@@ -221,6 +222,7 @@ const Password = forwardRef<
           className="ui-input-clear"
           type="button"
           aria-label={visible ? '隐藏密码' : '显示密码'}
+          disabled={props.disabled}
           onClick={() => setVisible(!visible)}
         >
           {iconRender?.(visible) ||
@@ -498,6 +500,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
     ref,
   ) {
     const [open, setOpen] = useState(false)
+    const commandId = useId()
     const [search, setSearch] = useState('')
     const [internal, setInternal] = useState(defaultValue)
     const current = value === undefined && !onChange ? internal : value
@@ -530,7 +533,18 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
       setSearch('')
       if (!mode) setOpen(false)
     }
-    const filtered = options.filter(
+    const availableOptions: SelectOption[] =
+      mode === 'tags'
+        ? [
+            ...options,
+            ...selected
+              .filter(
+                (value) => !options.some((option) => option.value === value),
+              )
+              .map((value) => ({ value, label: String(value) })),
+          ]
+        : options
+    const filtered = availableOptions.filter(
       (option) =>
         !search ||
         (typeof filterOption === 'function'
@@ -573,6 +587,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
               type="button"
               role="combobox"
               aria-expanded={open}
+              aria-controls={commandId}
               disabled={disabled}
               className="ui-select-selector"
             >
@@ -620,9 +635,15 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
         <PopoverContent
           className="ui-select-dropdown p-0"
           align="start"
+          onOpenAutoFocus={(event) => {
+            if (!showSearch && !mode) {
+              event.preventDefault()
+              document.getElementById(commandId)?.focus()
+            }
+          }}
           style={{ width: 'var(--radix-popover-trigger-width)', minWidth: 180 }}
         >
-          <Command shouldFilter={false}>
+          <Command id={commandId} tabIndex={-1} shouldFilter={false}>
             {(showSearch || mode) && (
               <CommandInput
                 placeholder={mode === 'tags' ? '输入或选择…' : '搜索…'}
@@ -631,21 +652,12 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
                   setSearch(s)
                   onSearch?.(s)
                 }}
-                onKeyDown={(event) => {
-                  if (
-                    mode === 'tags' &&
-                    event.key === 'Enter' &&
-                    search.trim() &&
-                    !filtered.length
-                  ) {
-                    event.preventDefault()
-                    choose(search.trim())
-                  }
-                }}
               />
             )}
             <CommandList
-              style={{ maxHeight: `min(${listHeight}px, calc(var(--radix-popover-content-available-height) - ${showSearch || mode ? 44 : 8}px))` }}
+              style={{
+                maxHeight: `min(${listHeight}px, calc(var(--radix-popover-content-available-height) - ${showSearch || mode ? 44 : 8}px))`,
+              }}
               onScroll={(event) => {
                 const el = event.currentTarget
                 if (el.scrollHeight - el.scrollTop - el.clientHeight < 50)
@@ -657,7 +669,9 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
               )}
               {mode === 'tags' &&
                 search.trim() &&
-                !options.some((o) => String(o.value) === search.trim()) && (
+                !availableOptions.some(
+                  (o) => String(o.value) === search.trim(),
+                ) && (
                   <CommandItem
                     value={`new-${search}`}
                     onSelect={() => choose(search.trim())}
@@ -707,24 +721,69 @@ export const AutoComplete = forwardRef<
   ref,
 ) {
   const [open, setOpen] = useState(false)
+  const [activeOption, setActiveOption] = useState(-1)
+  const inputRef = useRef<HTMLInputElement | null>(null)
   const id = useId()
   const filtered = options
     .filter((o) => !filterOption || filterOption(value, o))
     .slice(0, 80)
+  useEffect(() => setActiveOption(-1), [value])
+  useEffect(() => {
+    if (!open) setActiveOption(-1)
+  }, [open])
+  useEffect(() => {
+    if (activeOption >= 0)
+      document
+        .getElementById(`${id}-${activeOption}`)
+        ?.scrollIntoView({ block: 'nearest' })
+  }, [activeOption, id])
   return (
     <Popover open={open && filtered.length > 0} onOpenChange={setOpen}>
       <PopoverPrimitive.Anchor asChild>
         <div>
           <BaseInput
             {...props}
-            ref={ref}
+            ref={(node) => {
+              inputRef.current = node
+              if (typeof ref === 'function') ref(node)
+              else if (ref) ref.current = node
+            }}
             role="combobox"
             aria-expanded={open && filtered.length > 0}
             aria-controls={id}
+            aria-autocomplete="list"
+            aria-activedescendant={
+              open && activeOption >= 0 ? `${id}-${activeOption}` : undefined
+            }
             value={value}
-            onFocus={() => setOpen(true)}
+            onFocus={(event) => {
+              props.onFocus?.(event)
+              setOpen(true)
+            }}
             onKeyDown={(event) => {
-              if (event.key === 'Escape') setOpen(false)
+              props.onKeyDown?.(event)
+              if (event.key === 'Escape' && open) {
+                event.preventDefault()
+                event.stopPropagation()
+                setOpen(false)
+              }
+              if (
+                (event.key === 'ArrowDown' || event.key === 'ArrowUp') &&
+                filtered.length
+              ) {
+                event.preventDefault()
+                setOpen(true)
+                setActiveOption((index) =>
+                  event.key === 'ArrowDown'
+                    ? Math.min(index + 1, filtered.length - 1)
+                    : Math.max(index - 1, 0),
+                )
+              }
+              if (event.key === 'Enter' && open && filtered[activeOption]) {
+                event.preventDefault()
+                onChange?.(filtered[activeOption].value)
+                setOpen(false)
+              }
             }}
             onChange={(event) => {
               onChange?.(event.target.value)
@@ -741,17 +800,21 @@ export const AutoComplete = forwardRef<
         onCloseAutoFocus={(event) => event.preventDefault()}
         style={{ width: 'var(--radix-popover-trigger-width)', minWidth: 200 }}
       >
-        <div role="listbox">
-          {filtered.map((option) => (
+        <div role="listbox" aria-label={props['aria-label'] || '分组建议'}>
+          {filtered.map((option, index) => (
             <button
               type="button"
+              id={`${id}-${index}`}
               role="option"
+              data-active={index === activeOption || undefined}
+              onMouseDown={(event) => event.preventDefault()}
               aria-selected={value === option.value}
               className="ui-autocomplete-option"
               key={option.value}
               onClick={() => {
                 onChange?.(option.value)
                 setOpen(false)
+                inputRef.current?.focus()
               }}
             >
               {option.label || option.value}
@@ -930,7 +993,10 @@ function TypographyText({
       {copyable && (
         <button
           type="button"
-          className="ui-copy"
+          className={cn(
+            'ui-copy ui-typography-copy',
+            copied && 'ui-typography-copy-success',
+          )}
           aria-label={copied ? '已复制' : '复制'}
           onClick={() => {
             copyToClipboard(
