@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Button, Form, Input, InputNumber, Modal, Select, Space, Switch, type FormInstance } from '../../../ui'
 import { createInbound, updateInbound } from '../../../api'
 import { applyWithToast } from '../../../configApply'
@@ -297,6 +297,7 @@ export default function InboundForm({
   const [form] = Form.useForm()
   const [submitting, setSubmitting] = useState(false)
   const submitLock = useRef(false)
+  const submitSessionRef = useRef(0)
   const type: InboundType = Form.useWatch('type', form) ?? 'shadowsocks'
   const tlsMode = Form.useWatch('tls_mode', form)
   const transportType = Form.useWatch('transport_type', form)
@@ -304,6 +305,13 @@ export default function InboundForm({
   const obfsType = Form.useWatch('obfs_type', form)
   const method = Form.useWatch('method', form)
   const multiUser = !!Form.useWatch('multi_user', form) && supportsMultiUser(type, method)
+
+  useLayoutEffect(() => {
+    submitSessionRef.current += 1
+    submitLock.current = false
+    setSubmitting(false)
+    return () => { submitSessionRef.current += 1 }
+  }, [open, serverId, inbound?.id])
 
   useEffect(() => {
     if (!open) return
@@ -325,14 +333,16 @@ export default function InboundForm({
   }
 
   const submit = async () => {
-    if (submitLock.current) return
+    if (!open || submitLock.current) return
     submitLock.current = true
+    const session = submitSessionRef.current
     setSubmitting(true)
     try {
       const v = await form.validateFields().catch((err) => {
         scrollToFirstError(form, err)
         throw err
       })
+      if (session !== submitSessionRef.current) return
       const settings = assembleSettings(inbound?.settings || {}, v, v.type)
       const body = {
         type: v.type as InboundType,
@@ -343,16 +353,17 @@ export default function InboundForm({
         settings,
       }
       const editing = inbound
-      // Close the modal immediately; the config is delivered in the background
-      // behind a "配置下发中" spinner toast, so the form never appears to hang.
-      onClose()
-      await applyWithToast(`inbound-${editing ? editing.id : 'new'}`, () =>
+      const saved = await applyWithToast(`inbound-${editing ? editing.id : 'new'}`, () =>
         editing ? updateInbound(serverId, editing.id, body) : createInbound(serverId, body),
       )
+      if (!saved || session !== submitSessionRef.current) return
+      onClose()
       onSaved()
     } finally {
-      submitLock.current = false
-      setSubmitting(false)
+      if (session === submitSessionRef.current) {
+        submitLock.current = false
+        setSubmitting(false)
+      }
     }
   }
 
@@ -374,6 +385,7 @@ export default function InboundForm({
       centered
       destroyOnHidden
     >
+      <fieldset disabled={submitting} aria-busy={submitting} className="min-w-0 border-0 p-0 m-0">
       <Form form={form} layout="vertical" className="fm-form">
         <FormGroup title="基本">
           <Form.Item name="type" label="协议" rules={[{ required: true }]}>
@@ -762,6 +774,7 @@ export default function InboundForm({
           </FormGroup>
         )}
       </Form>
+      </fieldset>
     </Modal>
   )
 }

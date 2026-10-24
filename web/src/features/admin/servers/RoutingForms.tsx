@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { Button, Checkbox, Form, Input, InputNumber, Modal, Segmented, Select, Space, Switch } from '../../../ui'
 import {
   createOutbound,
@@ -53,12 +53,20 @@ export function OutboundForm({
   const [source, setSource] = useState<'manual' | 'external' | 'uri'>('manual')
   const [submitting, setSubmitting] = useState(false)
   const submitLock = useRef(false)
+  const submitSessionRef = useRef(0)
   const type: OutboundType = Form.useWatch('type', form) ?? 'shadowsocks'
   const tlsMode = Form.useWatch('tls_mode', form) ?? 'none'
   const transportType = Form.useWatch('transport_type', form) ?? 'tcp'
   const snellVersion = Form.useWatch('snell_version', form) ?? 4
   const snellObfsMode = Form.useWatch('snell_obfs_mode', form) ?? 'none'
   const hysteriaObfsType = Form.useWatch('obfs_type', form) ?? ''
+
+  useLayoutEffect(() => {
+    submitSessionRef.current += 1
+    submitLock.current = false
+    setSubmitting(false)
+    return () => { submitSessionRef.current += 1 }
+  }, [open, serverId, outbound?.id])
 
   useEffect(() => {
     if (!open) return
@@ -138,25 +146,29 @@ export function OutboundForm({
   }, [open, outbound])
 
   const submit = async () => {
-    if (submitLock.current) return
+    if (!open || submitLock.current) return
     submitLock.current = true
+    const session = submitSessionRef.current
     setSubmitting(true)
     try {
       const v = await form.validateFields().catch((err) => {
         scrollToFirstError(form, err)
         throw err
       })
+      if (session !== submitSessionRef.current) return
       const body = buildOutboundBody(outbound, v)
       const editing = outbound
-      // 关闭弹窗后在后台下发，避免确认按钮卡顿
-      onClose()
-      await applyWithToast(`outbound-${editing ? editing.id : 'new'}`, () =>
+      const saved = await applyWithToast(`outbound-${editing ? editing.id : 'new'}`, () =>
         editing ? updateOutbound(serverId, editing.id, body) : createOutbound(serverId, body),
       )
+      if (!saved || session !== submitSessionRef.current) return
+      onClose()
       onSaved()
     } finally {
-      submitLock.current = false
-      setSubmitting(false)
+      if (session === submitSessionRef.current) {
+        submitLock.current = false
+        setSubmitting(false)
+      }
     }
   }
 
@@ -192,7 +204,8 @@ export function OutboundForm({
       </fieldset>}
       {!outbound && source !== 'manual' ? (
         <OutboundImport key={source} serverId={serverId} source={source} onClose={onClose} onSaved={onSaved} onSavingChange={setSubmitting} formId={importFormId} onReadyChange={setImportReady} />
-      ) : <Form form={form} layout="vertical" className="fm-form">
+      ) : <fieldset disabled={submitting} aria-busy={submitting} className="min-w-0 border-0 p-0 m-0">
+      <Form form={form} layout="vertical" className="fm-form">
         <FormGroup title="基本">
           <Form.Item name="tag" label="标签" rules={[{ required: true }]}>
             <Input placeholder="hk-out" />
@@ -485,7 +498,8 @@ export function OutboundForm({
             </div>
           </FormGroup>
         )}
-      </Form>}
+      </Form>
+      </fieldset>}
     </Modal>
   )
 }
@@ -573,9 +587,17 @@ export function RuleForm({
   const [form] = Form.useForm()
   const [submitting, setSubmitting] = useState(false)
   const submitLock = useRef(false)
+  const submitSessionRef = useRef(0)
   const action = Form.useWatch('action', form) || 'route'
   const matchFields = (Form.useWatch('match_fields', form) || []) as MatchField[]
   const showMatchField = (field: MatchField) => matchFields.includes(field)
+
+  useLayoutEffect(() => {
+    submitSessionRef.current += 1
+    submitLock.current = false
+    setSubmitting(false)
+    return () => { submitSessionRef.current += 1 }
+  }, [open, serverId, rule?.id])
 
   useEffect(() => {
     if (!open) return
@@ -638,14 +660,16 @@ export function RuleForm({
   }, [open, rule])
 
   const submit = async () => {
-    if (submitLock.current) return
+    if (!open || submitLock.current) return
     submitLock.current = true
+    const session = submitSessionRef.current
     setSubmitting(true)
     try {
       const v = await form.validateFields().catch((err) => {
         scrollToFirstError(form, err)
         throw err
       })
+      if (session !== submitSessionRef.current) return
       const match: RuleMatch = { action: v.action }
       const selectedFields = new Set<MatchField>(v.match_fields || [])
       if ((v.action === 'sniff' || v.action === 'hijack-dns' || selectedFields.has('inbound')) && v.inbound?.length) {
@@ -696,15 +720,17 @@ export function RuleForm({
 
       const body = { match, outbound: targetOutbound, enabled: v.enabled, remark: v.remark || '', sort: rule?.sort }
       const editing = rule
-      // 关闭弹窗后在后台下发，避免确认按钮卡顿
-      onClose()
-      await applyWithToast(`rule-${editing ? editing.id : 'new'}`, () =>
+      const saved = await applyWithToast(`rule-${editing ? editing.id : 'new'}`, () =>
         editing ? updateRule(serverId, editing.id, body) : createRule(serverId, body),
       )
+      if (!saved || session !== submitSessionRef.current) return
+      onClose()
       onSaved()
     } finally {
-      submitLock.current = false
-      setSubmitting(false)
+      if (session === submitSessionRef.current) {
+        submitLock.current = false
+        setSubmitting(false)
+      }
     }
   }
 
@@ -722,6 +748,7 @@ export function RuleForm({
       centered
       destroyOnHidden
     >
+      <fieldset disabled={submitting} aria-busy={submitting} className="min-w-0 border-0 p-0 m-0">
       <Form form={form} layout="vertical" className="fm-form">
         <FormGroup title="动作">
           <Form.Item name="action" rules={[{ required: true, message: '请选择规则动作' }]} className="fm-full">
@@ -903,6 +930,7 @@ export function RuleForm({
           </div>
         </FormGroup>
       </Form>
+      </fieldset>
     </Modal>
   )
 }

@@ -23,22 +23,23 @@ export function showConfigApplyResult(result: ConfigApplyResult, key?: string) {
   }
 }
 
-// Run a config-mutating action in the background behind a persistent "配置下发中"
-// spinner toast that resolves in place to the apply result (or an error). Callers
-// close their modal first, then await/detach this so the task runs in the
-// background and the UI stays responsive. Errors are surfaced via the toast, not
-// rethrown, so the returned promise always resolves.
+// Resolve the persistent toast and report whether the panel saved the change.
+// A pending/failed Agent apply still means the database write succeeded.
+// HTTP failures return false so editors can retain their draft for retry;
+// detached callers still receive their error toast without an unhandled reject.
 export async function applyWithToast(
   key: string,
   action: () => Promise<unknown>,
   loading = '配置下发中',
-): Promise<void> {
+): Promise<boolean> {
   message.loading({ content: loading, key, duration: 0 })
   try {
     const result = await action()
     if (isConfigApplyResult(result)) showConfigApplyResult(result, key)
     else message.success({ content: '操作完成', key })
+    return true
   } catch (e) {
     message.error({ content: errMsg(e), key })
+    return false
   }
 }
