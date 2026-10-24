@@ -37,6 +37,9 @@ button:disabled { cursor: not-allowed; }
 .ui-switch[data-state='checked'] { background: var(--console-primary); border-color: var(--console-primary); }
 .ui-switch-handle { display: block; width: 12px; height: 12px; border-radius: 50%; background: var(--console-container); transition: transform .12s; }
 .ui-switch-handle[data-state='checked'] { transform: translateX(14px); background: var(--console-on-primary); }
+.ui-switch[data-size='sm'] { width: 28px; height: 16px; }
+.ui-switch[data-size='sm'] .ui-switch-handle { width: 10px; height: 10px; }
+.ui-switch[data-size='sm'] .ui-switch-handle[data-state='checked'] { transform: translateX(12px); }
 .ui-switch:focus-visible, .ui-checkbox:focus-visible { outline: 2px solid var(--console-border-hover); outline-offset: 2px; }
 .ui-checkbox-wrapper { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
 .ui-checkbox { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border: 1px solid var(--console-border-strong); border-radius: 4px; background: var(--console-container); }

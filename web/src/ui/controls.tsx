@@ -10,12 +10,14 @@ import {
   CircleAlert,
 } from 'lucide-react'
 import {
-  Checkbox as CheckboxPrimitive,
-  Switch as SwitchPrimitive,
   ToggleGroup,
   Popover as PopoverPrimitive,
 } from 'radix-ui'
 import { buttonVariants } from '@/components/ui/button'
+import { Input as InputPrimitive } from '@/components/ui/input'
+import { Textarea as TextareaPrimitive } from '@/components/ui/textarea'
+import { Checkbox as CheckboxPrimitive } from '@/components/ui/checkbox'
+import { Switch as SwitchPrimitive } from '@/components/ui/switch'
 import {
   Popover,
   PopoverContent,
@@ -158,13 +160,13 @@ const BaseInput = forwardRef<HTMLInputElement, InputProps>(function Input(
 ) {
   const clear = allowClear && value !== undefined && value !== ''
   const input = (
-    <input
+    <InputPrimitive
       {...props}
       value={value}
       onChange={onChange}
       ref={ref}
       className={cn(
-        'ui-input',
+        'ui-input h-auto',
         !prefix && !suffix && !allowClear && className,
         size === 'large' && 'ui-input-lg',
       )}
@@ -279,7 +281,7 @@ const TextArea = forwardRef<
     }
   }, [!!autoSize, resize])
   return (
-    <textarea
+    <TextareaPrimitive
       {...props}
       ref={(node) => {
         inputRef.current = node
@@ -321,13 +323,13 @@ export const InputNumber = forwardRef<
 ) {
   return (
     <span className={cn('ui-input-number', className)} style={props.style}>
-      <input
+      <InputPrimitive
         {...props}
         style={undefined}
         ref={ref}
         type="number"
         step={props.step ?? (precision === 0 ? 1 : 'any')}
-        className="ui-input-number-input"
+        className="ui-input-number-input h-auto border-0 shadow-none focus-visible:ring-0"
         value={value ?? ''}
         onChange={(event) =>
           onChange?.(
@@ -340,24 +342,26 @@ export const InputNumber = forwardRef<
 })
 export const Switch = forwardRef<
   HTMLButtonElement,
-  Omit<React.ComponentProps<typeof SwitchPrimitive.Root>, 'onChange'> & {
+  Omit<React.ComponentProps<typeof SwitchPrimitive>, 'onChange' | 'size'> & {
     onChange?: (checked: boolean) => void
     size?: string
   }
->(function Switch({ onChange, className, size, ...props }, ref) {
+>(function Switch({ onChange, onCheckedChange, className, size, ...props }, ref) {
   return (
-    <SwitchPrimitive.Root
+    <SwitchPrimitive
       {...props}
       ref={ref}
-      onCheckedChange={onChange}
+      size={size === 'small' ? 'sm' : 'default'}
+      onCheckedChange={(checked) => {
+        onChange?.(checked)
+        onCheckedChange?.(checked)
+      }}
       className={cn('ui-switch', className)}
-    >
-      <SwitchPrimitive.Thumb className="ui-switch-handle" />
-    </SwitchPrimitive.Root>
+    />
   )
 })
 type CheckboxProps = Omit<
-  React.ComponentProps<typeof CheckboxPrimitive.Root>,
+  React.ComponentProps<typeof CheckboxPrimitive>,
   'onChange'
 > & {
   onChange?: (event: { target: { checked: boolean } }) => void
@@ -365,7 +369,7 @@ type CheckboxProps = Omit<
 }
 const CheckboxRoot = forwardRef<HTMLButtonElement, CheckboxProps>(
   function Checkbox(
-    { onChange, children, className, indeterminate, checked, ...props },
+    { onChange, onCheckedChange, children, className, indeterminate, checked, ...props },
     ref,
   ) {
     return (
@@ -376,19 +380,16 @@ const CheckboxRoot = forwardRef<HTMLButtonElement, CheckboxProps>(
           className,
         )}
       >
-        <CheckboxPrimitive.Root
+        <CheckboxPrimitive
           {...props}
           ref={ref}
           checked={indeterminate ? 'indeterminate' : checked}
-          onCheckedChange={(value) =>
+          onCheckedChange={(value) => {
             onChange?.({ target: { checked: value === true } })
-          }
+            onCheckedChange?.(value)
+          }}
           className="ui-checkbox"
-        >
-          <CheckboxPrimitive.Indicator>
-            <Check size={12} />
-          </CheckboxPrimitive.Indicator>
-        </CheckboxPrimitive.Root>
+        />
         {children && <span>{children}</span>}
       </label>
     )
