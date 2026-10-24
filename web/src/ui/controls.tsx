@@ -1,4 +1,4 @@
-import React, { forwardRef, useEffect, useId, useRef, useState } from 'react'
+import React, { forwardRef, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import {
   Check,
   ChevronDown,
@@ -238,10 +238,57 @@ const TextArea = forwardRef<
     autoSize?: boolean | { minRows?: number; maxRows?: number }
   }
 >(function TextArea({ autoSize, className, ...props }, ref) {
+  const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  const minRows = Math.max(1, typeof autoSize === 'object' ? autoSize.minRows ?? 1 : props.rows ?? 1)
+  const maxRows = typeof autoSize === 'object' && autoSize.maxRows !== undefined
+    ? Math.max(minRows, autoSize.maxRows)
+    : Infinity
+  const resize = useCallback(() => {
+    const input = inputRef.current
+    if (!autoSize || !input || !input.clientWidth) return
+    const style = window.getComputedStyle(input)
+    const lineHeight = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.5
+    const padding = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom)
+    const border = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth)
+    input.style.height = '0px'
+    const contentHeight = input.scrollHeight
+    const boundedHeight = Math.max(minRows * lineHeight + padding,
+      Math.min(contentHeight, maxRows * lineHeight + padding))
+    input.style.height = `${boundedHeight + (style.boxSizing === 'border-box' ? border : -padding)}px`
+    input.style.overflowY = contentHeight > boundedHeight ? 'auto' : 'hidden'
+  }, [!!autoSize, minRows, maxRows])
+  useLayoutEffect(() => {
+    resize()
+  }, [resize, props.value, props.defaultValue])
+  useLayoutEffect(() => {
+    const input = inputRef.current
+    if (!autoSize || !input) return
+    let width = input.clientWidth
+    const observer = new ResizeObserver(() => {
+      if (input.clientWidth !== width) {
+        width = input.clientWidth
+        resize()
+      }
+    })
+    observer.observe(input)
+    return () => {
+      observer.disconnect()
+      input.style.height = ''
+      input.style.overflowY = ''
+    }
+  }, [!!autoSize, resize])
   return (
     <textarea
       {...props}
-      ref={ref}
+      ref={(node) => {
+        inputRef.current = node
+        if (typeof ref === 'function') ref(node)
+        else if (ref) ref.current = node
+      }}
+      onChange={(event) => {
+        props.onChange?.(event)
+        resize()
+      }}
       rows={props.rows ?? (typeof autoSize === 'object' ? autoSize.minRows : 3)}
       className={cn('ui-input ui-textarea', className)}
     />
