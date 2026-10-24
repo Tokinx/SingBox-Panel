@@ -209,7 +209,7 @@ export function OutboundForm({
             <Input placeholder="hk.example.com" className="mono" />
           </Form.Item>
           <Form.Item name="server_port" label="端口" rules={[{ required: true, message: '请填写落地服务器的端口' }]}>
-            <InputNumber min={1} max={65535} placeholder="443" className="mono" />
+            <InputNumber precision={0} min={1} max={65535} placeholder="443" className="mono" />
           </Form.Item>
         </FormGroup>
 

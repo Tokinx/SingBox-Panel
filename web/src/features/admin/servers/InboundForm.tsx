@@ -389,7 +389,7 @@ export default function InboundForm({
             />
           </Form.Item>
           <Form.Item name="listen_port" label="端口">
-            <InputNumber min={1} max={65535} placeholder="随机" className="mono" />
+            <InputNumber precision={0} min={1} max={65535} placeholder="随机" className="mono" />
           </Form.Item>
           <Form.Item name="tag" label="标签" className="fm-full">
             <Input placeholder="留空自动生成" />
@@ -527,10 +527,10 @@ export default function InboundForm({
             {HAS_BANDWIDTH.has(type) && (
               <>
                 <Form.Item name="up_mbps" label="上行 Mbps">
-                  <InputNumber min={0} placeholder="0" />
+                  <InputNumber precision={0} min={0} placeholder="0" />
                 </Form.Item>
                 <Form.Item name="down_mbps" label="下行 Mbps">
-                  <InputNumber min={0} placeholder="0" />
+                  <InputNumber precision={0} min={0} placeholder="0" />
                 </Form.Item>
                 <Form.Item name="obfs_type" label="混淆类型" className={obfsType ? undefined : 'fm-full'}>
                   <Select placeholder="无" options={[
@@ -712,7 +712,7 @@ export default function InboundForm({
                   <Input placeholder="www.apple.com" className="mono" />
                 </Form.Item>
                 <Form.Item name="reality_handshake_port" label="握手端口">
-                  <InputNumber min={1} max={65535} placeholder="443" className="mono" />
+                  <InputNumber precision={0} min={1} max={65535} placeholder="443" className="mono" />
                 </Form.Item>
               </>
             )}

@@ -1815,7 +1815,7 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
                     <Input aria-label="地址" placeholder="example.com" style={{ width: '70%' }} />
                   </Form.Item>
                   <Form.Item name="port" noStyle rules={[{ required: true, message: '请填写端口' }]}>
-                    <InputNumber aria-label="端口" min={1} max={65535} placeholder="443" style={{ width: '30%' }} />
+                    <InputNumber precision={0} aria-label="端口" min={1} max={65535} placeholder="443" style={{ width: '30%' }} />
                   </Form.Item>
                 </Space.Compact>
               </Form.Item>
@@ -1980,10 +1980,10 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
                   )}
                   <div className="um-form-grid">
                     <Form.Item name="up_mbps" label="上行 Mbps">
-                      <InputNumber min={1} style={{ width: '100%' }} placeholder="100" />
+                      <InputNumber precision={0} min={1} style={{ width: '100%' }} placeholder="100" />
                     </Form.Item>
                     <Form.Item name="down_mbps" label="下行 Mbps">
-                      <InputNumber min={1} style={{ width: '100%' }} placeholder="100" />
+                      <InputNumber precision={0} min={1} style={{ width: '100%' }} placeholder="100" />
                     </Form.Item>
                   </div>
                 </div>

@@ -17,6 +17,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { message } from './feedback'
+import { InputNumber } from './controls'
 import { errMsg } from '../api'
 
 type Values = Record<string, any>
@@ -220,6 +221,7 @@ function BoundItem(props: ItemProps) {
   const form = useContext(FormContext)!
   const prefix = useContext(ListContext)
   const name = [prefix, path(props.name!)].filter(Boolean).join('.')
+  const child = React.Children.only(props.children) as React.ReactElement<any>
   const rules = (props.rules || []).map((rule) =>
     typeof rule === 'function' ? rule(form) : rule,
   )
@@ -229,6 +231,24 @@ function BoundItem(props: ItemProps) {
     defaultValue: props.initialValue,
     rules: {
       validate: async (value) => {
+        if (child.type === InputNumber && value !== undefined && value !== null && value !== '') {
+          const number = Number(value)
+          const { min, max, precision, step } = child.props
+          if (!Number.isFinite(number)) return '请输入有效数值'
+          if (min !== undefined && number < Number(min)) return `数值不能小于 ${min}`
+          if (max !== undefined && number > Number(max)) return `数值不能大于 ${max}`
+          if (precision === 0 && !Number.isSafeInteger(number)) return '请输入有效整数'
+          if (precision > 0) {
+            const scaled = number * 10 ** precision
+            if (Math.abs(scaled - Math.round(scaled)) > Number.EPSILON * Math.max(1, Math.abs(scaled)) * 8)
+              return `最多保留 ${precision} 位小数`
+          }
+          if (step !== undefined && step !== 'any' && Number(step) > 0) {
+            const steps = (number - Number(min ?? 0)) / Number(step)
+            if (Math.abs(steps - Math.round(steps)) > Number.EPSILON * Math.max(1, Math.abs(steps)) * 8)
+              return `请按 ${step} 的步长输入`
+          }
+        }
         for (const rule of rules) {
           const empty =
             value === undefined ||
@@ -287,7 +307,6 @@ function BoundItem(props: ItemProps) {
     }
   }, [form, name])
   const id = `${form._id}-${name}`
-  const child = React.Children.only(props.children) as React.ReactElement<any>
   const valueProps = props.getValueProps
     ? props.getValueProps(field.value)
     : {
