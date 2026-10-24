@@ -8,9 +8,8 @@
   --app-radius-control: 6px;
   --app-radius-pop: 8px;
   --app-control-h: 32px;
-  /* Viewport height unit corrected for the fluid root zoom (see fluidScale.ts). */
-  --app-zoom: 1;
-  --dvh: calc(1dvh / var(--app-zoom));
+  /* Keep layout and portal measurements in the same browser coordinate space. */
+  --dvh: 1dvh;
   color-scheme: light;
 }
 :root[data-console-theme='dark'] { color-scheme: dark; }

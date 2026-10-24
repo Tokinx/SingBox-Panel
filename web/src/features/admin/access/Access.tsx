@@ -1774,7 +1774,7 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
         destroyOnClose
         className="um-modal"
         width={MODAL_MD}
-        style={{ maxWidth: 'calc(100vw - 16px)', top: 24 }}
+        style={{ maxWidth: 'calc(100vw - 24px)' }}
       >
         <Form form={nodeForm} layout="vertical">
           <Form.Item name="group" label="分组">

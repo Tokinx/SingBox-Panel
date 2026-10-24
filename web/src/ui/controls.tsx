@@ -645,7 +645,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
               />
             )}
             <CommandList
-              style={{ maxHeight: listHeight }}
+              style={{ maxHeight: `min(${listHeight}px, calc(var(--radix-popover-content-available-height) - ${showSearch || mode ? 44 : 8}px))` }}
               onScroll={(event) => {
                 const el = event.currentTarget
                 if (el.scrollHeight - el.scrollTop - el.clientHeight < 50)
