@@ -11,6 +11,7 @@ import {
 import { errMsg, isCanceledRequest, listServers, serverLogs, streamLogs } from '../../../api'
 import type { Server } from '../../../types'
 import { useSSE } from '../../../useSSE'
+import { useSearchParams } from 'react-router-dom'
 import type { SSEMessage } from '../../../useSSE'
 import { copyToClipboard } from '../../../util'
 import { VirtualList } from '../../../components/VirtualList'
@@ -282,7 +283,9 @@ function formatUpdatedAt(value: number | null) {
 // detail tab) the node selector is hidden.
 export default function Logs({ serverId }: { serverId?: number } = {}) {
   const [servers, setServers] = useState<Server[]>([])
-  const [sid, setSid] = useState<number | null>(serverId ?? null)
+  const [params, setParams] = useSearchParams()
+  const sid = serverId ?? (Number(params.get('server')) || null)
+  const setSid = (next: number) => { if (serverId === undefined) setParams({ server: String(next) }, { replace: true }) }
   const lines = 200
   const [logEntries, setLogEntries] = useState<LogEntry[]>([])
   const [loading, setLoading] = useState(false)
@@ -309,7 +312,6 @@ export default function Logs({ serverId }: { serverId?: number } = {}) {
   useEffect(() => {
     if (serverId !== undefined) {
       setLive(false)
-      setSid(serverId)
       return
     }
     const controller = new AbortController()
@@ -319,7 +321,7 @@ export default function Logs({ serverId }: { serverId?: number } = {}) {
         if (controller.signal.aborted) return
         setServers(s)
         const first = s.find((x) => x.online) ?? s[0]
-        if (first) setSid(first.id)
+        if (first && !Number(new URLSearchParams(window.location.search).get('server'))) setSid(first.id)
       })
       .catch((e) => {
         if (!controller.signal.aborted) message.error(errMsg(e))
@@ -517,6 +519,11 @@ export default function Logs({ serverId }: { serverId?: number } = {}) {
   // Newest first: the live edge sits at the top of the viewer.
   const displayLines = useMemo(() => [...filteredLines].reverse(), [filteredLines])
 
+  const previousSid = useRef(sid)
+  useEffect(() => {
+    if (previousSid.current !== sid) { previousSid.current = sid; setLive(false) }
+  }, [sid])
+
   const current = servers.find((s) => s.id === sid)
 
   const handleScroll = (event: UIEvent<HTMLDivElement>) => {
@@ -571,28 +578,6 @@ export default function Logs({ serverId }: { serverId?: number } = {}) {
       />
 
       <div className="lg-toolbar">
-        {serverId === undefined && <Select
-          className="lg-server-select"
-          value={sid ?? undefined}
-          onChange={(next) => {
-            setLive(false)
-            setSid(next)
-          }}
-          placeholder="选择主机"
-          aria-label="选择主机"
-          popupMatchSelectWidth={false}
-          options={servers.map((s) => ({
-            value: s.id,
-            label: (
-              <span className="lg-server-option">
-                <i className={`app-dot${s.online ? '' : ' is-off'}`} />
-                {s.name}
-                {s.online ? null : <span className="faint">离线</span>}
-              </span>
-            ),
-            disabled: !s.online,
-          }))}
-        />}
         <Select
           className="lg-filter-select"
           value={levelFilter}

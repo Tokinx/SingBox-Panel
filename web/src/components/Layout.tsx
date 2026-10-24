@@ -27,9 +27,7 @@ const ADMIN_NAV = [
 ]
 
 /** Breadcrumb server switcher shown while viewing one server. */
-function ServerSwitcher({ id }: { id: number }) {
-  const navigate = useNavigate()
-  const { pathname } = useLocation()
+function ServerSwitcher({ id, onPick }: { id: number | null; onPick: (id: number) => void }) {
   const [servers, setServers] = useState<Server[]>([])
   const [failed, setFailed] = useState(false)
   const [attempt, setAttempt] = useState(0)
@@ -42,14 +40,13 @@ function ServerSwitcher({ id }: { id: number }) {
     return () => controller.abort()
   }, [attempt])
   const current = servers.find((s) => s.id === id)
-  const section = pathname.split('/')[4]
   const items: MenuProps['items'] = servers.map((s) => ({
     key: String(s.id),
     label: <span className="app-switch-item"><i className={`app-dot${s.online ? '' : ' is-off'}`} />{s.name}{s.id === id && <CheckOutlined className="app-switch-check" />}</span>,
   }))
   return <>
     <span className="app-crumb-sep" aria-hidden="true">/</span>
-    <Dropdown trigger={['click']} onOpenChange={(open) => { if (open && failed) setAttempt((n) => n + 1) }} menu={{ items: items?.length ? items : [{ key: 'empty', disabled: true, label: failed ? '加载失败，请重试' : '加载中…' }], onClick: ({ key }) => { if (key !== 'empty') navigate(`/admin/servers/${key}${section ? `/${section}` : ''}`) } }}>
+    <Dropdown trigger={['click']} onOpenChange={(open) => { if (open && failed) setAttempt((n) => n + 1) }} menu={{ items: items?.length ? items : [{ key: 'empty', disabled: true, label: failed ? '加载失败，请重试' : '加载中…' }], onClick: ({ key }) => { if (key !== 'empty') onPick(Number(key)) } }}>
       <button type="button" className="app-switch" aria-label="切换服务器">
         <i className={`app-dot${current && !current.online ? ' is-off' : ''}`} />
         <span className="app-switch-name">{current?.name ?? (failed ? '服务器' : '…')}</span>
@@ -102,7 +99,12 @@ export default function AppLayout() {
   const { user } = useAuth()
   const { pathname } = useLocation()
   const admin = user?.role === 'admin'
+  const { search } = useLocation()
+  const navigate = useNavigate()
   const serverMatch = pathname.match(/^\/admin\/servers\/(\d+)/)
+  // Traffic and logs pick their server through ?server=, shown in the same breadcrumb switcher.
+  const pickerPage = admin && (pathname === '/admin/traffic' || pathname === '/admin/logs')
+  const pickerId = pickerPage ? Number(new URLSearchParams(search).get('server')) || null : null
   const home = admin ? '/admin/servers' : '/dashboard'
   const pageKey = pathname.split('/').slice(0, 4).join('/')
   useEffect(() => { window.scrollTo(0, 0) }, [pageKey])
@@ -111,7 +113,11 @@ export default function AppLayout() {
     <header className="app-header">
       <div className="app-bar">
         <Link to={home} className="app-brand"><BrandMark className="app-logo" /><span className="app-brand-name">SingBox Panel</span></Link>
-        {serverMatch && <ServerSwitcher id={Number(serverMatch[1])} />}
+        {serverMatch && <ServerSwitcher id={Number(serverMatch[1])} onPick={(next) => {
+          const section = pathname.split('/')[4]
+          navigate(`/admin/servers/${next}${section ? `/${section}` : ''}`)
+        }} />}
+        {pickerPage && <ServerSwitcher id={pickerId} onPick={(next) => navigate(`${pathname}?server=${next}`)} />}
         <div className="app-bar-right">
           <AccountBar scope={admin ? 'admin' : 'user'} />
         </div>
