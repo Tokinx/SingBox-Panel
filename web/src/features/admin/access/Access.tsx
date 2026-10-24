@@ -1269,14 +1269,16 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
   // Move a manually managed node into a group. An empty group moves it back
   // to 未分组.
   const moveToGroup = async (ids: number[], group: string) => {
-    if (ids.length === 0) return
+    if (ids.length === 0) return false
     const clean = group.trim()
     try {
       await batchSetCustomNodeGroup(ids, clean)
       message.success(clean ? `已移动到「${clean}」` : '已移出分组（未分组）')
       onNodesChange()
+      return true
     } catch (e) {
       message.error(errMsg(e))
+      return false
     }
   }
 
@@ -1296,8 +1298,7 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
     if (!quickGroup) return
     setGroupMoving(true)
     try {
-      await moveToGroup([quickGroup.id], quickGroupValue)
-      setQuickGroup(null)
+      if (await moveToGroup([quickGroup.id], quickGroupValue)) setQuickGroup(null)
     } finally {
       setGroupMoving(false)
     }
