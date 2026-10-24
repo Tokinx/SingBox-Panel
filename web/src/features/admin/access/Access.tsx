@@ -2020,7 +2020,8 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
                       { required: true, message: '请填写 PSK' },
                       ({ getFieldValue }) => ({
                         validator(_, value) {
-                          if (getFieldValue('snell_version') === 6 && value && (value.length < 12 || value.length > 255)) {
+                          const bytes = value ? new TextEncoder().encode(String(value)).length : 0
+                          if (getFieldValue('snell_version') === 6 && bytes > 0 && (bytes < 12 || bytes > 255)) {
                             return Promise.reject(new Error('Snell v6 的 PSK 长度必须在 12-255 字节之间'))
                           }
                           return Promise.resolve()
