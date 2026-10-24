@@ -88,6 +88,8 @@
 .fm-node-option { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .fm-node-option-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fm-node-option small { flex: none; color: var(--console-faint); font-size: 12px; font-weight: 400; }
+.fm-node-option-reason { display: block; margin-top: 3px; color: var(--console-muted); font-size: 12px; line-height: 1.5; white-space: normal; overflow-wrap: anywhere; }
+.ui-select-item:has(.fm-node-option-reason) { opacity: 1; }
 
 /* Dialog forms use framed parameter sections, matching the panel cards. */
 .fm-source-picker { min-width: 0; padding: 0; margin: 0 0 20px; border: 0; }

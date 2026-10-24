@@ -740,6 +740,7 @@ export const Select = forwardRef<HTMLButtonElement, SelectProps>(
                   key={`${String(option.value)}-${index}`}
                   value={`${String(option.value)}-${index}`}
                   disabled={option.disabled}
+                  title={typeof option.title === 'string' ? option.title : undefined}
                   onSelect={() => choose(option.value)}
                   className="ui-select-item"
                 >

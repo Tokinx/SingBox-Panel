@@ -143,13 +143,16 @@ export function OutboundImport({ serverId, source, onClose, onSaved, onSavingCha
                 disabled: !!node.unavailable_reason,
                 label: node.name || '未命名节点',
                 searchText: [node.name, node.type, node.server].filter(Boolean).join(' '),
-                title: node.unavailable_reason || `${node.type} · ${node.server}:${node.server_port}`,
+                title: node.unavailable_reason || undefined,
                 protocol: node.type,
                 reason: node.unavailable_reason,
               }))}
-              optionRender={(option) => <div className="fm-node-option">
-                <span className="fm-node-option-name">{option.label}</span>
-                <small>{option.data.reason ? '不可用' : option.data.protocol}</small>
+              optionRender={(option) => <div>
+                <div className="fm-node-option">
+                  <span className="fm-node-option-name">{option.label}</span>
+                  <small>{option.data.protocol}</small>
+                </div>
+                {option.data.reason && <span className="fm-node-option-reason">不可用：{option.data.reason}</span>}
               </div>}
               onChange={(id: number) => { setNodeId(id); void parse(id) }}
             />
