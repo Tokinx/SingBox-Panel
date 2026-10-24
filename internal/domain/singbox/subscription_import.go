@@ -314,22 +314,27 @@ func parseSingBoxSubscription(raw []byte) (SubscriptionParseResult, error) {
 	}
 	result := SubscriptionParseResult{SourceType: "sing-box-json"}
 	for _, item := range items {
-		if len(result.Nodes) >= SubscriptionImportMaxNodes {
-			result.Skipped = append(result.Skipped, ImportIssue{Error: "节点数量超过限制"})
-			continue
-		}
 		m, ok := item.(map[string]any)
 		if !ok {
 			result.Skipped = append(result.Skipped, ImportIssue{Error: "sing-box outbounds 条目不是对象"})
 			continue
 		}
+		// Routing objects are expected in a complete client profile. They are
+		// not failed nodes: a failure makes subscription sync retain unmatched
+		// old rows, so counting these would prevent upstream deletions forever.
+		switch mStr(m, "type") {
+		case "direct", "block", "dns", "selector", "urltest":
+			continue
+		}
+		if len(result.Nodes) >= SubscriptionImportMaxNodes {
+			result.Skipped = append(result.Skipped, ImportIssue{Error: "节点数量超过限制"})
+			continue
+		}
 		ob, ok := parseOutbound(m)
 		if !ok {
-			if typ := mStr(m, "type"); typ != "" {
-				result.Skipped = append(result.Skipped, ImportIssue{
-					Input: mStr(m, "tag"), Error: fmt.Sprintf("暂不支持或无需导入的出站类型 %q", typ),
-				})
-			}
+			result.Skipped = append(result.Skipped, ImportIssue{
+				Input: mStr(m, "tag"), Error: fmt.Sprintf("无法导入的出站类型 %q", mStr(m, "type")),
+			})
 			continue
 		}
 		if strings.TrimSpace(ob.Server) == "" || ob.ServerPort < 1 || ob.ServerPort > 65535 {
@@ -384,6 +389,12 @@ func parseV2RayJSONSubscription(raw []byte) (SubscriptionParseResult, error) {
 func parseV2RayOutbound(m map[string]any) ([]ClientNode, []ImportIssue) {
 	protocol := normalizeProtocol(getString(m, "protocol", "type"))
 	tag := strings.TrimSpace(getString(m, "tag", "name"))
+	// These route locally, reject traffic, or dispatch to DNS/an inbound; they
+	// are not remote proxy nodes and need not even carry a settings object.
+	switch protocol {
+	case "freedom", "blackhole", "dns", "loopback":
+		return nil, nil
+	}
 	settings := yamlMap(getAny(m, "settings"))
 	stream := yamlMap(getAny(m, "streamSettings", "stream_settings"))
 	if settings == nil {
@@ -542,9 +553,7 @@ func parseV2RayOutbound(m map[string]any) ([]ClientNode, []ImportIssue) {
 			}
 		}
 	default:
-		if protocol != "" {
-			issues = append(issues, ImportIssue{Input: tag, Error: fmt.Sprintf("暂不支持或无需导入的 V2Ray/Xray 协议 %q", protocol)})
-		}
+		issues = append(issues, ImportIssue{Input: tag, Error: fmt.Sprintf("无法导入的 V2Ray/Xray 协议 %q", protocol)})
 	}
 	return nodes, issues
 }

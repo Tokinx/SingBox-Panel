@@ -2,6 +2,7 @@ package singbox
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"math"
 	"strings"
 	"testing"
@@ -57,7 +58,10 @@ func TestParseSubscriptionSingBoxJSONOutbounds(t *testing.T) {
       "tls": {"enabled": true, "server_name": "cdn.example.com", "insecure": false}
     },
     {"tag": "direct", "type": "direct"},
-    {"tag": "Auto", "type": "urltest", "outbounds": ["🇭🇰 Gomami-HKT"]}
+    {"tag": "Auto", "type": "urltest", "outbounds": ["🇭🇰 Gomami-HKT"]},
+    {"tag": "Proxy", "type": "selector", "outbounds": ["Auto"]},
+    {"tag": "Block", "type": "block"},
+    {"tag": "DNS", "type": "dns"}
   ],
   "endpoints": []
 }`)
@@ -66,7 +70,7 @@ func TestParseSubscriptionSingBoxJSONOutbounds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.SourceType != "sing-box-json" || len(result.Nodes) != 1 || len(result.Skipped) != 2 {
+	if result.SourceType != "sing-box-json" || len(result.Nodes) != 1 || len(result.Skipped) != 0 {
 		t.Fatalf("result = %+v", result)
 	}
 	node := result.Nodes[0]
@@ -75,6 +79,65 @@ func TestParseSubscriptionSingBoxJSONOutbounds(t *testing.T) {
 	}
 	if node.Link != "" || node.Params["password"] != "secret" || node.Params["tls"] != "tls" || node.Params["sni"] != "cdn.example.com" {
 		t.Fatalf("node params = %#v", node.Params)
+	}
+}
+
+func TestParseSubscriptionJSONKeepsRealImportFailures(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		raw  string
+	}{
+		{
+			name: "sing-box",
+			raw: `{"outbounds":[
+				{"type":"trojan","tag":"valid","server":"edge.example.com","server_port":443,"password":"secret"},
+				{"type":"direct"},
+				{"type":"unsupported","tag":"unknown"},
+				{"tag":"missing-type"},
+				{"type":"trojan","tag":"bad-address","password":"secret"}
+			]}`,
+		},
+		{
+			name: "v2ray",
+			raw: `{"outbounds":[
+				{"protocol":"trojan","tag":"valid","settings":{"servers":[{"address":"edge.example.com","port":443,"password":"secret"}]}},
+				{"protocol":"freedom"},
+				{"protocol":"unsupported","tag":"unknown","settings":{}},
+				{"tag":"missing-type","settings":{}},
+				{"protocol":"trojan","tag":"bad-address","settings":{"servers":[{"password":"secret"}]}}
+			]}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := ParseSubscription([]byte(tc.raw))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(result.Nodes) != 1 || len(result.Skipped) != 3 {
+				t.Fatalf("routing objects must not hide actual failures: %+v", result)
+			}
+		})
+	}
+}
+
+func TestParseSubscriptionSingBoxRoutingObjectsDoNotExceedNodeLimit(t *testing.T) {
+	items := make([]map[string]any, 0, SubscriptionImportMaxNodes+1)
+	for i := 0; i < SubscriptionImportMaxNodes; i++ {
+		items = append(items, map[string]any{
+			"type": "trojan", "tag": "node", "server": "edge.example.com", "server_port": 443, "password": "secret",
+		})
+	}
+	items = append(items, map[string]any{"type": "direct", "tag": "direct"})
+	raw, err := json.Marshal(map[string]any{"outbounds": items})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := ParseSubscription(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Nodes) != SubscriptionImportMaxNodes || len(result.Skipped) != 0 {
+		t.Fatalf("a trailing routing object must not turn a complete profile into a partial import: %+v", result)
 	}
 }
 
@@ -118,7 +181,11 @@ func TestParseSubscriptionV2RayJSONOutbounds(t *testing.T) {
       "protocol": "socks",
       "settings": {"servers": [{"address": "socks.example.com", "port": 1080, "users": [{"user": "alice", "pass": "secret"}]}]}
     },
-    {"tag": "Unsupported", "protocol": "vmess", "settings": {"vnext": [{"address": "grpc.example.com", "port": 443, "users": [{"id": "grpc-uuid"}]}]}, "streamSettings": {"network": "grpc"}}
+    {"tag": "Unsupported", "protocol": "vmess", "settings": {"vnext": [{"address": "grpc.example.com", "port": 443, "users": [{"id": "grpc-uuid"}]}]}, "streamSettings": {"network": "grpc"}},
+    {"tag": "Direct", "protocol": "freedom"},
+    {"tag": "Block", "protocol": "blackhole", "settings": {}},
+    {"tag": "DNS", "protocol": "dns"},
+    {"tag": "Loop", "protocol": "loopback", "settings": {"inboundTag": "socks"}}
   ]
 }`)
 
