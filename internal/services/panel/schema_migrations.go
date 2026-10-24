@@ -417,10 +417,9 @@ func runSchemaMigrations(db *gorm.DB, cfg config.DatabaseConfig) error {
 		return nil
 	}
 
-	// A consistent SQLite snapshot is taken before the first schema write. A
-	// backup failure is fatal: continuing would remove the promised recovery
-	// point from the upgrade path.
-	if fileDatabase {
+	// Unless the operator explicitly opts out, take a consistent SQLite snapshot
+	// before the first schema write and abort if that promised backup fails.
+	if fileDatabase && !cfg.SkipMigrationBackup {
 		backup, err := backupSQLiteBeforeMigration(db, cfg.DSN, pending[len(pending)-1].version)
 		if err != nil {
 			return fmt.Errorf("backup sqlite before migration: %w", err)
@@ -428,6 +427,8 @@ func runSchemaMigrations(db *gorm.DB, cfg config.DatabaseConfig) error {
 		if backup != "" {
 			log.Printf("database backup created: %s", backup)
 		}
+	} else if fileDatabase {
+		log.Printf("SQLite migration backup skipped by explicit configuration")
 	}
 
 	if !hasVersionTable {

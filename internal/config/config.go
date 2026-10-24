@@ -50,6 +50,9 @@ type DatabaseConfig struct {
 	Driver string `yaml:"driver"`
 	// DSN: for sqlite, a file path (e.g. ./data/singbox-panel.db); otherwise a full DSN.
 	DSN string `yaml:"dsn"`
+	// SkipMigrationBackup is an explicit operator override. Normal upgrades
+	// continue to create a consistent SQLite snapshot before migration.
+	SkipMigrationBackup bool `yaml:"skip_migration_backup,omitempty"`
 	// Pool settings apply to MySQL and Postgres. SQLite is always constrained
 	// to one connection to preserve deterministic transaction ordering.
 	MaxOpenConns    int           `yaml:"max_open_conns"`
@@ -152,6 +155,13 @@ func applyEnv(cfg *PanelConfig) error {
 	}
 	if v := firstEnv("SINGBOX_PANEL_DB_DSN"); v != "" {
 		cfg.Database.DSN = v
+	}
+	if v := firstEnv("SINGBOX_PANEL_SKIP_MIGRATION_BACKUP"); v != "" {
+		parsed, err := strconv.ParseBool(v)
+		if err != nil {
+			return fmt.Errorf("SINGBOX_PANEL_SKIP_MIGRATION_BACKUP: %w", err)
+		}
+		cfg.Database.SkipMigrationBackup = parsed
 	}
 	for _, item := range []struct {
 		name string
