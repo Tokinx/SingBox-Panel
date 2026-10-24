@@ -13,11 +13,15 @@ button:disabled { cursor: not-allowed; }
 .ui-btn-default:hover { background: var(--console-hover); }
 .ui-input, .ui-input-affix-wrapper, .ui-input-number, .ui-select-selector { width: 100%; min-width: 0; min-height: 36px; border: 1px solid var(--console-border-strong); border-radius: var(--app-radius-control); background: var(--console-container); color: var(--console-ink); box-shadow: none; outline: none; font-size: 13px; transition: border-color .12s; }
 .ui-input { display: block; padding: 7px 11px; }
+input.ui-input { height: 36px; }
 .ui-input::placeholder, .ui-input-number-input::placeholder { color: var(--console-placeholder); }
 .ui-input:focus, .ui-input-affix-wrapper:focus-within, .ui-input-number:focus-within, .ui-select-selector:focus-visible { border-color: var(--console-border-hover); box-shadow: 0 0 0 2px var(--console-selected); }
 .ui-input:disabled, .ui-input-affix-wrapper-disabled, .ui-select-disabled .ui-select-selector { background: var(--console-surface); color: var(--console-faint); opacity: .7; }
 .ui-input-affix-wrapper { display: flex; align-items: center; gap: 8px; padding: 0 10px; }
 .ui-input-affix-wrapper .ui-input { min-height: 34px; padding-inline: 0; border: 0; box-shadow: none; background: transparent; }
+.ui-input-affix-wrapper input.ui-input { height: 34px; }
+input.ui-input-lg, .ui-input-affix-wrapper-lg { height: 40px; }
+.ui-input-affix-wrapper-lg input.ui-input { height: 38px; }
 .ui-input-prefix { color: var(--console-faint); display: flex; }
 .ui-input-clear, .ui-copy { flex: none; display: inline-flex; align-items: center; justify-content: center; color: var(--console-faint); background: none; border: 0; padding: 2px; }
 .ui-input-clear:hover, .ui-copy:hover { color: var(--console-ink); }
