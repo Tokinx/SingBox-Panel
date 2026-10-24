@@ -1167,8 +1167,9 @@ func nodeParams(n node) map[string]string {
 	u := n.getUserIdentity()
 	p := map[string]string{"服务器": n.server, "端口": strconv.Itoa(n.port), "协议": n.typ}
 	net := "tcp"
-	if st.Transport.Type == "ws" {
-		net = "ws"
+	switch st.Transport.Type {
+	case "ws", "httpupgrade":
+		net = st.Transport.Type
 	}
 	sni := sniOf(st, n.server)
 	if nodeTLSOn(st) && st.TLS.ClientInsecure() {
@@ -1181,24 +1182,11 @@ func nodeParams(n node) map[string]string {
 			p["Flow"] = st.Flow
 		}
 		p["传输"] = net
-		switch {
-		case st.TLS.Reality.Enabled:
-			p["安全"] = "reality"
-			p["SNI"] = sni
-			p["PublicKey"] = st.TLS.Reality.PublicKey
-			p["ShortID"] = firstOf(st.TLS.Reality.ShortID)
-			p["指纹"] = "chrome"
-		case nodeTLSOn(st):
+		if nodeTLSOn(st) {
 			p["安全"] = "tls"
 			p["SNI"] = sni
-		default:
+		} else {
 			p["安全"] = "none"
-		}
-		if net == "ws" {
-			p["Path"] = st.Transport.Path
-			if h := st.Transport.Host(); h != "" {
-				p["Host"] = h
-			}
 		}
 	case "vmess":
 		p["UUID"] = u.UUID
@@ -1211,12 +1199,6 @@ func nodeParams(n node) map[string]string {
 		}
 		if len(st.TLS.ALPN) > 0 {
 			p["ALPN"] = strings.Join(st.TLS.ALPN, ",")
-		}
-		if net == "ws" {
-			p["Path"] = st.Transport.Path
-			if h := st.Transport.Host(); h != "" {
-				p["Host"] = h
-			}
 		}
 	case "trojan":
 		p["密码"] = u.Password
@@ -1306,6 +1288,25 @@ func nodeParams(n node) map[string]string {
 		}
 		if st.SnellVersion == 6 && st.SnellMode != "" {
 			p["模式"] = st.SnellMode
+		}
+	}
+	switch n.typ {
+	case "vless", "vmess", "trojan":
+		if net == "ws" || net == "httpupgrade" {
+			p["Path"] = st.Transport.Path
+			if host := st.Transport.Host(); host != "" {
+				p["Host"] = host
+			}
+		}
+		if st.TLS.Reality.Enabled {
+			p["安全"] = "reality"
+			p["SNI"] = sni
+			p["PublicKey"] = st.TLS.Reality.PublicKey
+			p["ShortID"] = firstOf(st.TLS.Reality.ShortID)
+			p["指纹"] = st.TLS.Fingerprint
+			if p["指纹"] == "" {
+				p["指纹"] = "chrome"
+			}
 		}
 	}
 	return p
