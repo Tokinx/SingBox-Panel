@@ -11,6 +11,8 @@ export interface SSEMessage {
 // several tabs don't all reconnect in lockstep.
 const RECONNECT_BASE_MS = 1000
 const RECONNECT_MAX_MS = 30_000
+// The panel sends a heartbeat every 15 seconds, including on idle nodes.
+const IDLE_TIMEOUT_MS = 45_000
 
 // Kept behind an object so the redirect can be verified without asking jsdom
 // to perform a real navigation in unit tests.
@@ -58,6 +60,7 @@ export function useSSE(
     let controller: AbortController | null = null
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
     let retryTimer: ReturnType<typeof setTimeout> | null = null
+    let idleTimer: ReturnType<typeof setTimeout> | null = null
     let attempts = 0
     let stopped = false
     let generation = 0
@@ -69,9 +72,14 @@ export function useSSE(
         retryTimer = null
       }
     }
+    const clearIdle = () => {
+      if (idleTimer) clearTimeout(idleTimer)
+      idleTimer = null
+    }
 
     const closeActiveConnection = () => {
       generation += 1
+      clearIdle()
       const activeController = controller
       const activeReader = reader
       controller = null
@@ -108,7 +116,19 @@ export function useSSE(
       const connectionController = new AbortController()
       controller = connectionController
       let shouldReconnect = true
+      let timedOut = false
       let buffer = ''
+      const watchActivity = () => {
+        clearIdle()
+        idleTimer = setTimeout(() => {
+          if (stopped || connectionGeneration !== generation) return
+          timedOut = true
+          setConnected(false)
+          connectionController.abort()
+          if (reader) void reader.cancel().catch(() => {})
+        }, IDLE_TIMEOUT_MS)
+      }
+      watchActivity()
       try {
         // 从 Zustand 内存读取认证 Token
         const token = useAuth.getState().token
@@ -129,6 +149,7 @@ export function useSSE(
         if (!resp.ok || !resp.body) {
           return
         }
+        watchActivity()
         // A successful (re)connect resets the backoff ladder.
         attempts = 0
         setConnected(true)
@@ -140,6 +161,7 @@ export function useSSE(
           const { done, value } = await connectionReader.read()
           if (done) break
           if (stopped || connectionGeneration !== generation) return
+          watchActivity()
           buffer += decoder.decode(value, { stream: true })
           // SSE frames are separated by \n\n
           const frames = buffer.split('\n\n')
@@ -161,9 +183,10 @@ export function useSSE(
         }
       } catch (err) {
         // AbortError is expected on cleanup; ignore it.
-        if (err instanceof DOMException && err.name === 'AbortError') shouldReconnect = false
+        if (err instanceof DOMException && err.name === 'AbortError') shouldReconnect = timedOut
       } finally {
         if (connectionGeneration === generation) {
+          clearIdle()
           controller = null
           reader = null
           setConnected(false)
