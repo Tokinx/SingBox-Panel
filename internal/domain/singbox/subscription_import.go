@@ -619,6 +619,7 @@ func parseV2RayStreamSettings(stream map[string]any) (InboundSettings, error) {
 		reality := yamlMap(getAny(stream, "realitySettings", "reality_settings"))
 		if reality != nil {
 			settings.TLS.ServerName = getString(reality, "serverName", "server_name")
+			settings.TLS.Fingerprint = getString(reality, "fingerprint", "clientFingerprint", "client_fingerprint")
 			settings.TLS.Reality.PublicKey = getString(reality, "publicKey", "public_key", "pbk")
 			settings.TLS.Reality.ShortID = splitOrNil(getString(reality, "shortId", "short_id", "sid"))
 		}
