@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sync/atomic"
 	"time"
 
 	"github.com/hann0w0/singbox-panel/internal/domain/protocol"
@@ -29,6 +30,8 @@ type Agent struct {
 	client    *Client
 	traffic   *trafficSampler
 	logStream *logStreamer
+	// Only one delta-bearing report may be queued until its write completes.
+	trafficReportInFlight atomic.Bool
 }
 
 // New builds an Agent and wires the client callbacks.
@@ -81,11 +84,29 @@ func (a *Agent) trafficReportLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			snap := a.traffic.snapshot()
-			if snap != nil && a.client.SendEvent(protocol.EvtTraffic, protocol.TrafficEvt{Traffic: snap}) {
-				a.traffic.acknowledge(snap)
-			}
+			a.reportTraffic()
 		}
+	}
+}
+
+func (a *Agent) reportTraffic() {
+	if !a.trafficReportInFlight.CompareAndSwap(false, true) {
+		return
+	}
+	snap := a.traffic.snapshot()
+	if snap == nil {
+		a.trafficReportInFlight.Store(false)
+		return
+	}
+	if !a.client.sendEvent(protocol.EvtTraffic, protocol.TrafficEvt{Traffic: snap}, func(written bool) {
+		if written {
+			// Clear only the snapshot actually written, preserving newer samples.
+			// The write receipt does not promise panel-side persistence.
+			a.traffic.acknowledge(snap)
+		}
+		a.trafficReportInFlight.Store(false)
+	}) {
+		a.trafficReportInFlight.Store(false)
 	}
 }
 

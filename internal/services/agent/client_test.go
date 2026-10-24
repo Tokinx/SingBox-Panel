@@ -163,3 +163,53 @@ func TestOutboundEventsAreScopedToTheirWebSocketSession(t *testing.T) {
 		t.Fatalf("current event = %#v", current)
 	}
 }
+
+func TestDisconnectCompletesQueuedReceiptsBeforeNextSession(t *testing.T) {
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				return
+			}
+		}
+	}))
+	defer server.Close()
+	client := NewClient(server.URL, "token", false)
+	client.wsURL = "ws" + strings.TrimPrefix(server.URL, "http")
+
+	for _, cancelBeforeWrite := range []bool{true, false} {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		receipts := make(chan bool, 1)
+		client.OnConnected = func() {
+			if !client.sendEvent(protocol.EvtTraffic, protocol.TrafficEvt{}, func(written bool) {
+				receipts <- written
+				cancel()
+			}) {
+				t.Error("connected event was not queued")
+				cancel()
+			}
+			if cancelBeforeWrite {
+				// The writer starts after OnConnected, so this event is still queued.
+				cancel()
+			}
+		}
+		_, _ = client.connectOnce(ctx)
+		cancel()
+		select {
+		case written := <-receipts:
+			if written == cancelBeforeWrite {
+				t.Fatalf("write receipt = %v, cancelBeforeWrite = %v", written, cancelBeforeWrite)
+			}
+		default:
+			t.Fatal("session shutdown did not complete its event receipt")
+		}
+		if client.activeSession.Load() != 0 || len(client.send) != 0 {
+			t.Fatal("session returned before its writer and queue were cleaned up")
+		}
+	}
+}

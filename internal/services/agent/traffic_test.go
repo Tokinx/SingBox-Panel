@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -89,6 +90,62 @@ func TestTrafficSummaryDoesNotCarryPortDeltas(t *testing.T) {
 	}
 	if full := sampler.snapshot(); len(full.Ports) != 1 {
 		t.Fatal("summary snapshot consumed pending port traffic")
+	}
+}
+
+func TestTrafficReportsWaitForWriteCompletionAndPreserveNewSamples(t *testing.T) {
+	sampler := newTrafficSampler()
+	sampler.available, sampler.haveSample = true, true
+	sampler.lastSample = time.Now()
+	sampler.pendingPorts["in"] = protocol.PortTrafficSnapshot{Inbound: "in", Upload: 100}
+	userKey := userTrafficKey{inbound: "in", user: "alice"}
+	sampler.pendingUsers[userKey] = protocol.UserTrafficSnapshot{Inbound: "in", User: "alice", Upload: 100}
+	client := NewClient("https://panel.example.com", "token", false)
+	client.activeSession.Store(1)
+	a := &Agent{client: client, traffic: sampler}
+	nextReport := func() sessionEnvelope {
+		t.Helper()
+		select {
+		case report := <-client.send:
+			return report
+		default:
+			t.Fatal("traffic report was not queued")
+			return sessionEnvelope{}
+		}
+	}
+
+	a.reportTraffic()
+	first := nextReport()
+	if snapshot := sampler.snapshot(); snapshot.Ports[0].Upload != 100 || snapshot.Users[0].Upload != 100 {
+		t.Fatalf("enqueue consumed unsent deltas: %+v", snapshot)
+	}
+	a.reportTraffic()
+	if len(client.send) != 0 {
+		t.Fatal("a second report duplicated the in-flight deltas")
+	}
+	first.complete(false)
+	a.reportTraffic()
+	retry := nextReport()
+	var event protocol.TrafficEvt
+	if err := json.Unmarshal(retry.env.Payload, &event); err != nil {
+		t.Fatal(err)
+	}
+	if event.Traffic.Ports[0].Upload != 100 || event.Traffic.Users[0].Upload != 100 {
+		t.Fatalf("failed write lost pending deltas: %+v", event.Traffic)
+	}
+	sampler.mu.Lock()
+	sampler.pendingPorts["in"] = protocol.PortTrafficSnapshot{Inbound: "in", Upload: 150}
+	sampler.pendingUsers[userKey] = protocol.UserTrafficSnapshot{Inbound: "in", User: "alice", Upload: 150}
+	sampler.mu.Unlock()
+	retry.complete(true)
+	if snapshot := sampler.snapshot(); snapshot.Ports[0].Upload != 50 || snapshot.Users[0].Upload != 50 {
+		t.Fatalf("write receipt consumed newer samples: %+v", snapshot)
+	}
+
+	client.activeSession.Store(0)
+	a.reportTraffic()
+	if a.trafficReportInFlight.Load() {
+		t.Fatal("offline enqueue left the report permanently in flight")
 	}
 }
 

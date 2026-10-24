@@ -14,6 +14,7 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -58,11 +59,21 @@ type Client struct {
 	send          chan sessionEnvelope
 	nextSession   atomic.Uint64
 	activeSession atomic.Uint64
+	// eventMu makes non-blocking event enqueue atomic with session shutdown,
+	// so receipt-bearing events cannot arrive after the disconnect drain.
+	eventMu sync.Mutex
 }
 
 type sessionEnvelope struct {
-	session uint64
-	env     protocol.Envelope
+	session    uint64
+	env        protocol.Envelope
+	onComplete func(written bool)
+}
+
+func (e sessionEnvelope) complete(written bool) {
+	if e.onComplete != nil {
+		e.onComplete(written)
+	}
 }
 
 type clientSessionContextKey struct{}
@@ -117,16 +128,25 @@ func ValidatePanelURL(raw string, insecure bool, environment string) error {
 // SendEvent pushes a spontaneous event (no correlation id) to the panel.
 // Non-blocking: if the buffer is full the event is dropped.
 func (c *Client) SendEvent(t protocol.MessageType, payload any) bool {
+	return c.sendEvent(t, payload, nil)
+}
+
+// sendEvent optionally reports whether the queued event was written to its
+// WebSocket. This is a local write receipt, not acknowledgement that the panel
+// received or persisted it. A false return means no callback was queued.
+func (c *Client) sendEvent(t protocol.MessageType, payload any, onComplete func(bool)) bool {
 	env, err := protocol.NewEnvelope(t, "", payload)
 	if err != nil {
 		return false
 	}
+	c.eventMu.Lock()
+	defer c.eventMu.Unlock()
 	session := c.activeSession.Load()
 	if session == 0 {
 		return false
 	}
 	select {
-	case c.send <- sessionEnvelope{session: session, env: env}:
+	case c.send <- sessionEnvelope{session: session, env: env, onComplete: onComplete}:
 		return true
 	default:
 		return false
@@ -350,12 +370,26 @@ func (c *Client) connectOnce(ctx context.Context) (time.Duration, error) {
 		}
 	}
 	c.activeSession.Store(session)
-	defer c.activeSession.CompareAndSwap(session, 0)
 	if c.OnConnected != nil {
 		c.OnConnected()
 	}
 
-	go c.writeLoop(connCtx, conn, session)
+	writerDone := make(chan struct{})
+	go func() {
+		defer close(writerDone)
+		c.writeLoop(connCtx, conn, session)
+	}()
+	defer func() {
+		// Stop tracked producers before draining. Join the old writer before a
+		// reconnect can start another one on the shared send channel.
+		c.eventMu.Lock()
+		c.activeSession.CompareAndSwap(session, 0)
+		c.eventMu.Unlock()
+		cancel()
+		_ = conn.Close()
+		<-writerDone
+		c.discardQueuedEvents()
+	}()
 
 	// Heartbeat loop.
 	go c.periodic(connCtx, c.heartbeatInterval, func() {
@@ -410,20 +444,40 @@ func (c *Client) writeLoop(ctx context.Context, conn *websocket.Conn, session ui
 		case <-ctx.Done():
 			return
 		case queued := <-c.send:
+			if ctx.Err() != nil {
+				queued.complete(false)
+				return
+			}
 			if queued.session != session {
+				queued.complete(false)
 				continue
 			}
 			_ = conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := conn.WriteJSON(queued.env); err != nil {
+				queued.complete(false)
 				_ = conn.Close() // unblock readLoop
 				return
 			}
+			queued.complete(true)
 		case <-ping.C:
 			_ = conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				_ = conn.Close()
 				return
 			}
+		}
+	}
+}
+
+// discardQueuedEvents runs after the session is inactive and its writer has
+// stopped. Pending write receipts must resolve even if no reconnect happens.
+func (c *Client) discardQueuedEvents() {
+	for {
+		select {
+		case queued := <-c.send:
+			queued.complete(false)
+		default:
+			return
 		}
 	}
 }
