@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   AutoComplete,
   Button,
@@ -204,6 +204,7 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
   const [retryKey, setRetryKey] = useState(0)
   const [saving, setSaving] = useState(false)
   const saveLockRef = useRef(false)
+  const assignmentSessionRef = useRef(0)
   const [activeTab, setActiveTab] = useState<'nodes' | 'order'>('nodes')
   const [activeNodeTab, setActiveNodeTab] = useState<'managed' | 'custom'>('managed')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set())
@@ -219,6 +220,17 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
   const touchDropIndexRef = useRef<number | null>(null)
 
   nodeOrderRef.current = nodeOrder
+
+  useLayoutEffect(() => {
+    assignmentSessionRef.current += 1
+    saveLockRef.current = false
+    setSaving(false)
+    return () => {
+      // A request can finish after the parent closes or replaces this dialog.
+      // It must not overwrite another user's draft or close their session.
+      assignmentSessionRef.current += 1
+    }
+  }, [open, userId])
 
   useEffect(() => {
     if (!open) return
@@ -560,23 +572,28 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
   }, [])
 
   const handleClose = () => {
+    if (saving || saveLockRef.current) return
     if (!isDirty) {
       onClose()
       return
     }
+    const session = assignmentSessionRef.current
     Modal.confirm({
       title: '放弃未保存的更改？',
       content: '关闭会丢弃当前节点选择。',
       okText: '放弃并关闭',
       cancelText: '继续编辑',
       okType: 'danger',
-      onOk: onClose,
+      onOk: () => {
+        if (session === assignmentSessionRef.current && !saveLockRef.current) onClose()
+      },
     })
   }
 
   const save = async () => {
-    if (!userId || saveLockRef.current || !isDirty) return
+    if (!open || !userId || saveLockRef.current || !isDirty) return
     saveLockRef.current = true
+    const session = assignmentSessionRef.current
     setSaving(true)
     try {
       // A historical ServerIDs=[A], InboundIDs=[] grant means every current
@@ -590,6 +607,7 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
         custom_node_ids: customNodeIDs,
         node_order: nodeOrder,
       })
+      if (session !== assignmentSessionRef.current) return
       setLoadedServerIDs(access.server_ids ?? [])
       setLoadedServerWide(!!access.server_wide)
       setLoadedInboundIDs(access.inbound_ids)
@@ -602,10 +620,12 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
       onSaved()
       onClose()
     } catch (e) {
-      message.error(errMsg(e))
+      if (session === assignmentSessionRef.current) message.error(errMsg(e))
     } finally {
-      saveLockRef.current = false
-      setSaving(false)
+      if (session === assignmentSessionRef.current) {
+        saveLockRef.current = false
+        setSaving(false)
+      }
     }
   }
 
@@ -809,6 +829,7 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
       className="um-access-assign-modal um-modal"
       open={open}
       onCancel={handleClose}
+      confirmLoading={saving}
       width={MODAL_LG}
       style={{ maxWidth: 'calc(100vw - 16px)' }}
       destroyOnClose
@@ -817,7 +838,7 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
           <span className={isDirty ? 'is-dirty' : ''}>{isDirty ? '有未保存更改' : '已同步'}</span>
           <div className="um-access-footer-actions">
             <Button icon={<Undo2 />} disabled={!isDirty || saving} onClick={discardChanges}>撤销</Button>
-            <Button onClick={handleClose}>取消</Button>
+            <Button disabled={saving} onClick={handleClose}>取消</Button>
             <Button type="primary" loading={saving} disabled={!isDirty || accessLoading} onClick={() => void save()}>保存</Button>
           </div>
         </div>
