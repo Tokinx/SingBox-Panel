@@ -100,6 +100,9 @@ jobs:
       - name: Package tarballs
         run: |
           cp install.sh dist/install.sh
+          cp compose.yaml dist/compose.yaml
+          image="ghcr.io/${GITHUB_REPOSITORY,,}:${RELEASE_TAG}"
+          sed "s|^PANEL_IMAGE=.*|PANEL_IMAGE=${image}|" .env.example > dist/panel.env.example
           tar -czf "dist/singbox-panel-agents-${RELEASE_TAG}.tar.gz" \
             -C dist/agents .
           tar -czf "dist/singbox-panel-web-${RELEASE_TAG}.tar.gz" \
@@ -111,7 +114,7 @@ jobs:
           sha256sum \
             panel/singbox-panel-linux-amd64 \
             panel/singbox-panel-linux-arm64 \
-            install.sh \
+            install.sh compose.yaml panel.env.example \
             "singbox-panel-agents-${RELEASE_TAG}.tar.gz" \
             "singbox-panel-web-${RELEASE_TAG}.tar.gz" \
             | sed 's#panel/##' > checksums.txt
@@ -124,6 +127,8 @@ jobs:
             dist/panel/singbox-panel-linux-amd64
             dist/panel/singbox-panel-linux-arm64
             dist/install.sh
+            dist/compose.yaml
+            dist/panel.env.example
             dist/singbox-panel-agents-${{ env.RELEASE_TAG }}.tar.gz
             dist/singbox-panel-web-${{ env.RELEASE_TAG }}.tar.gz
             dist/checksums.txt
@@ -138,19 +143,27 @@ jobs:
           # 发布说明的唯一来源：只放安装与卸载命令，保持精简。
           # 不要在此添加标题或变更列表，也不要启用 generate_release_notes（会自动追加提交历史）。
           body: |
-            ### 安装
+            ### 原生面板安装（默认）
 
             ```bash
             curl -fsSL https://github.com/hann0w0/SingBox-Panel/releases/download/${{ env.RELEASE_TAG }}/install.sh | sudo bash -s -- --version ${{ env.RELEASE_TAG }}
             ```
 
+            ### Docker 部署（可选）
+
+            支持 `docker run` 和 Docker Compose 两种方式，完整命令及 Compose YAML 见 [Docker 部署说明](https://github.com/${{ github.repository }}/blob/${{ env.RELEASE_TAG }}/docs/docker.md)。请等待本版本镜像发布任务成功后安装。
+
             ### 卸载
+
+            原生面板：
 
             ```bash
             curl -fsSL https://github.com/hann0w0/SingBox-Panel/releases/download/${{ env.RELEASE_TAG }}/install.sh | sudo bash -s -- --uninstall --yes
             ```
 
-            卸载默认保留数据库与配置，重新安装即可恢复原有账号与设置；如需一并删除数据，在命令末尾加上 `--purge`。
+            原生卸载默认保留数据库与配置；如需清空，在命令末尾加上 `--purge`。
+
+            `docker run` 部署使用 `docker stop singbox-panel && docker rm singbox-panel`；Compose 部署使用 `docker compose down`。两者均保留数据卷。
 
           files: |
             dist/panel/singbox-panel-linux-amd64
@@ -159,3 +172,13 @@ jobs:
             dist/singbox-panel-web-${{ env.RELEASE_TAG }}.tar.gz
             dist/checksums.txt
             dist/install.sh
+            dist/compose.yaml
+            dist/panel.env.example
+
+  docker:
+    name: Publish release image
+    needs: build
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker.yml
