@@ -195,11 +195,34 @@ func (a *App) applyImportUnlocked(srv *model.Server, p *singbox.ParsedConfig, ra
 }
 
 func importedConfigMode(p *singbox.ParsedConfig, raw []byte) string {
+	// The real orchestrator adds panel statistics services even when they were
+	// absent in the imported JSON. Do not promote a gate that occupies those
+	// reserved ports: the raw configuration may work but managed pushes cannot.
+	for _, in := range p.Inbounds {
+		if !in.Settings.RealityGuardEnabled() {
+			continue
+		}
+		for _, port := range []int{in.ListenPort, in.Settings.TLS.Reality.Guard.InternalPort} {
+			if port == localTrafficPort() || port == addressPort(protocol.LocalStatsAPIAddress) {
+				return model.ConfigModeRaw
+			}
+		}
+	}
 	generated, err := buildManagedConfigFromImport(p, raw)
-	if err != nil || !equivalentJSON(raw, generated) {
+	if err != nil {
 		return model.ConfigModeRaw
 	}
-	return model.ConfigModeManaged
+	if equivalentJSON(raw, generated) {
+		return model.ConfigModeManaged
+	}
+	// Only an independently recognised, unambiguous REALITY gate may use
+	// these finite normalisations. All other imports retain strict equality.
+	normalizedRaw, rawOK := singbox.NormalizeRealityGuardImportJSON(raw)
+	normalizedGenerated, generatedOK := singbox.NormalizeRealityGuardImportJSON(generated)
+	if rawOK && generatedOK && equivalentJSON(normalizedRaw, normalizedGenerated) {
+		return model.ConfigModeManaged
+	}
+	return model.ConfigModeRaw
 }
 
 func buildManagedConfigFromImport(p *singbox.ParsedConfig, raw []byte) ([]byte, error) {

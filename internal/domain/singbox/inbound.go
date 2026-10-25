@@ -31,10 +31,11 @@ type realityHandshake struct {
 }
 
 type realityInbound struct {
-	Enabled    bool             `json:"enabled"`
-	Handshake  realityHandshake `json:"handshake"`
-	PrivateKey string           `json:"private_key"`
-	ShortID    []string         `json:"short_id,omitempty"`
+	Enabled           bool             `json:"enabled"`
+	Handshake         realityHandshake `json:"handshake"`
+	PrivateKey        string           `json:"private_key"`
+	ShortID           []string         `json:"short_id,omitempty"`
+	MaxTimeDifference string           `json:"max_time_difference,omitempty"`
 }
 
 type tlsInbound struct {
@@ -89,8 +90,9 @@ func buildTLS(t TLSSettings) *tlsInbound {
 				Server:     t.Reality.HandshakeServer,
 				ServerPort: orDefaultInt(t.Reality.HandshakeServerPort, 443),
 			},
-			PrivateKey: t.Reality.PrivateKey,
-			ShortID:    t.Reality.ShortID,
+			PrivateKey:        t.Reality.PrivateKey,
+			ShortID:           t.Reality.ShortID,
+			MaxTimeDifference: t.Reality.MaxTimeDifference,
 		}
 		if out.ServerName == "" {
 			out.ServerName = t.Reality.HandshakeServer
@@ -162,6 +164,13 @@ func BuildInbound(in InboundInput) (json.RawMessage, error) {
 		"tag":         in.Tag,
 		"listen":      "::",
 		"listen_port": in.ListenPort,
+	}
+	if in.Settings.RealityGuardEnabled() {
+		if in.ListenPort == in.Settings.TLS.Reality.Guard.InternalPort {
+			return nil, fmt.Errorf("REALITY 内部端口不能与公网端口相同")
+		}
+		m["listen"] = "127.0.0.1"
+		m["listen_port"] = in.Settings.TLS.Reality.Guard.InternalPort
 	}
 	tls := buildTLS(in.Settings.TLS)
 	tr := buildTransport(in.Settings.Transport)

@@ -67,11 +67,32 @@ type experimentalOut struct {
 // project's sing-box 1.14 baseline (also accepted by 1.15). The output is validated on the VPS by `sing-box check`
 // before being applied.
 func BuildServerConfig(in ServerConfigInput) ([]byte, error) {
+	if err := ValidateRealityGuardLayout(in.Inbounds); err != nil {
+		return nil, err
+	}
 	inbounds := make([]json.RawMessage, 0, len(in.Inbounds))
+	var guardRules []map[string]any
 	for _, ib := range in.Inbounds {
+		if ib.Settings.RealityGuardEnabled() {
+			for _, address := range []string{in.StatsController, in.StatsAPI} {
+				_, portText, _ := net.SplitHostPort(address)
+				port, _ := strconv.Atoi(portText)
+				if port == ib.Settings.TLS.Reality.Guard.InternalPort || port == ib.ListenPort {
+					return nil, fmt.Errorf("REALITY 入站 %q 与统计服务端口冲突", ib.Tag)
+				}
+			}
+		}
 		raw, err := BuildInbound(ib)
 		if err != nil {
 			return nil, fmt.Errorf("inbound %q: %w", ib.Tag, err)
+		}
+		if ib.Settings.RealityGuardEnabled() {
+			guard, err := json.Marshal(buildRealityGuardInbound(ib))
+			if err != nil {
+				return nil, err
+			}
+			inbounds = append(inbounds, guard)
+			guardRules = append(guardRules, buildRealityGuardRules(ib)...)
 		}
 		inbounds = append(inbounds, raw)
 	}
@@ -116,7 +137,10 @@ func BuildServerConfig(in ServerConfigInput) ([]byte, error) {
 			hasGlobalSniff = true
 		}
 	}
-	rules := []map[string]any{}
+	// Gate traffic must reach only its own local VLESS listener before the
+	// general loopback protection. The terminal reject isolates all other
+	// gate traffic from user rules and the global sniff fallback.
+	rules := append([]map[string]any{}, guardRules...)
 	if in.StatsController != "" {
 		rules = append(rules, LoopbackGuardRule())
 	}
