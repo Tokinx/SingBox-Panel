@@ -1,6 +1,7 @@
 /* Server detail (design A) */
 .sd-up { color: var(--console-warning); font-weight: 600; }
 .sd-strong { font-weight: 500; color: var(--console-ink); }
+.sd-remark { flex-basis: 100%; min-width: 0; color: var(--console-muted); white-space: pre-wrap; overflow-wrap: anywhere; }
 .sd-raw { margin: -12px 0 24px; }
 .sd-page :is(.ui-table-tbody > tr.is-disabled > td) { color: var(--console-faint); }
 .sd-test { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }

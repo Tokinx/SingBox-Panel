@@ -444,6 +444,7 @@ export default function Servers() {
               <div className="srv-name">
                 <a href={`/admin/servers/${s.id}`} onClick={(e) => { e.preventDefault(); open_(s) }}>{s.name}</a>
                 <span className="mono">{s.address || s.public_ip || '未设置地址'}</span>
+                {s.remark?.trim() && <span className="srv-remark" title={s.remark}>{s.remark}</span>}
               </div>
               <div className="srv-status"><Status tone={s.online ? 'ok' : 'off'}>{s.online ? '在线' : '离线'}</Status></div>
               <div className="srv-version">

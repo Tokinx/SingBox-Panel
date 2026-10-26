@@ -36,6 +36,7 @@ export function ServerOverviewCard({
       </span>
       <span>Agent {server.agent_version || '—'}{server.agent_has_update && <span className="sd-up"> ↑</span>}</span>
       {server.os && <span>{server.os}</span>}
+      {server.remark?.trim() && <span className="sd-remark">{server.remark}</span>}
     </>}
     actions={<>
       <Button icon={<RotateCw />} loading={refreshing} onClick={onRefresh} aria-label="刷新状态" title="刷新状态" />
