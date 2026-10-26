@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { errMsg, isCanceledRequest, listServers, serverLogs, streamLogs } from '../../../api'
 import type { Server } from '../../../types'
+import { parseServerId } from '../../../serverNavigation'
 import { useSSE } from '../../../useSSE'
 import { useSearchParams } from 'react-router-dom'
 import type { SSEMessage } from '../../../useSSE'
@@ -284,8 +285,8 @@ function formatUpdatedAt(value: number | null) {
 export default function Logs({ serverId }: { serverId?: number } = {}) {
   const [servers, setServers] = useState<Server[]>([])
   const [params, setParams] = useSearchParams()
-  const sid = serverId ?? (Number(params.get('server')) || null)
-  const setSid = (next: number) => { if (serverId === undefined) setParams({ server: String(next) }, { replace: true }) }
+  const requestedId = parseServerId(params.get('server'))
+  const sid = serverId ?? (servers.some((server) => server.id === requestedId) ? requestedId : null)
   const lines = 200
   const [logEntries, setLogEntries] = useState<LogEntry[]>([])
   const [loading, setLoading] = useState(false)
@@ -302,7 +303,6 @@ export default function Logs({ serverId }: { serverId?: number } = {}) {
   const followingRef = useRef(true)
   const loadAbortRef = useRef<AbortController | null>(null)
   const loadGenerationRef = useRef(0)
-  const serverListAbortRef = useRef<AbortController | null>(null)
   const nextLogIDRef = useRef(1)
   const pendingLiveLinesRef = useRef<string[]>([])
   const liveSequenceRef = useRef(0)
@@ -315,22 +315,26 @@ export default function Logs({ serverId }: { serverId?: number } = {}) {
       return
     }
     const controller = new AbortController()
-    serverListAbortRef.current = controller
     listServers(controller.signal)
       .then((s) => {
         if (controller.signal.aborted) return
         setServers(s)
-        const first = s.find((x) => x.online) ?? s[0]
-        if (first && !Number(new URLSearchParams(window.location.search).get('server'))) setSid(first.id)
       })
       .catch((e) => {
         if (!controller.signal.aborted) message.error(errMsg(e))
       })
     return () => {
       controller.abort()
-      if (serverListAbortRef.current === controller) serverListAbortRef.current = null
     }
   }, [serverId])
+
+  useEffect(() => {
+    if (serverId !== undefined || !servers.length || servers.some((server) => server.id === requestedId)) return
+    const first = servers.find((server) => server.online) ?? servers[0]
+    const next = new URLSearchParams(params)
+    next.set('server', String(first.id))
+    setParams(next, { replace: true })
+  }, [serverId, servers, requestedId, params, setParams])
 
   const setFollowState = (value: boolean) => {
     followingRef.current = value
@@ -487,7 +491,13 @@ export default function Logs({ serverId }: { serverId?: number } = {}) {
     if (liveFlushTimerRef.current) clearTimeout(liveFlushTimerRef.current)
     liveFlushTimerRef.current = null
     setLogEntries([])
+    setLastUpdatedAt(null)
+    setLoading(false)
     void load()
+    return () => {
+      loadGenerationRef.current += 1
+      loadAbortRef.current?.abort()
+    }
   }, [load])
 
   const filteredLines = useMemo(() => {

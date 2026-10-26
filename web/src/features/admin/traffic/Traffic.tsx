@@ -3,6 +3,7 @@ import { message } from '../../../ui'
 import { useSearchParams } from 'react-router-dom'
 import { errMsg, listServers } from '../../../api'
 import type { Server } from '../../../types'
+import { parseServerId } from '../../../serverNavigation'
 import { PageHeader } from '../../../ui/Page'
 import ServerTraffic from '../servers/ServerTraffic'
 import '../../../styles/traffic-logs.css'
@@ -11,7 +12,7 @@ import '../../../styles/traffic-logs.css'
 export default function Traffic() {
   const [servers, setServers] = useState<Server[]>([])
   const [params, setParams] = useSearchParams()
-  const serverId = Number(params.get('server')) || null
+  const serverId = parseServerId(params.get('server'))
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
@@ -20,8 +21,6 @@ export default function Traffic() {
       .then((items) => {
         if (controller.signal.aborted) return
         setServers(items)
-        const first = items.find((server) => server.online) ?? items[0]
-        if (first && !Number(new URLSearchParams(window.location.search).get('server'))) setParams({ server: String(first.id) }, { replace: true })
       })
       .catch((error) => {
         if (!controller.signal.aborted) message.error(errMsg(error))
@@ -31,6 +30,14 @@ export default function Traffic() {
       })
     return () => controller.abort()
   }, [])
+
+  useEffect(() => {
+    if (!servers.length || servers.some((server) => server.id === serverId)) return
+    const first = servers.find((server) => server.online) ?? servers[0]
+    const next = new URLSearchParams(params)
+    next.set('server', String(first.id))
+    setParams(next, { replace: true })
+  }, [servers, serverId, params, setParams])
 
   const current = servers.find((server) => server.id === serverId)
 
