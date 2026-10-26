@@ -171,7 +171,8 @@ func (a *App) serverLogs(c *gin.Context) {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "解析日志失败"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"text": data.Text})
+	users := logUserResolver{db: a.db, serverID: id}
+	c.JSON(http.StatusOK, gin.H{"text": users.resolve(ctx, data.Text)})
 }
 
 // ---------- servers ----------

@@ -136,13 +136,14 @@ func (a *App) handleTrafficSSE(c *gin.Context) {
 
 	sub, backlog := a.hub.live.subscribe(serverID)
 	defer a.hub.live.unsubscribe(serverID, sub)
+	logUsers := logUserResolver{db: a.db, serverID: serverID}
 
 	// Send initial backlog so the chart isn't empty on connect.
 	for _, evt := range backlog {
 		if !a.auth.sessionActive(ctx, claims) {
 			return
 		}
-		if _, err := io.WriteString(c.Writer, evt.SSE()); err != nil {
+		if _, err := io.WriteString(c.Writer, logUsers.event(ctx, evt).SSE()); err != nil {
 			return
 		}
 	}
@@ -164,7 +165,7 @@ func (a *App) handleTrafficSSE(c *gin.Context) {
 			if !ok || !a.auth.sessionActive(ctx, claims) {
 				return
 			}
-			if _, err := io.WriteString(c.Writer, evt.SSE()); err != nil {
+			if _, err := io.WriteString(c.Writer, logUsers.event(ctx, evt).SSE()); err != nil {
 				return
 			}
 			flusher.Flush()
