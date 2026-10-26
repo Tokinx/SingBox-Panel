@@ -164,22 +164,26 @@
   .um-rule-none { display: none; }
   .um-rule-actions { grid-column: 3; grid-row: 1; }
   .um-access-modal-items { grid-template-columns: minmax(0, 1fr); padding-left: 14px; }
-  .um-access-order-item { grid-template-columns: 44px minmax(0, 1fr) 44px; grid-template-areas: 'handle content remove' 'input input input' 'kind actions actions'; gap: 8px; padding: 10px; }
-  .um-access-order-handle { grid-area: handle; width: 44px; height: 44px; }
+  .um-access-order-item { grid-template-columns: var(--app-control-h) minmax(0, 1fr) var(--app-control-h); grid-template-areas: 'handle content remove' 'input input input' 'kind actions actions'; gap: 6px; padding: 8px 10px; }
+  .um-access-order-handle { grid-area: handle; width: var(--app-control-h); height: var(--app-control-h); }
   .um-access-order-number, .um-access-order-protocol { display: none; }
   .um-access-order-content { grid-area: content; }
   .um-access-order-kind { grid-area: kind; }
-  .um-access-order-name-input { grid-area: input; min-height: 44px; }
-  .um-access-order-name-input input { font-size: 16px; }
-  .um-access-order-remove { grid-area: remove; min-width: 44px; min-height: 44px; }
+  .um-access-order-name-input { grid-area: input; }
+  /* Keep iOS inputs at 16px without enlarging every mobile control. */
+  .um-access-order-name-input input { padding-block: 4px; font-size: 16px; }
+  .um-access-order-remove.ui-btn { grid-area: remove; width: var(--app-control-h); height: var(--app-control-h); }
   .um-access-order-mobile-actions { grid-area: actions; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
   .um-access-order-mobile-actions > span { margin-right: auto; font-size: 12px; }
-  .um-access-order-mobile-actions > .ui-btn { min-height: 44px; padding: 0 12px; }
-  .um-access-editor .um-access-chip { min-height: 44px; height: auto; }
-  .um-access-editor .um-access-group-toggle { width: 44px; height: 44px; }
-  .um-access-editor .um-access-modal-group-head .ui-checkbox-wrapper { min-width: 44px; min-height: 44px; justify-content: center; }
-  .um-user-detail .ui-pill, .um-user-detail .ui-page-actions .ui-btn, .um-user-detail .um-back { min-height: 44px; }
-  .um-user-detail .ui-pills { height: auto; min-height: 50px; }
+  .um-access-order-mobile-actions > .ui-btn, .um-access-editor .ui-pills-actions > .ui-btn { height: var(--app-control-h); gap: 4px; padding: 0 8px; }
+  .um-access-editor .um-access-chip { height: 36px; }
+  .um-access-editor .um-access-modal-group-head { gap: 6px; }
+  .um-access-editor .um-access-group-toggle { width: var(--app-control-h); height: var(--app-control-h); }
+  .um-access-editor .um-access-modal-group-head .ui-checkbox-wrapper { flex: none; width: var(--app-control-h); height: var(--app-control-h); justify-content: center; }
+  .um-user-detail .ui-page-actions .ui-btn, .um-access-page-footer .ui-btn { height: var(--app-control-h); gap: 6px; padding: 0 10px; }
+  .um-user-detail .ui-page-actions .ui-btn-icon-only { width: var(--app-control-h); padding: 0; }
+  .um-user-detail .ui-btn .lucide, .um-access-editor .um-access-group-toggle .lucide { width: 14px; height: 14px; }
+  .um-user-detail .um-back { min-height: var(--app-control-h); margin-bottom: 10px; }
   .um-user-detail .sub-clients { grid-template-columns: minmax(0, 1fr); gap: 0; border: 1px solid var(--console-border); border-radius: var(--app-radius); overflow: clip; }
   .um-user-detail .sub-client { height: 52px; padding: 0 14px; border: 0; border-radius: 0; }
   .um-user-detail .sub-client + .sub-client { border-top: 1px solid var(--console-border); }
@@ -187,7 +191,7 @@
   .um-access-footer-actions { flex: 1; justify-content: flex-end; }
   .um-access-page-footer > span { display: block; }
   .um-access-page-footer .um-access-footer-actions { flex: none; }
-  .um-access-page-footer .ui-btn { min-height: 44px; }
+  .um-access-page-footer { gap: 8px; padding: 10px 0 max(10px, env(safe-area-inset-bottom)); margin-top: 12px; }
 }
 .um-detail .ui-typography-copy, .um-detail .ui-typography-copy:hover { color: var(--console-faint); }
 
