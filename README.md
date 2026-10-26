@@ -4,6 +4,8 @@
 
 ## 安装
 
+### 原生面板安装
+
 需要 Linux x86_64 或 arm64、systemd、已解析到面板服务器的域名，以及支持 WebSocket 的 HTTPS 反向代理。
 
 ```bash
@@ -12,23 +14,107 @@ curl -fsSL https://github.com/hann0w0/SingBox-Panel/releases/latest/download/ins
 
 安装脚本支持非交互安装（`--base-url`、`--admin`、`--password`、`--non-interactive`），用 `--version vX.Y.Z` 可指定版本。安装完成后在面板中创建服务器，并在目标 VPS 上执行该节点详情页生成的 Agent 安装命令。
 
-## 卸载
+### Docker 部署
+
+Docker 仅运行控制面板，各节点 VPS 上的 Agent 和 sing-box 仍以原生方式运行。提供以下两种部署方式（二选一），直接拉取官方镜像即可使用。
+
+前置要求：Docker Engine、已解析到服务器的域名，以及支持 WebSocket 的 HTTPS 反向代理（Compose 方式另需 Compose 插件）。
+
+#### 方式一：docker run
+
+替换域名、管理员账号和初始密码后执行：
 
 ```bash
-# 保留配置与数据库
+docker run -d \
+  --name singbox-panel \
+  --restart unless-stopped \
+  -p 127.0.0.1:32334:8080 \
+  -v singbox-panel-data:/app/data \
+  -e SINGBOX_PANEL_BASE_URL='https://panel.example.com' \
+  -e SINGBOX_PANEL_ADMIN_EMAIL='admin' \
+  -e SINGBOX_PANEL_ADMIN_PASSWORD='请替换为自己的初始密码' \
+  ghcr.io/hann0w0/singbox-panel:latest
+```
+
+- `SINGBOX_PANEL_BASE_URL`：面板对外公开访问的 HTTPS 根地址（节点 Agent 连接及订阅分发均依赖此地址）。
+- 管理员账号和初始密码仅在首次初始化数据库时使用。
+- 宿主机仅发布 `127.0.0.1:32334`，映射到容器内 `8080`，需由反向代理统一对外提供 HTTPS。
+
+#### 方式二：Docker Compose
+
+在新目录创建 `compose.yaml`：
+
+```yaml
+services:
+  panel:
+    image: ghcr.io/hann0w0/singbox-panel:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:32334:8080"
+    environment:
+      SINGBOX_PANEL_BASE_URL: "https://panel.example.com"
+      SINGBOX_PANEL_ADMIN_EMAIL: "admin"
+      SINGBOX_PANEL_ADMIN_PASSWORD: "请替换为自己的初始密码"
+    volumes:
+      - panel-data:/app/data
+
+volumes:
+  panel-data:
+```
+
+> **提示**：如果初始密码中含有字符 `$`，在 YAML 中需写为 `$$` 转义。
+
+启动服务：
+
+```bash
+docker compose up -d
+```
+
+更多关于镜像更新、数据备份恢复及生产安全加固配置（如只读文件系统、权限收紧等），详见 [Docker 部署说明](docs/docker.md)。
+
+## 卸载
+
+### 原生面板卸载
+
+```bash
+# 卸载面板服务，保留配置与数据库
 curl -fsSL https://github.com/hann0w0/SingBox-Panel/releases/latest/download/install.sh | sudo bash -s -- --uninstall --yes
 
-# 连同配置与数据库一并删除
+# 完整卸载，连同配置与数据库一并删除
 curl -fsSL https://github.com/hann0w0/SingBox-Panel/releases/latest/download/install.sh | sudo bash -s -- --uninstall --purge --yes
 ```
 
-节点 Agent 与 sing-box 在对应服务器详情页单独卸载，互不影响。
+### Docker 面板卸载
+
+停止并删除容器（数据保存在数据卷中，默认保留）：
+
+```bash
+# docker run 方式
+docker stop singbox-panel && docker rm singbox-panel
+
+# Docker Compose 方式（在 compose.yaml 目录下）
+docker compose down
+```
+
+> **注意**：请勿添加 `-v` 或删除数据卷，除非确认清空所有数据。各 VPS 上的节点 Agent 与 sing-box 可在面板对应服务器详情页单独卸载。
 
 ## 工作模式
 
 面板通过 HTTPS 提供管理界面，节点上的 Agent 主动以 WSS 连接面板，节点无需开放额外管理端口，也不提供任意 Shell 执行能力。Agent 以官方方式安装 sing-box，下发配置前执行 `sing-box check`，程序与配置更新采用校验、原子替换与失败回滚。
 
 面板支持两种配置模式：管理模式根据面板中的节点、协议与路由设置生成配置；原始配置模式保存并下发完整 JSON，适合面板暂未结构化支持的 sing-box 配置项。
+
+### Reality 前置 SNI 过滤
+
+在 VLESS 入站选择 REALITY 与 TCP 传输后，可以开启「前置 SNI 过滤」。原入站端口仍是客户端和订阅使用的公网端口；另填一个未占用的内部端口，面板自动生成公网 `direct` 入站与仅监听 `127.0.0.1` 的 VLESS 入站。例如公网 `31735`、内部 `31736`，订阅始终连接 `31735`。
+
+SNI 白名单留空时沿用 Reality 的 SNI／握手域名，可填写多个完整域名；名单必须包含订阅使用的域名。嗅探超时留空为 `300ms`，Reality 时间差限制可填写 `1m` 等时长，留空不启用时间差检查。SNI 过滤后仍由 Reality 和 VLESS 完成认证。
+
+面板将过滤规则放在普通分流规则之前，只允许指定前置入站访问对应的本地端口，其余回环保护继续生效。内部端口不能与公网端口、其他入站或统计服务保留端口 `29091`／`29092` 冲突。关闭开关后自动恢复单入站，公网端口和客户端凭证保留。
+
+导入支持明确的单用户组合：一个公网 `direct` 转发至本地 VLESS Reality，开头依次为 TLS 嗅探、SNI 白名单放行、拒绝三条规则。识别后恢复为一个面板入站并使用公网订阅端口；未知字段、目标歧义或更复杂的组合继续保留原始配置模式。
+
+可选真实连接回归：设置 `SING_BOX_BINARY` 为 sing-box 可执行文件的绝对路径，再运行 `go test ./internal/domain/singbox -run TestRealityGuardLive -v`。测试使用本地 TLS 伪装站点与 HTTP 目标，验证允许和拒绝路径及回环保护。
 
 ## 导入出站
 

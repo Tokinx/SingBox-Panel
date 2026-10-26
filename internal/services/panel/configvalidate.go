@@ -112,6 +112,38 @@ func (a *App) validateInboundIdentity(db *gorm.DB, serverID, excludeID uint, tag
 	return nil
 }
 
+// validateInboundConfiguration includes virtual guard listeners in identity
+// checks. Disabled rows still reserve their ports and tags for later enabling.
+func (a *App) validateInboundConfiguration(db *gorm.DB, serverID, excludeID uint, tag, typ string, port int, settings singbox.InboundSettings) error {
+	if err := a.validateInboundIdentity(db, serverID, excludeID, tag, port); err != nil {
+		return err
+	}
+	if settings.RealityGuardEnabled() {
+		guardPort := settings.TLS.Reality.Guard.InternalPort
+		if guardPort == localTrafficPort() || guardPort == addressPort(protocol.LocalStatsAPIAddress) {
+			return fmt.Errorf("REALITY 内部端口 %d 已保留给节点流量统计服务", guardPort)
+		}
+		if err := validateTag(settings.RealityGuardTag(tag)); err != nil {
+			return err
+		}
+	}
+	var rows []model.Inbound
+	if err := db.Where("server_id = ? AND id <> ?", serverID, excludeID).Find(&rows).Error; err != nil {
+		return err
+	}
+	inputs := []singbox.InboundInput{{Tag: tag, Type: typ, ListenPort: port, Settings: settings}}
+	for _, row := range rows {
+		var other singbox.InboundSettings
+		if len(row.Settings) > 0 {
+			if err := json.Unmarshal(row.Settings, &other); err != nil {
+				return fmt.Errorf("读取入站 %q 参数失败: %w", row.Tag, err)
+			}
+		}
+		inputs = append(inputs, singbox.InboundInput{Tag: row.Tag, Type: string(row.Type), ListenPort: row.ListenPort, Settings: other})
+	}
+	return singbox.ValidateRealityGuardLayout(inputs)
+}
+
 func (a *App) validateOutbound(db *gorm.DB, serverID, excludeID uint, tag, typ string, raw json.RawMessage) error {
 	if err := validateTag(tag); err != nil {
 		return err

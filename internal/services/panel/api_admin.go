@@ -1000,7 +1000,7 @@ func (a *App) createInbound(c *gin.Context) {
 	raw, _ := json.Marshal(st)
 
 	tag := inboundTag(req.Type, req.Tag)
-	if err := a.validateInboundIdentity(a.db, id, 0, tag, req.ListenPort); err != nil {
+	if err := a.validateInboundConfiguration(a.db, id, 0, tag, req.Type, req.ListenPort, st); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -1109,6 +1109,17 @@ func (a *App) updateInbound(c *gin.Context) {
 		}
 		raw, _ := json.Marshal(st)
 		ib.Settings = model.JSONText(raw)
+	}
+	var nextSettings singbox.InboundSettings
+	if len(ib.Settings) > 0 {
+		if err := json.Unmarshal(ib.Settings, &nextSettings); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid settings: " + err.Error()})
+			return
+		}
+	}
+	if err := a.validateInboundConfiguration(a.db, sid, ib.ID, ib.Tag, string(ib.Type), ib.ListenPort, nextSettings); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
 	}
 	tx := a.db.Begin()
 	if tx.Error != nil {

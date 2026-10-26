@@ -181,10 +181,11 @@ func parseTLS(t map[string]any) TLSSettings {
 			}
 		}
 		out.Reality = RealitySettings{
-			Enabled:    true,
-			PrivateKey: privateKey,
-			PublicKey:  publicKey,
-			ShortID:    mStrSlice(r, "short_id"),
+			Enabled:           true,
+			PrivateKey:        privateKey,
+			PublicKey:         publicKey,
+			ShortID:           mStrSlice(r, "short_id"),
+			MaxTimeDifference: mStr(r, "max_time_difference"),
 		}
 		if h := mMap(r, "handshake"); h != nil {
 			out.Reality.HandshakeServer = mStr(h, "server")
@@ -459,9 +460,23 @@ func ParseServerConfig(raw []byte) (*ParsedConfig, error) {
 		return nil, fmt.Errorf("配置不是合法 JSON: %w", err)
 	}
 	out := &ParsedConfig{Final: "direct"}
+	guards := findRealityGuardImports(root)
+	guardTargets := make(map[int]realityGuardImport, len(guards))
+	guardInbounds := make(map[int]bool, len(guards))
+	guardRules := make(map[int]bool, len(guards)*3)
+	for _, guard := range guards {
+		guardTargets[guard.targetIndex] = guard
+		guardInbounds[guard.directIndex] = true
+		for i := guard.ruleIndex; i < guard.ruleIndex+3; i++ {
+			guardRules[i] = true
+		}
+	}
 
 	providers := taggedObjects(root, "certificate_providers")
-	for _, e := range mSlice(root, "inbounds") {
+	for index, e := range mSlice(root, "inbounds") {
+		if guardInbounds[index] {
+			continue
+		}
 		m, ok := e.(map[string]any)
 		if !ok {
 			continue
@@ -477,6 +492,13 @@ func ParseServerConfig(raw []byte) (*ParsedConfig, error) {
 		if in.ListenPort == 0 {
 			out.Skipped = append(out.Skipped, fmt.Sprintf("入站 %s: 缺少 listen_port", in.Tag))
 			continue
+		}
+		if guard, ok := guardTargets[index]; ok {
+			in.ListenPort = guard.publicPort
+			in.Settings.TLS.Reality.Guard = &RealityGuardSettings{
+				Enabled: true, InternalPort: guard.internalPort,
+				SniffTimeout: guard.timeout, ServerNames: guard.serverNames, Tag: guard.tag,
+			}
 		}
 		out.Inbounds = append(out.Inbounds, in)
 	}
@@ -497,7 +519,10 @@ func ParseServerConfig(raw []byte) (*ParsedConfig, error) {
 		if f := mStr(route, "final"); f != "" {
 			out.Final = f
 		}
-		for _, e := range mSlice(route, "rules") {
+		for index, e := range mSlice(route, "rules") {
+			if guardRules[index] {
+				continue
+			}
 			m, ok := e.(map[string]any)
 			if !ok {
 				continue
