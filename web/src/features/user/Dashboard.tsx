@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button, Form, Grid, Input, Modal, Typography, message } from '../../ui'
-import { Copy, ChevronRight } from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { changePassword, errMsg, getMe, getUserNodes, resetSub } from '../../api'
 import type { UserNode } from '../../api'
 import type { User } from '../../types'
-import { copyToClipboard } from '../../util'
+import { SubscriptionLinks } from './SubscriptionLinks'
 import { useAuth } from '../../store'
 import { CONTINENT_ORDER, continentOf, type Continent } from '../../continents'
 import regionData from '../../assets/regions.json'
@@ -19,31 +19,6 @@ import { MODAL_MD, MODAL_SM } from '../../ui/modal'
 type RegionInfo = { geo: string; coord: [number, number]; label: string }
 const REGIONS = regionData as unknown as Record<string, RegionInfo>
 const userNodeKey = (node: UserNode) => `${node.type}:${node.name}:${node.server}:${node.port}`
-
-const LOGO_VERSION = '20260906-2'
-type ClientKind = 'surge' | 'clash' | 'shadowrocket'
-
-interface ClientSpec {
-  kind: ClientKind
-  label: string
-  logo: string
-  logoClass: string
-  target: string
-}
-
-const CLIENTS: ClientSpec[] = [
-  { kind: 'surge', label: 'Surge', logo: '/logos/surge.png', logoClass: 'client-logo-surge', target: 'surge' },
-  { kind: 'clash', label: 'ClashMeta', logo: '/logos/clashmeta.png', logoClass: 'client-logo-clashmeta', target: 'clash' },
-  { kind: 'shadowrocket', label: 'Shadowrocket', logo: '/logos/shadowrocket.png', logoClass: 'client-logo-shadowrocket', target: 'shadowrocket' },
-]
-
-function ClientLogo({ spec }: { spec: ClientSpec }) {
-  return (
-    <span className={`client-logo ${spec.logoClass}`} aria-hidden="true">
-      <img src={`${spec.logo}?v=${LOGO_VERSION}`} alt="" />
-    </span>
-  )
-}
 
 // Chinese label for an ISO region code (HK → 香港), falls back to the code.
 const labelOf = (code: string): string => REGIONS[code]?.label || (code === 'Other' ? '其他' : code)
@@ -123,15 +98,6 @@ export default function Dashboard({ embedded = false }: { embedded?: boolean }) 
     return <RequestState loading={loading} error={loadError} hasData={false} onRetry={load}><span /></RequestState>
   }
 
-  const link = (target: string) => (target ? `${subUrl}?target=${target}` : subUrl)
-  const copySub = async (spec: ClientSpec) => {
-    try {
-      await copyToClipboard(link(spec.target))
-      message.success(`已复制 ${spec.label} 订阅链接`)
-    } catch {
-      Modal.info({ title: `${spec.label} 订阅链接`, width: 640, content: <Typography.Paragraph copyable code style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{link(spec.target)}</Typography.Paragraph> })
-    }
-  }
   const doReset = () => Modal.confirm({
     title: '重置订阅链接？',
     content: '旧链接将立即失效。',
@@ -209,15 +175,7 @@ export default function Dashboard({ embedded = false }: { embedded?: boolean }) 
         {embedded ? <PageToolbar {...headerProps} /> : <PageHeader title="订阅" {...headerProps} />}
 
         <Section title="订阅链接">
-          <div className="sub-clients">
-            {CLIENTS.map((spec) => (
-              <button key={spec.kind} type="button" className="sub-client" onClick={() => void copySub(spec)} aria-label={`复制 ${spec.label} 订阅链接`}>
-                <ClientLogo spec={spec} />
-                <span className="sub-client-name">{spec.label}</span>
-                <span className="sub-client-copy"><Copy /> 复制</span>
-              </button>
-            ))}
-          </div>
+          <SubscriptionLinks url={subUrl} />
         </Section>
 
         <Section title="节点">

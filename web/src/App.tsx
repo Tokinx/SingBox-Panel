@@ -15,6 +15,7 @@ const ExternalNodes = lazy(() => import('./features/admin/nodes/ExternalNodes'))
 const Traffic = lazy(() => import('./features/admin/traffic/Traffic'))
 const Logs = lazy(() => import('./features/admin/logs/Logs'))
 const Users = lazy(() => import('./features/admin/users/UsersPage'))
+const UserDetail = lazy(() => import('./features/admin/users/UserDetail'))
 const Settings = lazy(() => import('./features/admin/settings/Settings'))
 const Dashboard = lazy(() => import('./features/user/Dashboard'))
 
@@ -37,7 +38,7 @@ function Home() {
 
 function DashboardRoute() {
   const user = useAuth((s) => s.user)
-  return user?.role === 'admin' ? <Navigate to="/admin/users?tab=subscription" replace /> : <Dashboard />
+  return user?.role === 'admin' ? <Navigate to={`/admin/users/${user.id}`} replace /> : <Dashboard />
 }
 
 // Spinner renders an Apple-style 12-spoke throbber (pure CSS, no icon font).
@@ -92,6 +93,7 @@ export default function App() {
           <Route path="/admin/servers/:id/:section?" element={<AdminGuard><ServerDetail /></AdminGuard>} />
           <Route path="/admin/traffic" element={<AdminGuard><Traffic /></AdminGuard>} />
           <Route path="/admin/users" element={<AdminGuard><Users /></AdminGuard>} />
+          <Route path="/admin/users/:id" element={<AdminGuard><UserDetail /></AdminGuard>} />
           <Route path="/admin/logs" element={<AdminGuard><Logs /></AdminGuard>} />
           <Route path="/admin/external-nodes" element={<AdminGuard><ExternalNodes /></AdminGuard>} />
           <Route path="/admin/settings" element={<AdminGuard><Settings /></AdminGuard>} />

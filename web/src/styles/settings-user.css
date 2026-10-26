@@ -62,10 +62,10 @@
 .sub-client:focus-visible { outline: 2px solid var(--console-focus); outline-offset: 2px; }
 .sub-client-name { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sub-client-copy { display: inline-flex; align-items: center; gap: 4px; flex: none; color: var(--console-faint); font-size: 12.5px; }
+.sub-client-copy .lucide { width: 16px; height: 16px; flex: none; }
 .sub-client:hover .sub-client-copy { color: var(--console-ink); }
-.sub-page .client-logo { display: inline-flex; flex: 0 0 28px; width: 28px; height: 28px; align-items: center; justify-content: center; }
-.sub-page .client-logo img { display: block; width: 26px; height: 26px; object-fit: contain; }
-.sub-page .client-logo-shadowrocket img { width: 28px; height: 28px; }
+.sub-client-logo { display: grid; place-items: center; flex: none; width: 28px; height: 28px; aspect-ratio: 1; }
+.sub-client-logo img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .sub-nodes { overflow: hidden; }
 .sub-node-virtual { overflow-y: auto; }
 .sub-node { display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 10px 16px 10px 20px; border-top: 1px solid var(--console-border); cursor: pointer; outline: none; }

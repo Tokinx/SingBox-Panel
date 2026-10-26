@@ -302,6 +302,8 @@ interface UserBody {
 }
 export const listUsers = (signal?: AbortSignal) =>
   http.get<{ users: User[] }>('/api/admin/users', { signal }).then((r) => r.data.users)
+export const getUser = (id: number, signal?: AbortSignal) =>
+  http.get<{ user: User; subscription_url: string }>(`/api/admin/users/${id}`, { signal }).then((r) => r.data)
 export const createUser = (body: UserBody) =>
   http.post<{ user: User }>('/api/admin/users', body).then((r) => r.data.user)
 export const updateUser = (id: number, body: UserBody) =>

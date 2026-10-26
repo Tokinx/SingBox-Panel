@@ -60,35 +60,6 @@
   transform: translateY(1px);
 }
 
-.console-app .client-logo {
-  display: inline-flex;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  align-items: center;
-  justify-content: center;
-}
-
-.console-app .client-logo img {
-  display: block;
-  object-fit: contain;
-}
-
-.console-app .client-logo-surge img {
-  width: 29px;
-  height: 29px;
-}
-
-.console-app .client-logo-clashmeta img {
-  width: 30px;
-  height: 30px;
-}
-
-.console-app .client-logo-shadowrocket img {
-  width: 32px;
-  height: 32px;
-}
-
 :root[data-console-theme='blue'] .console-app {
   -webkit-font-smoothing: auto;
 }

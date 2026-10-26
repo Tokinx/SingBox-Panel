@@ -11,7 +11,6 @@ import {
   Popover,
   Select,
   Space,
-  Spin,
   Switch,
   Table,
   Typography,
@@ -29,6 +28,7 @@ import {
   ChevronRight,
   Search,
   Undo2,
+  X,
   ChevronUp,
 } from 'lucide-react'
 import {
@@ -39,6 +39,7 @@ import {
   deleteCustomNode,
   errMsg,
   getUserAccess,
+  listCustomNodes,
   listCustomNodeSubscriptions,
   listServers,
   syncCustomNodeSubscription,
@@ -163,32 +164,23 @@ const AccessItem = memo(function AccessItem({ item, checked, disabled, onToggle 
   onToggle: (item: AccessNodeItem, checked: boolean) => void
 }) {
   return (
-    <label className={`um-access-chip${checked ? ' checked' : ''}${disabled ? ' disabled' : ''}`} title={item.detail}>
-      <Checkbox checked={checked} disabled={disabled} onChange={(event) => onToggle(item, event.target.checked)} />
+    <Checkbox className={`um-access-chip${checked ? ' checked' : ''}${disabled ? ' disabled' : ''}`} title={item.detail}
+      aria-label={`分配 ${item.name}`} checked={checked} disabled={disabled} onChange={(event) => onToggle(item, event.target.checked)}>
       <span className="um-access-chip-name">{item.name}</span>
       <span className="um-access-chip-proto">{nodeTypeLabel[item.protocol] || item.protocol || '-'}</span>
       {!item.enabled ? <span className="um-access-chip-off">停用</span> : null}
-    </label>
+    </Checkbox>
   )
 })
 
-// AssignModal is a controlled dialog that edits one user's node assignment.
-// It is opened from a row in the users table (open + userId), so the admin no
-// longer has to first pick a user from a separate panel.
-export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }: {
-  userId?: number
-  userEmail?: string
-  nodes: CustomNode[]
-  open: boolean
-  onClose: () => void
-  onSaved: () => void
+// The same assignment draft owns selection, ordering and per-user names.
+// Keep it mounted while switching views so none of those edits are lost.
+export function UserAccessEditor({ userId, onStateChange }: {
+  userId: number
+  onStateChange: (state: { dirty: boolean; saving: boolean }) => void
 }) {
-  const screens = Grid.useBreakpoint()
-  const isMobile = !screens.md
+  const [nodes, setNodes] = useState<CustomNode[]>([])
   const [servers, setServers] = useState<Server[]>([])
-  const [serversLoading, setServersLoading] = useState(false)
-  const [serversLoaded, setServersLoaded] = useState(false)
-  const [serversError, setServersError] = useState<string | null>(null)
   const [loadedServerIDs, setLoadedServerIDs] = useState<number[]>([])
   const [loadedServerWide, setLoadedServerWide] = useState(false)
   const [loadedInboundIDs, setLoadedInboundIDs] = useState<number[]>([])
@@ -197,26 +189,27 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
   const [inboundIDs, setInboundIDs] = useState<number[]>([])
   const [customNodeIDs, setCustomNodeIDs] = useState<number[]>([])
   const [nodeOrder, setNodeOrder] = useState<UserNodeOrderItem[]>([])
-  const [accessLoading, setAccessLoading] = useState(false)
+  const [accessLoading, setAccessLoading] = useState(true)
   const [accessLoaded, setAccessLoaded] = useState(false)
   const [accessError, setAccessError] = useState<string | null>(null)
   const [retryKey, setRetryKey] = useState(0)
   const [saving, setSaving] = useState(false)
   const saveLockRef = useRef(false)
   const assignmentSessionRef = useRef(0)
-  const [activeTab, setActiveTab] = useState<'nodes' | 'order'>('nodes')
+  const [activeTab, setActiveTab] = useState<'nodes' | 'order'>('order')
   const [activeNodeTab, setActiveNodeTab] = useState<'managed' | 'custom'>('managed')
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set())
   const [draggedNodeKey, setDraggedNodeKey] = useState<string | null>(null)
-  const [editingNameKey, setEditingNameKey] = useState<string | null>(null)
-  const [touchDropIndex, setTouchDropIndex] = useState<number | null>(null)
+  const [dropIndex, setDropIndex] = useState<number | null>(null)
   const [sortAnnouncement, setSortAnnouncement] = useState('')
   const nodeOrderRef = useRef(nodeOrder)
   const customNameCacheRef = useRef(new Map<string, string>())
   const orderListRef = useRef<HTMLDivElement>(null)
   const orderItemRefs = useRef(new Map<string, HTMLDivElement>())
-  const touchDragRef = useRef<{ key: string; pointerId: number; sourceIndex: number } | null>(null)
-  const touchDropIndexRef = useRef<number | null>(null)
+  const pointerDragRef = useRef<{ key: string; pointerId: number; sourceIndex: number; startY: number; clientY: number; moved: boolean; handle: HTMLElement } | null>(null)
+  const dropIndexRef = useRef<number | null>(null)
+  const dragFrameRef = useRef<number | null>(null)
+  const footerRef = useRef<HTMLElement>(null)
 
   nodeOrderRef.current = nodeOrder
 
@@ -225,56 +218,26 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
     saveLockRef.current = false
     setSaving(false)
     return () => {
-      // A request can finish after the parent closes or replaces this dialog.
+      // A request can finish after the parent leaves or replaces this page.
       // It must not overwrite another user's draft or close their session.
       assignmentSessionRef.current += 1
+      if (dragFrameRef.current !== null) cancelAnimationFrame(dragFrameRef.current)
+      pointerDragRef.current = null
     }
-  }, [open, userId])
+  }, [userId])
 
   useEffect(() => {
-    if (!open) return
     const controller = new AbortController()
-    setServersLoading(true)
-    setServersError(null)
-    listServers(controller.signal)
-      .then((items) => {
-        if (!controller.signal.aborted) {
-          setServers(items)
-          setServersLoaded(true)
-        }
-      })
-      .catch((e) => {
-        if (!controller.signal.aborted) setServersError(errMsg(e))
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setServersLoading(false)
-      })
-    return () => controller.abort()
-  }, [open, retryKey])
-
-  useEffect(() => {
-    // Preserve content through the exit motion; reset only when opening again.
-    if (!open) return
-    {
-      setLoadedServerIDs([])
-      setLoadedServerWide(false)
-      setLoadedInboundIDs([])
-      setLoadedCustomNodeIDs([])
-      setLoadedNodeOrder([])
-      setInboundIDs([])
-      setCustomNodeIDs([])
-      setNodeOrder([])
-      customNameCacheRef.current.clear()
-      setAccessLoaded(false)
-      setAccessError(null)
-    }
-    if (!userId) return
-    const controller = new AbortController()
+    setAccessLoaded(false)
     setAccessLoading(true)
     setAccessError(null)
-    getUserAccess(userId, controller.signal)
-      .then((access) => {
+    // Never offer a writable draft with a partial catalog: a failed external
+    // node request must not look like an empty selection that can be saved.
+    Promise.all([getUserAccess(userId, controller.signal), listServers(controller.signal), listCustomNodes(controller.signal)])
+      .then(([access, nextServers, nextNodes]) => {
         if (controller.signal.aborted) return
+        setServers(nextServers)
+        setNodes(nextNodes)
         const initialOrder = access.node_order ?? []
         customNameCacheRef.current.clear()
         for (const item of initialOrder) {
@@ -292,22 +255,13 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
       })
       .catch((e) => {
         if (controller.signal.aborted) return
-        setLoadedServerIDs([])
-        setLoadedServerWide(false)
-        setLoadedInboundIDs([])
-        setLoadedCustomNodeIDs([])
-        setLoadedNodeOrder([])
-        setInboundIDs([])
-        setCustomNodeIDs([])
-        setNodeOrder([])
-        setAccessLoaded(false)
         setAccessError(errMsg(e))
       })
       .finally(() => {
         if (!controller.signal.aborted) setAccessLoading(false)
       })
     return () => controller.abort()
-  }, [open, userId, retryKey])
+  }, [userId, retryKey])
 
   const managedGroups = useMemo<AccessGroup[]>(() =>
     servers.map((server) => ({
@@ -372,25 +326,6 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
     [customGroups, managedGroups],
   )
 
-  // Start each assignment session with compact group rows. Administrators can
-  // expand only the groups they need or use the existing "全部展开" action.
-  useEffect(() => {
-    if (open) {
-      setExpandedGroups(new Set())
-      setActiveNodeTab('managed')
-    }
-  }, [open, userId])
-
-  useEffect(() => {
-    // Wait for the server list; otherwise the dialog always lands on 外部.
-    if (!serversLoaded) return
-    if (activeNodeTab === 'managed' && managedGroups.length === 0 && customGroups.length > 0) {
-      setActiveNodeTab('custom')
-    } else if (activeNodeTab === 'custom' && customGroups.length === 0 && managedGroups.length > 0) {
-      setActiveNodeTab('managed')
-    }
-  }, [activeNodeTab, customGroups.length, managedGroups.length, serversLoaded])
-
   const selectedInboundSet = useMemo(() => new Set(inboundIDs), [inboundIDs])
   const selectedCustomSet = useMemo(() => new Set(customNodeIDs), [customNodeIDs])
   const isSelected = (item: AccessNodeItem) => (
@@ -410,6 +345,10 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
       )
     return !equal(loadedInboundIDs, inboundIDs) || !equal(loadedCustomNodeIDs, customNodeIDs) || !sameOrder
   }, [customNodeIDs, inboundIDs, loadedCustomNodeIDs, loadedInboundIDs, loadedNodeOrder, nodeOrder])
+
+  useEffect(() => {
+    onStateChange({ dirty: isDirty, saving })
+  }, [isDirty, saving, onStateChange])
 
   const sameIDs = useCallback((a: number[], b: number[]) => {
     if (a.length !== b.length) return false
@@ -502,55 +441,56 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
     setSortAnnouncement(`${moved.node_type === 'managed' ? '面板节点' : '外部节点'} #${moved.node_id} 已移动到第 ${to + 1} 位`)
   }, [])
 
-  const finishTouchDrag = useCallback((event?: React.PointerEvent<HTMLElement>) => {
-    const drag = touchDragRef.current
-    if (!drag || (event && event.pointerId !== drag.pointerId)) return
-    if (event?.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-    const targetIndex = touchDropIndexRef.current
-    touchDragRef.current = null
-    touchDropIndexRef.current = null
+  const clearPointerDrag = useCallback(() => {
+    const drag = pointerDragRef.current
+    pointerDragRef.current = null
+    dropIndexRef.current = null
+    if (dragFrameRef.current !== null) cancelAnimationFrame(dragFrameRef.current)
+    dragFrameRef.current = null
+    if (drag?.handle.hasPointerCapture(drag.pointerId)) drag.handle.releasePointerCapture(drag.pointerId)
     setDraggedNodeKey(null)
-    setTouchDropIndex(null)
-    if (targetIndex !== null) moveNodeOrder(drag.sourceIndex, targetIndex)
-  }, [moveNodeOrder])
-
-  const cancelTouchDrag = useCallback((event: React.PointerEvent<HTMLElement>) => {
-    const drag = touchDragRef.current
-    if (!drag || event.pointerId !== drag.pointerId) return
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId)
-    }
-    touchDragRef.current = null
-    touchDropIndexRef.current = null
-    setDraggedNodeKey(null)
-    setTouchDropIndex(null)
+    setDropIndex(null)
   }, [])
 
-  const handleTouchDragStart = useCallback((event: React.PointerEvent<HTMLElement>, key: string, index: number) => {
-    if (saving || (event.pointerType !== 'touch' && event.pointerType !== 'pen')) return
+  const finishPointerDrag = useCallback((event: React.PointerEvent<HTMLElement>) => {
+    const drag = pointerDragRef.current
+    if (!drag || event.pointerId !== drag.pointerId) return
+    const targetIndex = dropIndexRef.current
+    clearPointerDrag()
+    if (targetIndex !== null) moveNodeOrder(drag.sourceIndex, targetIndex)
+  }, [clearPointerDrag, moveNodeOrder])
+
+  const cancelPointerDrag = useCallback((event: React.PointerEvent<HTMLElement>) => {
+    const drag = pointerDragRef.current
+    if (!drag || event.pointerId !== drag.pointerId) return
+    clearPointerDrag()
+  }, [clearPointerDrag])
+
+  const handlePointerDragStart = useCallback((event: React.PointerEvent<HTMLElement>, key: string, index: number) => {
+    if (saving || pointerDragRef.current || event.button !== 0) return
     event.preventDefault()
     event.stopPropagation()
+    event.currentTarget.focus({ preventScroll: true })
     event.currentTarget.setPointerCapture(event.pointerId)
-    touchDragRef.current = { key, pointerId: event.pointerId, sourceIndex: index }
-    touchDropIndexRef.current = null
-    setTouchDropIndex(null)
-    setDraggedNodeKey(key)
+    pointerDragRef.current = { key, pointerId: event.pointerId, sourceIndex: index, startY: event.clientY, clientY: event.clientY, moved: false, handle: event.currentTarget }
+    dropIndexRef.current = null
+    setDropIndex(null)
   }, [saving])
 
-  const handleTouchDragMove = useCallback((event: React.PointerEvent<HTMLElement>) => {
-    const drag = touchDragRef.current
-    if (!drag || event.pointerId !== drag.pointerId) return
-    event.preventDefault()
+  const updatePointerDrop = useCallback(() => {
+    const drag = pointerDragRef.current
+    if (!drag?.moved) return
     const list = orderListRef.current
     if (list) {
       const listRect = list.getBoundingClientRect()
-      const edgeSize = Math.min(56, listRect.height / 4)
-      if (event.clientY < listRect.top + edgeSize) list.scrollTop -= 12
-      else if (event.clientY > listRect.bottom - edgeSize) list.scrollTop += 12
+      const top = Math.max(0, listRect.top)
+      const bottom = Math.min(window.innerHeight, listRect.bottom, footerRef.current?.getBoundingClientRect().top ?? window.innerHeight)
+      const edgeSize = Math.max(0, Math.min(56, (bottom - top) / 4))
+      const offset = drag.clientY < top + edgeSize ? -12 : drag.clientY > bottom - edgeSize ? 12 : 0
+      if (list.scrollHeight > list.clientHeight) list.scrollTop += offset
+      else if (offset) window.scrollBy(0, offset)
     }
-    // Keep the rendered order fixed during a touch drag. Calculate the
+    // Keep the rendered order fixed during a pointer drag. Calculate the
     // insertion index against the list with the dragged item removed and
     // commit the move only on pointerup; this prevents mobile oscillation.
     const currentOrder = nodeOrderRef.current
@@ -561,36 +501,36 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
       const element = orderItemRefs.current.get(userNodeOrderKey(item))
       if (!element) continue
       const rect = element.getBoundingClientRect()
-      if (event.clientY <= rect.top + rect.height / 2) {
+      if (drag.clientY <= rect.top + rect.height / 2) {
         targetIndex = index
         break
       }
     }
-    touchDropIndexRef.current = targetIndex
-    setTouchDropIndex(targetIndex)
+    dropIndexRef.current = targetIndex
+    setDropIndex(targetIndex)
   }, [])
 
-  const handleClose = () => {
-    if (saving || saveLockRef.current) return
-    if (!isDirty) {
-      onClose()
-      return
+  const handlePointerDragMove = useCallback((event: React.PointerEvent<HTMLElement>) => {
+    const drag = pointerDragRef.current
+    if (!drag || event.pointerId !== drag.pointerId) return
+    event.preventDefault()
+    drag.clientY = event.clientY
+    if (!drag.moved && Math.abs(drag.clientY - drag.startY) < 5) return
+    drag.moved = true
+    setDraggedNodeKey(drag.key)
+    updatePointerDrop()
+    if (dragFrameRef.current === null) {
+      const scrollWhileHeld = () => {
+        updatePointerDrop()
+        dragFrameRef.current = requestAnimationFrame(scrollWhileHeld)
+      }
+      dragFrameRef.current = requestAnimationFrame(scrollWhileHeld)
     }
-    const session = assignmentSessionRef.current
-    Modal.confirm({
-      title: '放弃未保存的更改？',
-      content: '关闭会丢弃当前节点选择。',
-      okText: '放弃并关闭',
-      cancelText: '继续编辑',
-      okType: 'danger',
-      onOk: () => {
-        if (session === assignmentSessionRef.current && !saveLockRef.current) onClose()
-      },
-    })
-  }
+  }, [updatePointerDrop])
 
   const save = async () => {
-    if (!open || !userId || saveLockRef.current || !isDirty) return
+    if (!accessLoaded || accessLoading || saveLockRef.current || !isDirty) return
+    clearPointerDrag()
     saveLockRef.current = true
     const session = assignmentSessionRef.current
     setSaving(true)
@@ -615,9 +555,7 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
       setInboundIDs(access.inbound_ids)
       setCustomNodeIDs(access.custom_node_ids)
       setNodeOrder(access.node_order)
-      message.success(`已保存 ${userEmail ?? ''} 的节点分配`)
-      onSaved()
-      onClose()
+      message.success('已保存节点分配，更新客户端订阅后生效')
     } catch (e) {
       if (session === assignmentSessionRef.current) message.error(errMsg(e))
     } finally {
@@ -651,6 +589,7 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
             {expanded ? <ChevronDown /> : <ChevronRight />}
           </button>
           <Checkbox
+            aria-label={`选择 ${group.label} 全部节点`}
             checked={groupSelectedCount === group.items.length && group.items.length > 0}
             indeterminate={groupSelectedCount > 0 && groupSelectedCount < group.items.length}
             disabled={saving}
@@ -707,15 +646,15 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
     return (
       <div className="um-access-order-list" ref={orderListRef}>
         {(() => {
-          const touchRemaining = draggedNodeKey
+          const remainingOrder = draggedNodeKey
             ? nodeOrder.filter((candidate) => userNodeOrderKey(candidate) !== draggedNodeKey)
             : []
-          const touchTargetKey = touchDropIndex === null
+          const dropTargetKey = dropIndex === null
             ? null
-            : touchRemaining[Math.min(touchDropIndex, Math.max(0, touchRemaining.length - 1))]
-              ? userNodeOrderKey(touchRemaining[Math.min(touchDropIndex, Math.max(0, touchRemaining.length - 1))])
+            : remainingOrder[Math.min(dropIndex, Math.max(0, remainingOrder.length - 1))]
+              ? userNodeOrderKey(remainingOrder[Math.min(dropIndex, Math.max(0, remainingOrder.length - 1))])
               : null
-          const touchTargetAfter = touchDropIndex !== null && touchDropIndex >= touchRemaining.length
+          const dropTargetAfter = dropIndex !== null && dropIndex >= remainingOrder.length
           return nodeOrder.map((orderItem, index) => {
             const key = userNodeOrderKey(orderItem)
             const item = nodeItemMap.get(key)
@@ -734,62 +673,45 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
                 ? `${item.serverName} · ${item.name} · ${item.detail}`
                 : item.detail)
               : (orderItem.node_type === 'managed' ? '面板节点' : '节点')
-            const touchDropClass = touchTargetKey === key
-              ? (touchTargetAfter ? ' touch-drop-after' : ' touch-drop-before')
+            const dropClass = dropTargetKey === key
+              ? (dropTargetAfter ? ' sort-drop-after' : ' sort-drop-before')
               : ''
             return (
               <div
-                className={`um-access-order-item${draggedNodeKey === key ? ' dragging' : ''}${touchDropClass}`}
+                className={`um-access-order-item${draggedNodeKey === key ? ' dragging' : ''}${dropClass}`}
                 key={key}
-                draggable={!isMobile && !saving && editingNameKey !== key}
+                data-node-key={key}
                 ref={(element) => {
                   if (element) orderItemRefs.current.set(key, element)
                   else orderItemRefs.current.delete(key)
                 }}
-                onDragStart={(event) => {
-                  if (editingNameKey === key) {
-                    event.preventDefault()
-                    return
-                  }
-                  setDraggedNodeKey(key)
-                  event.dataTransfer.effectAllowed = 'move'
-                  event.dataTransfer.setData('text/plain', key)
-                }}
-                onDragOver={(event) => {
-                  event.preventDefault()
-                  event.dataTransfer.dropEffect = 'move'
-                }}
-                onDrop={(event) => {
-                  event.preventDefault()
-                  const sourceKey = event.dataTransfer.getData('text/plain') || draggedNodeKey
-                  const from = nodeOrder.findIndex((candidate) => userNodeOrderKey(candidate) === sourceKey)
-                  moveNodeOrder(from, index)
-                  setDraggedNodeKey(null)
-                }}
-                onDragEnd={() => setDraggedNodeKey(null)}
               >
                 <button
                     type="button"
                     className="um-access-order-handle"
                     disabled={saving}
+                    onDragStart={(event) => event.preventDefault()}
                     aria-label={`调整第 ${index + 1} 个节点顺序`}
                     aria-describedby="access-sort-help"
                     onKeyDown={(event) => {
+                      if (event.key === 'Escape') clearPointerDrag()
+                      if (pointerDragRef.current) return
                       if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
                         event.preventDefault()
                         moveNodeOrder(index, index + (event.key === 'ArrowUp' ? -1 : 1))
                       }
                     }}
-                    onPointerDown={(event) => handleTouchDragStart(event, key, index)}
-                    onPointerMove={handleTouchDragMove}
-                    onPointerUp={finishTouchDrag}
-                    onPointerCancel={cancelTouchDrag}
+                    onPointerDown={(event) => handlePointerDragStart(event, key, index)}
+                    onPointerMove={handlePointerDragMove}
+                    onPointerUp={finishPointerDrag}
+                    onPointerCancel={cancelPointerDrag}
+                    onLostPointerCapture={cancelPointerDrag}
                   >
                     <GripVertical />
                   </button>
                 <span className="um-access-order-number">{index + 1}</span>
                 <div className="um-access-order-content">
-                  <strong>{(orderItem.custom_name ?? '').trim() || defaultName}</strong>
+                  <strong>{(orderItem.custom_name ?? '').trim() || defaultName}{item && !item.enabled && <span className="ui-tag um-node-disabled">停用</span>}</strong>
                   <small>{subtitle}</small>
                 </div>
                 <Input
@@ -801,14 +723,18 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
                   maxLength={128}
                   allowClear
                   disabled={saving}
-                  onFocus={() => setEditingNameKey(key)}
-                  onBlur={() => setEditingNameKey((current) => (current === key ? null : current))}
                   onMouseDown={(event) => event.stopPropagation()}
                   onPointerDown={(event) => event.stopPropagation()}
                   onChange={(event) => updateNodeCustomName(key, event.target.value)}
                 />
                 <span className="um-access-order-kind">{orderItem.node_type === 'managed' ? '面板' : '外部'}</span>
-                {item?.protocol ? <span className="ui-tag um-access-order-protocol">{nodeTypeLabel[item.protocol] || item.protocol}</span> : null}
+                <span className={`um-access-order-protocol${item?.protocol ? ' ui-tag' : ''}`}>{item?.protocol ? nodeTypeLabel[item.protocol] || item.protocol : null}</span>
+                <Button size="small" type="text" icon={<X />} aria-label={`移除 ${defaultName}`} title="取消分配" disabled={saving} className="um-access-order-remove" onClick={() => setIDs(orderItem.node_type, [orderItem.node_id], false)} />
+                <div className="um-access-order-mobile-actions">
+                  <span className="faint mono">第 {index + 1} 位</span>
+                  <Button size="small" icon={<ChevronUp />} aria-label={`上移 ${defaultName}`} disabled={saving || index === 0} onClick={() => moveNodeOrder(index, index - 1)}>上移</Button>
+                  <Button size="small" icon={<ChevronDown />} aria-label={`下移 ${defaultName}`} disabled={saving || index === nodeOrder.length - 1} onClick={() => moveNodeOrder(index, index + 1)}>下移</Button>
+                </div>
               </div>
             )
           })
@@ -823,27 +749,8 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
   const activeGroups = activeNodeTab === 'managed' ? managedGroups : customGroups
 
   return (
-    <Modal
-      title={userEmail ? `节点分配 · ${userEmail}` : '节点分配'}
-      className="um-access-assign-modal um-modal"
-      open={open}
-      onCancel={handleClose}
-      confirmLoading={saving}
-      width={MODAL_LG}
-      style={{ maxWidth: 'calc(100vw - 16px)' }}
-      footer={(
-        <div className="um-access-footer">
-          <span className={isDirty ? 'is-dirty' : ''}>{isDirty ? '有未保存更改' : '已同步'}</span>
-          <div className="um-access-footer-actions">
-            <Button icon={<Undo2 />} disabled={!isDirty || saving} onClick={discardChanges}>撤销</Button>
-            <Button disabled={saving} onClick={handleClose}>取消</Button>
-            <Button type="primary" loading={saving} disabled={!isDirty || accessLoading} onClick={() => void save()}>保存</Button>
-          </div>
-        </div>
-      )}
-    >
-      <RequestState loading={accessLoading || serversLoading} error={accessError || serversError} hasData={accessLoaded && serversLoaded} onRetry={() => setRetryKey((value) => value + 1)}>
-      <Spin spinning={accessLoading || serversLoading}>
+    <div className="um-access-editor">
+      <RequestState loading={accessLoading} error={accessError} hasData={accessLoaded} onRetry={() => setRetryKey((value) => value + 1)}>
         <Pills
           label="节点分配视图"
           active={view}
@@ -856,9 +763,9 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
             }
           }}
           items={[
-            { key: 'managed', label: '面板', count: managedCount },
-            { key: 'custom', label: '外部', count: customCount },
-            { key: 'order', label: '排序', count: nodeOrder.length },
+            { key: 'order', label: '已分配', count: nodeOrder.length },
+            { key: 'managed', label: '面板节点', count: managedCount },
+            { key: 'custom', label: '外部节点', count: customCount },
           ]}
           actions={view !== 'order' && allGroupKeys.length > 1 ? (
             <Button size="small" type="text" icon={allCollapsed ? <ChevronDown /> : <ChevronRight />} onClick={toggleAllGroups}>
@@ -866,6 +773,7 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
             </Button>
           ) : null}
         />
+        <p className="um-access-note">{view === 'order' ? '拖拽手柄排序，手机也可点上移、下移；名称留空使用默认名称。仅对当前用户生效。' : '勾选要分配的节点，也可整组选择。停用的节点不会出现在订阅中。'}</p>
         {loadedServerWide ? (
           <p className="um-access-note">
             整机授权：{loadedServerIDs.map((id) => servers.find((server) => server.id === id)?.name || `#${id}`).join('、')}
@@ -876,11 +784,17 @@ export function AssignModal({ userId, userEmail, nodes, open, onClose, onSaved }
         ) : (
           <div className="um-access-modal-body">{renderGroupSections(activeGroups)}</div>
         )}
-      </Spin>
+        <footer ref={footerRef} className="um-access-footer um-access-page-footer">
+          <span className={isDirty ? 'is-dirty' : ''} role="status">{isDirty ? '有未保存更改' : '已同步'}</span>
+          <div className="um-access-footer-actions">
+            <Button icon={<Undo2 />} disabled={!isDirty || saving} onClick={discardChanges}>撤销</Button>
+            <Button type="primary" loading={saving} disabled={!isDirty || accessLoading || !accessLoaded} onClick={() => void save()}>保存更改</Button>
+          </div>
+        </footer>
       </RequestState>
       <span id="access-sort-help" className="sr-only">使用上方向键或下方向键调整节点顺序</span>
       <div className="sr-only" aria-live="polite" aria-atomic="true">{sortAnnouncement}</div>
-    </Modal>
+    </div>
   )
 }
 

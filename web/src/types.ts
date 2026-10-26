@@ -18,14 +18,14 @@ export interface User {
   last_sub_client?: string
   last_sub_ua?: string
   sub_fetch_count?: number
-  // Only present in the admin user list.
+  // Subscription activity is only present in admin responses.
   sub_fetches_24h?: number
   sub_ips_24h?: number
   // Attributed traffic of the last 30 days (multi-user inbounds only).
   traffic_upload_30d?: number
   traffic_download_30d?: number
   // sub_token intentionally absent: the API never returns it (see model.User).
-  // The frontend uses subscription_url from /api/user/me and /api/user/reset-sub.
+  // Subscription URLs come from the current-user or admin user-detail endpoints.
   created_at: string
   updated_at: string
 }

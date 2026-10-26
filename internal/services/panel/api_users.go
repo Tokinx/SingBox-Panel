@@ -329,6 +329,36 @@ func (a *App) getUserAccess(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"access": access})
 }
 
+// getUser exposes a subscription link only through the admin-only detail route,
+// never in the user list or by changing the authenticated user's identity.
+func (a *App) getUser(c *gin.Context) {
+	c.Header("Cache-Control", "private, no-store")
+	id, ok := uintParam(c, "id")
+	if !ok {
+		return
+	}
+	var user model.User
+	if err := a.db.First(&user, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "暂时无法读取用户，请稍后重试"})
+		}
+		return
+	}
+	detail := struct {
+		model.User
+		SubFetches24h int64 `json:"sub_fetches_24h"`
+	}{User: user}
+	if err := a.db.Model(&model.SubscriptionFetch{}).
+		Where("user_id = ? AND created_at >= ?", id, time.Now().Add(-24*time.Hour)).
+		Count(&detail.SubFetches24h).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "暂时无法读取订阅记录，请稍后重试"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"user": detail, "subscription_url": a.subURL(user.SubToken)})
+}
+
 func (a *App) updateUserAccess(c *gin.Context) {
 	id, ok := uintParam(c, "id")
 	if !ok {

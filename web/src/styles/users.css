@@ -15,6 +15,14 @@
 .um-table .ui-table-tbody > tr > td { padding-top: 12px; padding-bottom: 12px; }
 .um-table .ui-table-tbody > tr.ui-table-row:hover > td { background: var(--console-surface); }
 .um-clickable-row { cursor: pointer; }
+.um-clickable-row:focus-within > td { background: var(--console-surface); }
+.um-user-link { text-decoration: none; }
+.um-user-link:focus-visible { outline: 2px solid var(--console-focus); outline-offset: 4px; border-radius: 2px; }
+.um-row-chevron { width: 15px; height: 15px; color: var(--console-faint); }
+.um-back { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 18px; color: var(--console-muted); text-decoration: none; font-size: 13px; }
+.um-back:hover { color: var(--console-ink); }
+.um-back .lucide { width: 14px; height: 14px; }
+.um-user-detail .ui-page-title h1 { overflow-wrap: anywhere; }
 
 /* ---------- External nodes ---------- */
 
@@ -96,6 +104,7 @@
 .um-access-modal-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; padding: 4px 14px 14px 42px; }
 .um-access-chip { display: flex; align-items: center; gap: 8px; min-width: 0; height: 32px; padding: 0 10px; border: 1px solid var(--console-border); border-radius: 6px; background: var(--console-container); cursor: pointer; transition: border-color .15s, background .15s; }
 .um-access-chip:hover { border-color: var(--console-border-hover); }
+.um-access-chip > span { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; }
 .um-access-chip.checked { border-color: var(--console-border-strong); background: var(--console-selected); }
 .um-access-chip.disabled { cursor: not-allowed; opacity: .6; }
 .um-access-chip-name { flex: 1; min-width: 0; font-size: 13px; color: var(--console-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -103,12 +112,12 @@
 .um-access-chip-off { color: var(--console-warning-text); }
 
 .um-access-order-list { display: flex; flex-direction: column; max-height: min(calc(56 * var(--dvh)), 520px); overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--console-border); border-radius: var(--app-radius); }
-.um-access-order-item { position: relative; flex: none; display: grid; grid-template-columns: 28px 24px minmax(0, 1fr) 200px 44px 92px; align-items: center; gap: 8px; min-height: 52px; padding: 6px 14px 6px 6px; background: var(--console-container); }
+.um-access-order-item { position: relative; flex: none; display: grid; grid-template-columns: 28px 24px minmax(0, 1fr) minmax(130px, 200px) 36px 80px 28px; align-items: center; gap: 8px; min-height: 58px; padding: 6px 14px 6px 6px; background: var(--console-container); }
 .um-access-order-item + .um-access-order-item { border-top: 1px solid var(--console-border); }
 .um-access-order-item:hover { background: var(--console-surface); }
 .um-access-order-item.dragging { opacity: .45; }
-.um-access-order-item.touch-drop-before { box-shadow: inset 0 2px 0 var(--console-ink); }
-.um-access-order-item.touch-drop-after { box-shadow: inset 0 -2px 0 var(--console-ink); }
+.um-access-order-item.sort-drop-before { box-shadow: inset 0 2px 0 var(--console-ink); }
+.um-access-order-item.sort-drop-after { box-shadow: inset 0 -2px 0 var(--console-ink); }
 .um-access-order-handle { display: grid; place-items: center; width: 28px; height: 32px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--console-faint); cursor: grab; touch-action: none; }
 .um-access-order-handle:hover { color: var(--console-ink); background: var(--console-hover); }
 .um-access-order-handle:disabled { cursor: not-allowed; opacity: .5; }
@@ -119,11 +128,16 @@
 .um-access-order-content small { color: var(--console-faint); font-size: 12px; }
 .um-access-order-kind { color: var(--console-muted); font-size: 12px; text-align: center; }
 .um-access-order-protocol { justify-self: end; }
+.um-access-order-mobile-actions { display: none; }
+.um-user-detail .ui-btn .lucide, .um-access-order-handle .lucide { width: 16px; height: 16px; flex: none; }
+.um-node-disabled { margin-left: 8px; color: var(--console-faint); font-size: 11px; }
 
 .um-access-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .um-access-footer > span { color: var(--console-faint); font-size: 12.5px; }
 .um-access-footer > span.is-dirty { color: var(--console-warning-text); }
 .um-access-footer-actions { display: flex; gap: 8px; margin-left: auto; }
+.um-access-page-footer { position: sticky; bottom: 0; z-index: 2; padding: 14px 0 max(14px, env(safe-area-inset-bottom)); margin-top: 16px; border-top: 1px solid var(--console-border); background: var(--console-layout); }
+.um-access-editor .um-access-order-list { max-height: none; overflow: clip; overscroll-behavior: auto; }
 
 /* ---------- Mobile ---------- */
 .um-xs-status { display: none; }
@@ -150,14 +164,30 @@
   .um-rule-none { display: none; }
   .um-rule-actions { grid-column: 3; grid-row: 1; }
   .um-access-modal-items { grid-template-columns: minmax(0, 1fr); padding-left: 14px; }
-  .um-access-order-item { grid-template-columns: 28px minmax(0, 1fr) auto; grid-template-areas: 'handle content kind' 'handle input input'; row-gap: 6px; padding: 8px 12px 10px 6px; }
-  .um-access-order-handle { grid-area: handle; align-self: start; }
+  .um-access-order-item { grid-template-columns: 44px minmax(0, 1fr) 44px; grid-template-areas: 'handle content remove' 'input input input' 'kind actions actions'; gap: 8px; padding: 10px; }
+  .um-access-order-handle { grid-area: handle; width: 44px; height: 44px; }
   .um-access-order-number, .um-access-order-protocol { display: none; }
   .um-access-order-content { grid-area: content; }
   .um-access-order-kind { grid-area: kind; }
-  .um-access-order-name-input { grid-area: input; }
+  .um-access-order-name-input { grid-area: input; min-height: 44px; }
+  .um-access-order-name-input input { font-size: 16px; }
+  .um-access-order-remove { grid-area: remove; min-width: 44px; min-height: 44px; }
+  .um-access-order-mobile-actions { grid-area: actions; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+  .um-access-order-mobile-actions > span { margin-right: auto; font-size: 12px; }
+  .um-access-order-mobile-actions > .ui-btn { min-height: 44px; padding: 0 12px; }
+  .um-access-editor .um-access-chip { min-height: 44px; height: auto; }
+  .um-access-editor .um-access-group-toggle { width: 44px; height: 44px; }
+  .um-access-editor .um-access-modal-group-head .ui-checkbox-wrapper { min-width: 44px; min-height: 44px; justify-content: center; }
+  .um-user-detail .ui-pill, .um-user-detail .ui-page-actions .ui-btn, .um-user-detail .um-back { min-height: 44px; }
+  .um-user-detail .ui-pills { height: auto; min-height: 50px; }
+  .um-user-detail .sub-clients { grid-template-columns: minmax(0, 1fr); gap: 0; border: 1px solid var(--console-border); border-radius: var(--app-radius); overflow: clip; }
+  .um-user-detail .sub-client { height: 52px; padding: 0 14px; border: 0; border-radius: 0; }
+  .um-user-detail .sub-client + .sub-client { border-top: 1px solid var(--console-border); }
   .um-access-footer > span { display: none; }
   .um-access-footer-actions { flex: 1; justify-content: flex-end; }
+  .um-access-page-footer > span { display: block; }
+  .um-access-page-footer .um-access-footer-actions { flex: none; }
+  .um-access-page-footer .ui-btn { min-height: 44px; }
 }
 .um-detail .ui-typography-copy, .um-detail .ui-typography-copy:hover { color: var(--console-faint); }
 

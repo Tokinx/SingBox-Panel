@@ -194,6 +194,7 @@ func (a *App) routes() *gin.Engine {
 
 		admin.GET("/users", a.listUsers)
 		admin.POST("/users", a.createUser)
+		admin.GET("/users/:id", a.getUser)
 		admin.PUT("/users/:id", a.updateUser)
 		admin.GET("/users/:id/access", a.getUserAccess)
 		admin.GET("/users/:id/sub-fetches", a.listUserSubscriptionFetches)

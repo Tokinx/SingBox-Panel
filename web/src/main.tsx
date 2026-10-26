@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import './styles/shadcn.css'
 import './index.css'
 import './console.css'
@@ -15,10 +15,11 @@ import { markStandalone, registerServiceWorker } from './pwa'
 registerServiceWorker()
 markStandalone()
 
+// A data router lets detail editors guard both link clicks and browser Back.
+const router = createBrowserRouter([{ path: '*', element: <ThemePreferenceProvider><Appearance /></ThemePreferenceProvider> }])
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <ThemePreferenceProvider><Appearance /></ThemePreferenceProvider>
-    </BrowserRouter>
+    <RouterProvider router={router} />
   </React.StrictMode>,
 )
