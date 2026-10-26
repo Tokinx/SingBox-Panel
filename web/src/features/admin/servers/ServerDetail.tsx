@@ -28,7 +28,6 @@ import {
   deleteOutbound,
   deleteRule,
   errMsg,
-  getNodeFormats,
   getServer,
   importConfig,
   installSingbox,
@@ -47,13 +46,14 @@ import {
   uninstallSingbox,
   updateAgent,
 } from '../../../api'
-import type { ImportSummary, NodeFormats, OutboundTest } from '../../../api'
+import type { ImportSummary, OutboundTest } from '../../../api'
 import { applyWithToast, isConfigApplyResult, showConfigApplyResult } from '../../../configApply'
 import type { Inbound, Outbound, RouteRule, RuleSet, Server } from '../../../types'
 import InboundForm from './InboundForm'
 import { OutboundForm, RuleForm } from './RoutingForms'
 import { RuleSetsTab } from './RuleSetsTab'
-import { ConfigEditorModal, ImportPreviewModal, InstallSingboxModal, NodeFormatsExportModal } from './ServerDialogs'
+import { ConfigEditorModal, ImportPreviewModal, InstallSingboxModal } from './ServerDialogs'
+import { NodeFormatsExportModal } from './NodeFormatsModal'
 import { ServerOverviewCard } from './ServerOverviewCard'
 import { copyToClipboard, formatBytes } from '../../../util'
 import { Pills, Stats, Status } from '../../../ui/Page'
@@ -104,8 +104,6 @@ export default function ServerDetail() {
 
   // 节点格式弹窗状态
   const [fmtOpen, setFmtOpen] = useState(false)
-  const [fmtLoading, setFmtLoading] = useState(false)
-  const [fmtData, setFmtData] = useState<NodeFormats | null>(null)
 
   const [outbounds, setOutbounds] = useState<Outbound[]>([])
   const [rules, setRules] = useState<RouteRule[]>([])
@@ -177,8 +175,6 @@ export default function ServerDetail() {
       const d = await getServer(targetSID, controller.signal)
       if (generation !== loadGenerationRef.current || currentSIDRef.current !== targetSID) return
       setServer(d.server)
-      // 入站标签/端口等改动后，导出弹窗的缓存必须失效，下次打开时重新拉取。
-      setFmtData(null)
       setInstall(d.install_command)
       setPublicURL(d.public_url)
       const [outboundRows, ruleRows, ruleSetRows] = await Promise.allSettled([
@@ -330,8 +326,6 @@ export default function ServerDetail() {
     setCfgLoading(false)
     setCfgSaving(false)
     setFmtOpen(false)
-    setFmtData(null)
-    setFmtLoading(false)
     setImportOpen(false)
     setImportSum(null)
     setImporting(false)
@@ -599,30 +593,6 @@ export default function ServerDetail() {
         }
       },
     })
-
-  const openNodeFormats = async () => {
-    const targetSID = sid
-    const controller = scopedController()
-    setFmtOpen(true)
-    if (fmtData) {
-      releaseScopedController(controller)
-      return
-    }
-    setFmtLoading(true)
-    try {
-      const data = await getNodeFormats(targetSID, controller.signal)
-      if (currentSIDRef.current !== targetSID) return
-      setFmtData(data)
-    } catch (e) {
-      if (!controller.signal.aborted && currentSIDRef.current === targetSID) {
-        message.error(errMsg(e))
-        setFmtOpen(false)
-      }
-    } finally {
-      releaseScopedController(controller)
-      if (currentSIDRef.current === targetSID) setFmtLoading(false)
-    }
-  }
 
   const onDeleteInbound = (ib: Inbound) => {
     const targetSID = sid
@@ -972,7 +942,6 @@ export default function ServerDetail() {
         publicURL={publicURL}
         busy={busy}
         refreshing={refreshing}
-        exportLoading={fmtLoading}
         onRefresh={refresh}
         onInstallSingbox={() => setInstallOpen(true)}
         onUninstallSingbox={confirmUninstallSingbox}
@@ -981,7 +950,7 @@ export default function ServerDetail() {
         onImport={openImport}
         onEditConfig={openConfigEditor}
         onRestart={() => run('restart', () => serviceAction(sid, 'restart'), 'sing-box 已重启')}
-        onExport={openNodeFormats}
+        onExport={() => setFmtOpen(true)}
       />
 
       <Stats items={[
@@ -1071,7 +1040,7 @@ export default function ServerDetail() {
         onConfirm={doInstall}
       />
 
-      <NodeFormatsExportModal open={fmtOpen} loading={fmtLoading} data={fmtData} onCancel={() => setFmtOpen(false)} />
+      <NodeFormatsExportModal serverId={sid} open={fmtOpen} onCancel={() => setFmtOpen(false)} />
 
       <span id="rule-sort-help" className="sr-only">使用上方向键或下方向键调整规则顺序</span>
       <div className="sr-only" aria-live="polite" aria-atomic="true">{sortAnnouncement}</div>

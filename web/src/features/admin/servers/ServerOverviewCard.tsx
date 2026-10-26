@@ -5,7 +5,7 @@ import { PageHeader, Status } from '../../../ui/Page'
 
 /** Server detail heading: name, one meta line and the server-level actions. */
 export function ServerOverviewCard({
-  server, publicURL, busy, refreshing, exportLoading,
+  server, publicURL, busy, refreshing,
   onRefresh, onInstallSingbox, onUninstallSingbox, onInstallAgent, onUninstallAgent,
   onImport, onEditConfig, onRestart, onExport,
 }: {
@@ -13,7 +13,6 @@ export function ServerOverviewCard({
   publicURL: string
   busy: string
   refreshing: boolean
-  exportLoading: boolean
   onRefresh: () => void
   onInstallSingbox: () => void
   onUninstallSingbox: () => void
@@ -40,7 +39,7 @@ export function ServerOverviewCard({
     </>}
     actions={<>
       <Button icon={<RotateCw />} loading={refreshing} onClick={onRefresh} aria-label="刷新状态" title="刷新状态" />
-      <Button loading={exportLoading} onClick={onExport}>导出订阅</Button>
+      <Button onClick={onExport}>导出节点</Button>
       <Button onClick={onEditConfig}>配置文件</Button>
       <Dropdown placement="bottomRight" menu={{ items: [
         { key: 'restart', label: '重启 sing-box', disabled: !server.online || !!busy, onClick: onRestart },

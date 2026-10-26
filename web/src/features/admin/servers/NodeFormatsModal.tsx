@@ -1,10 +1,62 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Modal, Tooltip, Typography, message } from '../../../ui'
+import { Button, Modal, Select, Tooltip, Typography, message } from '../../../ui'
 import { Check, Copy, Eye } from 'lucide-react'
 import type { NodeFormats } from '../../../api'
+import { errMsg, getNodeFormats } from '../../../api'
+import { RequestState } from '../../../components/RequestState'
 import { copyToClipboard } from '../../../util'
 import '../../../styles/forms.css'
-import { MODAL_MD } from '../../../ui/modal'
+import { MODAL_LG, MODAL_MD } from '../../../ui/modal'
+
+export function NodeFormatsExportModal({ serverId, open, onCancel }: { serverId: number; open: boolean; onCancel: () => void }) {
+  return <Modal className="fm-modal" title="导出节点" open={open} onCancel={onCancel} footer={null} width={MODAL_LG}>
+    {open && <NodeExportSession key={serverId} serverId={serverId} />}
+  </Modal>
+}
+
+function NodeExportSession({ serverId }: { serverId: number }) {
+  const [userId, setUserId] = useState(0)
+  const [data, setData] = useState<NodeFormats | null>(null)
+  const [users, setUsers] = useState<NodeFormats['users']>([])
+  const [multiCount, setMultiCount] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setLoading(true)
+    setError(null)
+    setData(null)
+    getNodeFormats(serverId, controller.signal, userId || undefined)
+      .then((next) => {
+        if (controller.signal.aborted) return
+        setData(next)
+        setUsers(next.users)
+        setMultiCount(next.multi_user_count)
+      })
+      .catch((cause) => { if (!controller.signal.aborted) setError(errMsg(cause)) })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    return () => controller.abort()
+  }, [serverId, userId, attempt])
+
+  // Never show the previous account's credentials while its replacement loads.
+  const current = data?.user_id === userId ? data : null
+  return <>
+    {multiCount > 0 && <div className="fm-export-user">
+      <Select aria-label="多用户凭证" value={userId} onChange={setUserId} showSearch options={[
+        { value: 0, label: '选择用户以导出多用户节点' },
+        ...users.map((user) => ({ value: user.id, label: user.email })),
+      ]} />
+      <p className="muted">{users.length
+        ? '单凭证节点始终显示；多用户节点使用所选用户的实际凭证，仅包含该用户获授权的入站。'
+        : '暂无可用的授权用户，请先在用户页分配此服务器的多用户入站。'}</p>
+    </div>}
+    <RequestState loading={loading} error={error} hasData={!!current} onRetry={() => setAttempt((value) => value + 1)}>
+      {current && <NodeFormatsModalContent key={userId} data={current} />}
+    </RequestState>
+  </>
+}
 
 export function NodeFormatsModalContent({ data }: { data: NodeFormats }) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
@@ -41,7 +93,7 @@ export function NodeFormatsModalContent({ data }: { data: NodeFormats }) {
   return (
     <>
       {!items.length ? (
-        <div className="ui-empty">暂无可导出的单凭证入站</div>
+        <div className="ui-empty">{data.multi_user_count > 0 && !data.user_id ? '选择已授权用户后可导出多用户节点' : '暂无可导出的节点'}</div>
       ) : (
         <ul className="fm-nodes">
           {items.map((item, index) => {

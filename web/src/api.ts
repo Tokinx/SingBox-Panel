@@ -280,13 +280,16 @@ export interface NodeFormatItem {
 }
 
 export interface NodeFormats {
+  users: { id: number; email: string }[]
+  multi_user_count: number
+  user_id: number
   items: NodeFormatItem[]
   uri: string
   clash: string
   surge: string
 }
-export const getNodeFormats = (serverId: number, signal?: AbortSignal) =>
-  http.get<NodeFormats>(`/api/admin/servers/${serverId}/node-formats`, { signal }).then((r) => r.data)
+export const getNodeFormats = (serverId: number, signal?: AbortSignal, userId?: number) =>
+  http.get<NodeFormats>(`/api/admin/servers/${serverId}/node-formats`, { signal, params: userId ? { user_id: userId } : undefined }).then((r) => r.data)
 
 // ---- admin: users ----
 interface UserBody {

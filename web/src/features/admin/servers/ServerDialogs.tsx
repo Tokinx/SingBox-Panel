@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react'
 import { Form, Input, Modal, Select, Table, type FormInstance } from '../../../ui'
-import type { ImportSummary, NodeFormats } from '../../../api'
-import { NodeFormatsModalContent } from './NodeFormatsModal'
+import type { ImportSummary } from '../../../api'
 import '../../../styles/forms.css'
 import { MODAL_LG, MODAL_SM } from '../../../ui/modal'
 
@@ -150,21 +149,6 @@ export function InstallSingboxModal({
           </Form.Item>
         </div>
       </Form>
-    </Modal>
-  )
-}
-
-export function NodeFormatsExportModal({
-  open, loading, data, onCancel,
-}: {
-  open: boolean
-  loading: boolean
-  data: NodeFormats | null
-  onCancel: () => void
-}) {
-  return (
-    <Modal className="fm-modal" title="导出节点" open={open} onCancel={onCancel} footer={null} width={MODAL_LG}>
-      {loading ? <div className="fm-loading">加载中…</div> : data ? <NodeFormatsModalContent data={data} /> : null}
     </Modal>
   )
 }
