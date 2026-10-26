@@ -112,7 +112,7 @@
 .um-access-chip-off { color: var(--console-warning-text); }
 
 .um-access-order-list { display: flex; flex-direction: column; max-height: min(calc(56 * var(--dvh)), 520px); overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--console-border); border-radius: var(--app-radius); }
-.um-access-order-item { position: relative; flex: none; display: grid; grid-template-columns: 28px 24px minmax(0, 1fr) minmax(130px, 200px) 36px 80px 28px; align-items: center; gap: 8px; min-height: 58px; padding: 6px 14px 6px 6px; background: var(--console-container); }
+.um-access-order-item { position: relative; flex: none; display: grid; grid-template-columns: 28px 24px minmax(0, 1fr) minmax(130px, 200px) 36px 80px 60px; align-items: center; gap: 8px; min-height: 58px; padding: 6px 14px 6px 6px; background: var(--console-container); }
 .um-access-order-item + .um-access-order-item { border-top: 1px solid var(--console-border); }
 .um-access-order-item:hover { background: var(--console-surface); }
 .um-access-order-item.dragging { opacity: .45; }
@@ -124,11 +124,14 @@
 .um-access-order-number { color: var(--console-faint); font-family: var(--app-mono); font-size: 12px; text-align: center; font-variant-numeric: tabular-nums; }
 .um-access-order-content { display: flex; flex-direction: column; min-width: 0; }
 .um-access-order-content strong, .um-access-order-content small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.um-access-order-content strong { font-weight: 500; font-size: 13px; color: var(--console-ink); }
+.um-access-order-content strong { min-width: 0; font-weight: 500; font-size: 13px; color: var(--console-ink); }
 .um-access-order-content small { color: var(--console-faint); font-size: 12px; }
+.um-access-order-rename.ui-btn { flex: none; width: 28px; height: 28px; padding: 0; color: var(--console-faint); }
+.um-access-order-name-editor { min-width: 0; }
+.um-access-order-name-done.ui-btn, .um-access-order-mobile-meta { display: none; }
 .um-access-order-kind { color: var(--console-muted); font-size: 12px; text-align: center; }
 .um-access-order-protocol { justify-self: end; }
-.um-access-order-mobile-actions { display: none; }
+.um-access-order-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
 .um-user-detail .ui-btn .lucide, .um-access-order-handle .lucide { width: 16px; height: 16px; flex: none; }
 .um-node-disabled { margin-left: 8px; color: var(--console-faint); font-size: 11px; }
 
@@ -164,18 +167,21 @@
   .um-rule-none { display: none; }
   .um-rule-actions { grid-column: 3; grid-row: 1; }
   .um-access-modal-items { grid-template-columns: minmax(0, 1fr); padding-left: 14px; }
-  .um-access-order-item { grid-template-columns: var(--app-control-h) minmax(0, 1fr) var(--app-control-h); grid-template-areas: 'handle content remove' 'input input input' 'kind actions actions'; gap: 6px; padding: 8px 10px; }
-  .um-access-order-handle { grid-area: handle; width: var(--app-control-h); height: var(--app-control-h); }
-  .um-access-order-number, .um-access-order-protocol { display: none; }
+  .um-access-order-item { grid-template-columns: var(--app-control-h) minmax(0, 1fr) auto; grid-template-areas: 'handle content actions'; column-gap: 4px; row-gap: 6px; min-height: 64px; padding: 8px 6px; }
+  .um-access-order-item.is-renaming { grid-template-areas: 'handle content actions' 'input input input'; }
+  .um-access-order-handle { grid-area: handle; width: var(--app-control-h); height: 40px; }
+  .um-access-order-number, .um-access-order-protocol, .um-access-order-kind { display: none; }
   .um-access-order-content { grid-area: content; }
-  .um-access-order-kind { grid-area: kind; }
-  .um-access-order-name-input { grid-area: input; }
+  .um-access-order-mobile-meta { display: inline; }
+  .um-access-order-name-editor { grid-area: input; display: none; align-items: center; gap: 8px; padding: 0 4px 2px; }
+  .um-access-order-item.is-renaming .um-access-order-name-editor { display: flex; }
+  .um-access-order-name-input { flex: 1; }
+  .um-access-order-name-done.ui-btn { display: inline-flex; height: var(--app-control-h); }
   /* Keep iOS inputs at 16px without enlarging every mobile control. */
   .um-access-order-name-input input { padding-block: 4px; font-size: 16px; }
-  .um-access-order-remove.ui-btn { grid-area: remove; width: var(--app-control-h); height: var(--app-control-h); }
-  .um-access-order-mobile-actions { grid-area: actions; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-  .um-access-order-mobile-actions > span { margin-right: auto; font-size: 12px; }
-  .um-access-order-mobile-actions > .ui-btn, .um-access-editor .ui-pills-actions > .ui-btn { height: var(--app-control-h); gap: 4px; padding: 0 8px; }
+  .um-access-order-actions { grid-area: actions; }
+  .um-access-order-actions .ui-btn { width: var(--app-control-h); height: var(--app-control-h); padding: 0; color: var(--console-muted); }
+  .um-access-editor .ui-pills-actions > .ui-btn { height: var(--app-control-h); gap: 4px; padding: 0 8px; }
   .um-access-editor .um-access-chip { height: 36px; }
   .um-access-editor .um-access-modal-group-head { gap: 6px; }
   .um-access-editor .um-access-group-toggle { width: var(--app-control-h); height: var(--app-control-h); }

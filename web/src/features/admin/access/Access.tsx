@@ -202,6 +202,7 @@ export function UserAccessEditor({ userId, onStateChange }: {
   const [draggedNodeKey, setDraggedNodeKey] = useState<string | null>(null)
   const [dropIndex, setDropIndex] = useState<number | null>(null)
   const [sortAnnouncement, setSortAnnouncement] = useState('')
+  const [renamingNode, setRenamingNode] = useState<{ key: string; originalName: string } | null>(null)
   const nodeOrderRef = useRef(nodeOrder)
   const customNameCacheRef = useRef(new Map<string, string>())
   const orderListRef = useRef<HTMLDivElement>(null)
@@ -212,6 +213,13 @@ export function UserAccessEditor({ userId, onStateChange }: {
   const footerRef = useRef<HTMLElement>(null)
 
   nodeOrderRef.current = nodeOrder
+
+  useEffect(() => {
+    if (!renamingNode) return
+    const input = orderItemRefs.current.get(renamingNode.key)?.querySelector('input')
+    input?.focus()
+    input?.select()
+  }, [renamingNode])
 
   useLayoutEffect(() => {
     assignmentSessionRef.current += 1
@@ -367,6 +375,7 @@ export function UserAccessEditor({ userId, onStateChange }: {
     }
     if (kind === 'managed') setInboundIDs(update)
     else setCustomNodeIDs(update)
+    if (!checked) setRenamingNode((current) => current && ids.some((id) => current.key === `${kind}:${id}`) ? null : current)
     setNodeOrder((current) => {
       const changedKeys = new Set(ids.map((id) => `${kind}:${id}`))
       if (!checked) {
@@ -402,6 +411,12 @@ export function UserAccessEditor({ userId, onStateChange }: {
     )))
   }, [])
 
+  const finishNodeRename = (key: string, cancel = false) => {
+    if (cancel && renamingNode?.key === key) updateNodeCustomName(key, renamingNode.originalName)
+    setRenamingNode(null)
+    orderItemRefs.current.get(key)?.querySelector<HTMLButtonElement>('.um-access-order-rename')?.focus()
+  }
+
   const toggleItem = useCallback((item: AccessNodeItem, checked: boolean) => {
     setIDs(item.kind, [item.id], checked)
   }, [setIDs])
@@ -421,6 +436,7 @@ export function UserAccessEditor({ userId, onStateChange }: {
   }
 
   const discardChanges = () => {
+    setRenamingNode(null)
     customNameCacheRef.current.clear()
     for (const item of loadedNodeOrder) {
       if (item.custom_name) customNameCacheRef.current.set(userNodeOrderKey(item), item.custom_name)
@@ -483,11 +499,15 @@ export function UserAccessEditor({ userId, onStateChange }: {
     const list = orderListRef.current
     if (list) {
       const listRect = list.getBoundingClientRect()
-      const top = Math.max(0, listRect.top)
-      const bottom = Math.min(window.innerHeight, listRect.bottom, footerRef.current?.getBoundingClientRect().top ?? window.innerHeight)
+      const headerBottom = document.querySelector('.app-header')?.getBoundingClientRect().bottom ?? 0
+      const scrollWithinList = list.scrollHeight > list.clientHeight
+      // A page-scrolling list must use viewport edges, not its own first row:
+      // otherwise starting a drag halfway down the page scrolls it away.
+      const top = Math.max(0, headerBottom, scrollWithinList ? listRect.top : 0)
+      const bottom = Math.min(window.innerHeight, scrollWithinList ? listRect.bottom : window.innerHeight, footerRef.current?.getBoundingClientRect().top ?? window.innerHeight)
       const edgeSize = Math.max(0, Math.min(56, (bottom - top) / 4))
       const offset = drag.clientY < top + edgeSize ? -12 : drag.clientY > bottom - edgeSize ? 12 : 0
-      if (list.scrollHeight > list.clientHeight) list.scrollTop += offset
+      if (scrollWithinList) list.scrollTop += offset
       else if (offset) window.scrollBy(0, offset)
     }
     // Keep the rendered order fixed during a pointer drag. Calculate the
@@ -555,6 +575,7 @@ export function UserAccessEditor({ userId, onStateChange }: {
       setInboundIDs(access.inbound_ids)
       setCustomNodeIDs(access.custom_node_ids)
       setNodeOrder(access.node_order)
+      setRenamingNode(null)
       message.success('已保存节点分配，更新客户端订阅后生效')
     } catch (e) {
       if (session === assignmentSessionRef.current) message.error(errMsg(e))
@@ -678,7 +699,7 @@ export function UserAccessEditor({ userId, onStateChange }: {
               : ''
             return (
               <div
-                className={`um-access-order-item${draggedNodeKey === key ? ' dragging' : ''}${dropClass}`}
+                className={`um-access-order-item${renamingNode?.key === key ? ' is-renaming' : ''}${draggedNodeKey === key ? ' dragging' : ''}${dropClass}`}
                 key={key}
                 data-node-key={key}
                 ref={(element) => {
@@ -711,29 +732,39 @@ export function UserAccessEditor({ userId, onStateChange }: {
                   </button>
                 <span className="um-access-order-number">{index + 1}</span>
                 <div className="um-access-order-content">
-                  <strong>{(orderItem.custom_name ?? '').trim() || defaultName}{item && !item.enabled && <span className="ui-tag um-node-disabled">停用</span>}</strong>
-                  <small>{subtitle}</small>
+                  <strong title={(orderItem.custom_name ?? '').trim() || defaultName}>{(orderItem.custom_name ?? '').trim() || defaultName}{item && !item.enabled && <span className="ui-tag um-node-disabled">停用</span>}</strong>
+                  <small title={subtitle}><span className="um-access-order-mobile-meta">{index + 1} · {orderItem.node_type === 'managed' ? '面板' : '外部'} · </span>{subtitle}</small>
                 </div>
-                <Input
-                  size="small"
-                  className="um-access-order-name-input"
-                  placeholder={defaultName}
-                  aria-label={`自定义 ${defaultName} 的节点名称`}
-                  value={orderItem.custom_name ?? ''}
-                  maxLength={128}
-                  allowClear
-                  disabled={saving}
-                  onMouseDown={(event) => event.stopPropagation()}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onChange={(event) => updateNodeCustomName(key, event.target.value)}
-                />
+                <div className="um-access-order-name-editor" id={`user-node-name-${userId}-${key}`}>
+                  <Input
+                    size="small"
+                    className="um-access-order-name-input"
+                    placeholder={defaultName}
+                    aria-label={`自定义 ${defaultName} 的节点名称`}
+                    aria-description="留空使用默认名称，仅对当前用户生效"
+                    value={orderItem.custom_name ?? ''}
+                    maxLength={128}
+                    allowClear
+                    disabled={saving}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => {
+                      if (renamingNode?.key !== key || event.nativeEvent.isComposing || event.keyCode === 229) return
+                      if (event.key === 'Enter' || event.key === 'Escape') {
+                        event.preventDefault()
+                        finishNodeRename(key, event.key === 'Escape')
+                      }
+                    }}
+                    onChange={(event) => updateNodeCustomName(key, event.target.value)}
+                  />
+                  <Button size="small" className="um-access-order-name-done" aria-label={`完成重命名 ${defaultName}`} disabled={saving} onClick={() => finishNodeRename(key)}>完成</Button>
+                </div>
                 <span className="um-access-order-kind">{orderItem.node_type === 'managed' ? '面板' : '外部'}</span>
                 <span className={`um-access-order-protocol${item?.protocol ? ' ui-tag' : ''}`}>{item?.protocol ? nodeTypeLabel[item.protocol] || item.protocol : null}</span>
-                <Button size="small" type="text" icon={<X />} aria-label={`移除 ${defaultName}`} title="取消分配" disabled={saving} className="um-access-order-remove" onClick={() => setIDs(orderItem.node_type, [orderItem.node_id], false)} />
-                <div className="um-access-order-mobile-actions">
-                  <span className="faint mono">第 {index + 1} 位</span>
-                  <Button size="small" icon={<ChevronUp />} aria-label={`上移 ${defaultName}`} disabled={saving || index === 0} onClick={() => moveNodeOrder(index, index - 1)}>上移</Button>
-                  <Button size="small" icon={<ChevronDown />} aria-label={`下移 ${defaultName}`} disabled={saving || index === nodeOrder.length - 1} onClick={() => moveNodeOrder(index, index + 1)}>下移</Button>
+                <div className="um-access-order-actions">
+                  <Button size="small" type="text" className="um-access-order-rename" icon={<Pencil />} aria-label={`重命名 ${defaultName}`} title="重命名" aria-controls={`user-node-name-${userId}-${key}`} disabled={saving}
+                    onClick={() => renamingNode?.key === key ? finishNodeRename(key) : setRenamingNode({ key, originalName: orderItem.custom_name ?? '' })} />
+                  <Button size="small" type="text" icon={<X />} aria-label={`移除 ${defaultName}`} title="取消分配" disabled={saving} className="um-access-order-remove" onClick={() => setIDs(orderItem.node_type, [orderItem.node_id], false)} />
                 </div>
               </div>
             )
@@ -773,7 +804,7 @@ export function UserAccessEditor({ userId, onStateChange }: {
             </Button>
           ) : null}
         />
-        <p className="um-access-note">{view === 'order' ? '拖拽手柄排序，手机也可点上移、下移；名称留空使用默认名称。仅对当前用户生效。' : '勾选要分配的节点，也可整组选择。停用的节点不会出现在订阅中。'}</p>
+        <p className="um-access-note">{view === 'order' ? '拖拽排序，点铅笔改名；仅对当前用户生效。' : '勾选要分配的节点，也可整组选择。停用的节点不会出现在订阅中。'}</p>
         {loadedServerWide ? (
           <p className="um-access-note">
             整机授权：{loadedServerIDs.map((id) => servers.find((server) => server.id === id)?.name || `#${id}`).join('、')}

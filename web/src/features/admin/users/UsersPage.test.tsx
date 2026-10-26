@@ -164,15 +164,88 @@ describe('editing a selected user subscription', () => {
     expect(orderedNames()).toEqual(['Singapore', 'Tokyo'])
   })
 
-  it('provides tap-to-move controls with disabled boundaries on mobile', async () => {
+  it('keeps rename beside remove without move buttons, and retains keyboard sorting with safe boundaries', async () => {
     mount('/admin/users/2')
-    expect((await screen.findByRole('button', { name: '上移 Tokyo' }) as HTMLButtonElement).disabled).toBe(true)
-    expect((screen.getByRole('button', { name: '下移 Singapore' }) as HTMLButtonElement).disabled).toBe(true)
-    fireEvent.click(screen.getByRole('button', { name: '下移 Tokyo' }))
+    const handle = await screen.findByRole('button', { name: '调整第 1 个节点顺序' })
+    expect(screen.queryByRole('button', { name: /^(上移|下移)/ })).toBeNull()
+    const actions = handle.closest('.um-access-order-item')!.querySelector('.um-access-order-actions')!
+    expect(within(actions as HTMLElement).getAllByRole('button').map((button) => button.getAttribute('aria-label'))).toEqual(['重命名 Tokyo', '移除 Tokyo'])
+    fireEvent.keyDown(handle, { key: 'ArrowUp' })
+    expect(orderedNames()).toEqual(['Tokyo', 'Singapore'])
+    fireEvent.keyDown(handle, { key: 'ArrowDown' })
     expect(orderedNames()).toEqual(['Singapore', 'Tokyo'])
-    fireEvent.click(screen.getByRole('button', { name: '上移 Tokyo' }))
+    fireEvent.keyDown(handle, { key: 'ArrowDown' })
+    expect(orderedNames()).toEqual(['Singapore', 'Tokyo'])
+    fireEvent.keyDown(handle, { key: 'ArrowUp' })
     expect(orderedNames()).toEqual(['Tokyo', 'Singapore'])
     expect(screen.getByRole('textbox', { name: '自定义 Tokyo 的节点名称' }).closest('[draggable="true"]')).toBeNull()
+  })
+
+  it('opens one inline name editor, keeps the draft on completion, and cancels only the current edit', async () => {
+    mount('/admin/users/2')
+    const rename = await screen.findByRole('button', { name: '重命名 Tokyo' })
+    const row = rename.closest('.um-access-order-item')!
+    const input = screen.getByRole('textbox', { name: '自定义 Tokyo 的节点名称' }) as HTMLInputElement
+    expect(row.classList.contains('is-renaming')).toBe(false)
+    expect(document.getElementById(rename.getAttribute('aria-controls')!)?.contains(input)).toBe(true)
+    fireEvent.click(rename)
+    expect(row.classList.contains('is-renaming')).toBe(true)
+    expect(document.activeElement).toBe(input)
+    fireEvent.change(input, { target: { value: 'My Tokyo' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(row.classList.contains('is-renaming')).toBe(false)
+    expect(document.activeElement).toBe(rename)
+    expect(row.querySelector('strong')?.textContent).toBe('My Tokyo')
+    expect(updateUserAccess).not.toHaveBeenCalled()
+    fireEvent.click(rename)
+    fireEvent.change(input, { target: { value: 'Cancel this edit' } })
+    fireEvent.keyDown(input, { key: 'Escape' })
+    expect(input.value).toBe('My Tokyo')
+    expect(row.classList.contains('is-renaming')).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: '保存更改' }))
+    await waitFor(() => expect(updateUserAccess).toHaveBeenCalledWith(2, expect.objectContaining({
+      node_order: [{ node_type: 'managed', node_id: 10, custom_name: 'My Tokyo' }, { node_type: 'custom', node_id: 30 }],
+    })))
+  })
+
+  it('keeps a renamed draft through reordering and switching editors, and closes editors on undo', async () => {
+    mount('/admin/users/2')
+    fireEvent.click(await screen.findByRole('button', { name: '重命名 Tokyo' }))
+    fireEvent.change(screen.getByRole('textbox', { name: '自定义 Tokyo 的节点名称' }), { target: { value: 'Tokyo draft' } })
+    fireEvent.keyDown(screen.getByRole('button', { name: '调整第 1 个节点顺序' }), { key: 'ArrowDown' })
+    expect(orderedNames()).toEqual(['Singapore', 'Tokyo'])
+    expect(screen.getByRole('button', { name: '重命名 Tokyo' }).closest('.is-renaming')).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '重命名 Singapore' }))
+    expect(document.querySelectorAll('.um-access-order-item.is-renaming').length).toBe(1)
+    expect(screen.getByRole('button', { name: '重命名 Tokyo' }).closest('.is-renaming')).toBeNull()
+    selectTab(/面板节点/)
+    selectTab(/已分配/)
+    expect((screen.getByRole('textbox', { name: '自定义 Tokyo 的节点名称' }) as HTMLInputElement).value).toBe('Tokyo draft')
+    fireEvent.click(screen.getByRole('button', { name: '撤销' }))
+    expect(document.querySelector('.um-access-order-item.is-renaming')).toBeNull()
+    expect(orderedNames()).toEqual(['Tokyo', 'Singapore'])
+    expect((screen.getByRole('textbox', { name: '自定义 Tokyo 的节点名称' }) as HTMLInputElement).value).toBe('')
+  })
+
+  it('does not close a name editor while confirming Chinese IME input, and supports clearing the alias', async () => {
+    mount('/admin/users/2')
+    fireEvent.click(await screen.findByRole('button', { name: '重命名 Tokyo' }))
+    const input = screen.getByRole('textbox', { name: '自定义 Tokyo 的节点名称' }) as HTMLInputElement
+    const row = input.closest('.um-access-order-item')!
+    fireEvent.change(input, { target: { value: '东京' } })
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+    expect(row.classList.contains('is-renaming')).toBe(true)
+    fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 })
+    expect(row.classList.contains('is-renaming')).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: '完成重命名 Tokyo' }))
+    expect(row.classList.contains('is-renaming')).toBe(false)
+    expect(row.querySelector('strong')?.textContent).toBe('东京')
+    fireEvent.click(screen.getByRole('button', { name: '重命名 Tokyo' }))
+    fireEvent.click(within(row as HTMLElement).getByRole('button', { name: '清空' }))
+    fireEvent.click(screen.getByRole('button', { name: '完成重命名 Tokyo' }))
+    expect(input.value).toBe('')
+    expect(row.querySelector('strong')?.textContent).toBe('Tokyo')
+    expect((screen.getByRole('button', { name: '保存更改' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('assigns and removes managed and external nodes in one draft, and can undo', async () => {
@@ -249,6 +322,19 @@ describe('editing a selected user subscription', () => {
     fireEvent.lostPointerCapture(handle, pointer)
     expect(orderedNames()).toEqual(['Tokyo', 'Singapore'])
     fireEvent.pointerDown(handle, start)
+    if (pointerType === 'touch') {
+      vi.spyOn(document.querySelector('.app-header')!, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 390, 96))
+      const listBounds = vi.spyOn(document.querySelector('.um-access-order-list')!, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 300, 390, 400))
+      vi.spyOn(document.querySelector('.um-access-page-footer')!, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 600, 390, 53))
+      vi.mocked(window.scrollBy).mockClear()
+      fireEvent.pointerMove(handle, { ...pointer, clientY: 320 })
+      expect(window.scrollBy).not.toHaveBeenCalled()
+      listBounds.mockReturnValue(new DOMRect(0, -100, 390, 800))
+      fireEvent.pointerMove(handle, { ...pointer, clientY: 120 })
+      expect(window.scrollBy).toHaveBeenLastCalledWith(0, -12)
+      fireEvent.pointerMove(handle, { ...pointer, clientY: 590 })
+      expect(window.scrollBy).toHaveBeenLastCalledWith(0, 12)
+    }
     fireEvent.pointerMove(handle, pointer)
     fireEvent.pointerUp(handle, pointer)
     expect(orderedNames()).toEqual(['Singapore', 'Tokyo'])
