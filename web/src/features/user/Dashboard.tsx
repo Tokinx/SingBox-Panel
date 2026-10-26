@@ -12,7 +12,7 @@ import regionData from '../../assets/regions.json'
 import { VirtualList } from '../../components/VirtualList'
 import { RequestState } from '../../components/RequestState'
 import { RegionFlag } from '../../components/RegionFlag'
-import { PageHeader, Pills, Section } from '../../ui/Page'
+import { PageHeader, PageToolbar, Pills, Section } from '../../ui/Page'
 import '../../styles/settings-user.css'
 import { MODAL_MD, MODAL_SM } from '../../ui/modal'
 
@@ -48,7 +48,7 @@ function ClientLogo({ spec }: { spec: ClientSpec }) {
 // Chinese label for an ISO region code (HK → 香港), falls back to the code.
 const labelOf = (code: string): string => REGIONS[code]?.label || (code === 'Other' ? '其他' : code)
 
-export default function Dashboard() {
+export default function Dashboard({ embedded = false }: { embedded?: boolean }) {
   const screens = Grid.useBreakpoint()
   const isMobile = !screens.md
   const setAuth = useAuth((s) => s.setAuth)
@@ -196,20 +196,17 @@ export default function Dashboard() {
     </div>
   )
 
+  const headerProps = {
+    meta: <><span>{user.email}</span><span>{nodes.length} 个节点</span></>,
+    actions: <>
+      <Button onClick={doReset}>重置链接</Button>
+      <Button onClick={() => setPwdOpen(true)}>修改密码</Button>
+    </>,
+  }
   return (
     <RequestState loading={loading} error={loadError} hasData onRetry={load}>
       <div className="sub-page">
-        <PageHeader
-          title="订阅"
-          meta={<>
-            <span>{user.email}</span>
-            <span>{nodes.length} 个节点</span>
-          </>}
-          actions={<>
-            <Button onClick={doReset}>重置链接</Button>
-            <Button onClick={() => setPwdOpen(true)}>修改密码</Button>
-          </>}
-        />
+        {embedded ? <PageToolbar {...headerProps} /> : <PageHeader title="订阅" {...headerProps} />}
 
         <Section title="订阅链接">
           <div className="sub-clients">

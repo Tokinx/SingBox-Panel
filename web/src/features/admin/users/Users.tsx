@@ -10,7 +10,7 @@ import { formatBytes, relativeTime } from '../../../util'
 import { ProtocolTag } from '../servers/ServerTraffic'
 import { AssignModal } from '../access/Access'
 import { RequestState } from '../../../components/RequestState'
-import { PageHeader, Status } from '../../../ui/Page'
+import { PageToolbar, Status } from '../../../ui/Page'
 import '../../../styles/users.css'
 import { MODAL_LG, MODAL_SM } from '../../../ui/modal'
 
@@ -413,8 +413,7 @@ export default function Users() {
 
   return (
     <div className="um-page">
-      <PageHeader
-        title="用户"
+      <PageToolbar
         meta={users.length ? <span>{users.length} 个用户</span> : undefined}
         actions={<>
           <Input

@@ -22,7 +22,6 @@ const ADMIN_NAV = [
   { to: '/admin/logs', label: '日志' },
   { to: '/admin/users', label: '用户' },
   { to: '/admin/external-nodes', label: '节点' },
-  { to: '/dashboard', label: '订阅' },
   { to: '/admin/settings', label: '设置' },
 ]
 

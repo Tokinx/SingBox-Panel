@@ -65,6 +65,8 @@ a { color: inherit; }
 .ui-page-title h1 { margin: 0; font-size: 28px; line-height: 1.25; font-weight: 600; letter-spacing: -.6px; color: var(--console-ink); overflow-wrap: anywhere; }
 .ui-page-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-top: 8px; color: var(--console-muted); font-size: 13px; }
 .ui-page-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ui-page-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 20px 0 16px; }
+.ui-page-toolbar .ui-page-meta { margin-top: 0; }
 .ui-stats { display: grid; grid-template-columns: repeat(var(--ui-stats-cols, 4), minmax(0, 1fr)); border: 1px solid var(--console-border); border-radius: var(--app-radius); margin-bottom: 32px; overflow: hidden; }
 .ui-stat { padding: 18px 20px; min-width: 0; min-height: 109px; box-sizing: border-box; }
 .ui-stat + .ui-stat { border-left: 1px solid var(--console-border); }
@@ -75,8 +77,8 @@ a { color: inherit; }
 .ui-pills { display: inline-flex; gap: 2px; height: var(--app-control-h); box-sizing: border-box; padding: 2px; border: 1px solid var(--console-border); border-radius: var(--app-radius-pop); background: var(--console-surface); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
 .ui-pill { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: var(--console-muted); font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
 .ui-pill:hover { color: var(--console-ink); }
-.ui-pill.is-active { background: var(--console-container); color: var(--console-ink); box-shadow: 0 1px 2px rgb(0 0 0 / 8%), 0 0 0 1px var(--console-border); }
-:root[data-console-theme='dark'] .ui-pill.is-active { background: #3a3a3a; box-shadow: none; }
+.ui-pill.is-active, .ui-pill[data-state='active'] { background: var(--console-container); color: var(--console-ink); box-shadow: 0 1px 2px rgb(0 0 0 / 8%), 0 0 0 1px var(--console-border); }
+:root[data-console-theme='dark'] .ui-pill.is-active, :root[data-console-theme='dark'] .ui-pill[data-state='active'] { background: #3a3a3a; box-shadow: none; }
 .ui-pill-count { color: var(--console-faint); font-variant-numeric: tabular-nums; }
 .ui-pill.is-active .ui-pill-count { color: var(--console-muted); }
 .ui-pills-actions { display: flex; align-items: center; gap: 8px; }
