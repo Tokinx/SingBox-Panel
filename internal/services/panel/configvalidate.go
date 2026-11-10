@@ -221,13 +221,29 @@ func (a *App) validateOutbound(db *gorm.DB, serverID, excludeID uint, tag, typ s
 	return nil
 }
 
-func (a *App) outboundExists(db *gorm.DB, serverID uint, tag string) (bool, error) {
+func (a *App) outboundExists(db *gorm.DB, tag string) (bool, error) {
 	switch tag {
 	case "direct", "block", "reject", "sniff", "hijack-dns":
 		return true, nil
 	}
+	if strings.HasPrefix(tag, "inbound-") {
+		id, err := managedRoutingNodeID(tag)
+		if err != nil {
+			return false, nil
+		}
+		client, _, err := loadManagedRoutingClient(db, id)
+		if err != nil {
+			return false, err
+		}
+		_, err = singbox.BuildClientOutbound(client)
+		return err == nil, err
+	}
+	id, err := routingNodeID(tag)
+	if err != nil {
+		return false, nil
+	}
 	var n int64
-	err := db.Model(&model.Outbound{}).Where("server_id = ? AND tag = ?", serverID, tag).Count(&n).Error
+	err = db.Model(&model.CustomNode{}).Where("id = ? AND enabled = ? AND hidden_by_subscription_rule = ?", id, true, false).Count(&n).Error
 	return n > 0, err
 }
 
@@ -243,7 +259,10 @@ func (a *App) validateRule(db *gorm.DB, serverID uint, raw json.RawMessage, outb
 	if strings.TrimSpace(outbound) == "" {
 		return fmt.Errorf("目标出站必填")
 	}
-	ok, err := a.outboundExists(db, serverID, outbound)
+	if err := validateManagedRoutingSource(db, serverID, outbound); err != nil {
+		return err
+	}
+	ok, err := a.outboundExists(db, outbound)
 	if err != nil {
 		return err
 	}
@@ -308,8 +327,19 @@ func (a *App) validateRule(db *gorm.DB, serverID uint, raw json.RawMessage, outb
 		}
 	}
 	var ruleSets []string
-	if err := db.Model(&model.RuleSet{}).Where("server_id = ?", serverID).Pluck("tag", &ruleSets).Error; err != nil {
+	if err := db.Model(&model.RuleSet{}).Where("server_id = ?", 0).Pluck("tag", &ruleSets).Error; err != nil {
 		return err
+	}
+	if len(rule.RuleSet) > 0 {
+		var detours []string
+		if err := db.Model(&model.RuleSet{}).Where("server_id = 0 AND tag IN ?", rule.RuleSet).Pluck("download_detour", &detours).Error; err != nil {
+			return err
+		}
+		for _, detour := range detours {
+			if err := validateManagedRoutingSource(db, serverID, detour); err != nil {
+				return fmt.Errorf("规则集下载出站: %w", err)
+			}
+		}
 	}
 	ruleSetSet := stringSet(ruleSets)
 	for _, tag := range rule.RuleSet {
@@ -359,7 +389,7 @@ func renameInboundRuleRefs(tx *gorm.DB, serverID uint, old, next string) error {
 
 func renameRuleSetRefs(tx *gorm.DB, serverID uint, old, next string) error {
 	var rows []model.RouteRule
-	if err := tx.Where("server_id = ?", serverID).Find(&rows).Error; err != nil {
+	if err := ruleReferenceScope(tx, serverID).Find(&rows).Error; err != nil {
 		return err
 	}
 	for i := range rows {
@@ -403,7 +433,7 @@ func (a *App) inboundReferenced(db *gorm.DB, serverID uint, tag string) (bool, e
 
 func (a *App) ruleSetReferenced(db *gorm.DB, serverID uint, tag string) (bool, error) {
 	var rows []model.RouteRule
-	if err := db.Where("server_id = ?", serverID).Find(&rows).Error; err != nil {
+	if err := ruleReferenceScope(db, serverID).Find(&rows).Error; err != nil {
 		return false, err
 	}
 	for _, row := range rows {
@@ -464,4 +494,12 @@ func preserveInboundSecrets(old, next *singbox.InboundSettings) {
 			next.TLS.Key = old.TLS.Key
 		}
 	}
+}
+
+// A zero server ID addresses references across all servers for shared resources.
+func ruleReferenceScope(db *gorm.DB, serverID uint) *gorm.DB {
+	if serverID != 0 {
+		return db.Where("server_id = ?", serverID)
+	}
+	return db
 }

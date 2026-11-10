@@ -39,11 +39,13 @@ describe('subscription sync feedback', () => {
       last_sync_status: 'partial', source_type: 'clash-yaml', created_at: '', updated_at: '',
     }
     vi.mocked(listCustomNodeSubscriptions).mockResolvedValue([source])
-    render(<CustomNodesPanel nodes={[]} loading={false} onNodesChange={vi.fn()} />)
+    const { container } = render(<CustomNodesPanel nodes={[]} loading={false} onNodesChange={vi.fn()} />)
     const label = await screen.findByText('部分成功')
     expect(label.className).toContain('is-warn')
     expect(screen.queryByText('同步失败')).toBeNull()
     expect(label.closest('[title]')?.getAttribute('title')).toBe(source.last_error)
+    expect(container.querySelector('.um-table')).not.toBeNull()
+    expect(container.querySelector('.um-mcard')).toBeNull()
   })
 
   it.each([

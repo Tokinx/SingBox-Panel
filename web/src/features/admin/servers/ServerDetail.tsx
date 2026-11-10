@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import {
   Alert,
@@ -9,31 +9,31 @@ import {
   Popconfirm,
   Select,
   Space,
+  Switch,
   Table,
   Typography,
   message,
 } from '../../../ui'
 import {
   Copy,
+  Eye,
   Trash2,
   Pencil,
   GripVertical,
   Plus,
-  RotateCw,
 } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   applyRawConfig,
   deleteInbound,
-  deleteOutbound,
   deleteRule,
   errMsg,
   getServer,
   importConfig,
   installSingbox,
   isCanceledRequest,
-  listOutbounds,
   listRuleSets,
+  listRoutingNodes,
   listRules,
   remoteConfig,
   reorderRules,
@@ -41,22 +41,24 @@ import {
   serviceAction,
   setConfigMode,
   setFinalOutbound,
-  testOutbound,
   uninstallAgent,
   uninstallSingbox,
   updateAgent,
+  updateRule,
+  updateServer,
 } from '../../../api'
-import type { ImportSummary, OutboundTest } from '../../../api'
+import type { ImportSummary } from '../../../api'
 import { applyWithToast, isConfigApplyResult, showConfigApplyResult } from '../../../configApply'
-import type { Inbound, Outbound, RouteRule, RuleSet, Server } from '../../../types'
+import type { Inbound, RoutingNode, RouteRule, RuleSet, Server, TrafficSeries } from '../../../types'
 import InboundForm from './InboundForm'
-import { OutboundForm, RuleForm } from './RoutingForms'
-import { RuleSetsTab } from './RuleSetsTab'
-import { ConfigEditorModal, ImportPreviewModal, InstallSingboxModal } from './ServerDialogs'
+import { RuleForm } from './RoutingForms'
+import { ConfigEditorModal, ImportPreviewModal, InstallSingboxModal, ServerEditModal } from './ServerDialogs'
 import { NodeFormatsExportModal } from './NodeFormatsModal'
 import { ServerOverviewCard } from './ServerOverviewCard'
+import ServerTraffic from './ServerTraffic'
+import Logs from '../logs/Logs'
 import { copyToClipboard, formatBytes } from '../../../util'
-import { Pills, Stats, Status } from '../../../ui/Page'
+import { Pills } from '../../../ui/Page'
 import '../../../styles/server-detail.css'
 import { RequestState } from '../../../components/RequestState'
 import { MODAL_MD } from '../../../ui/modal'
@@ -71,15 +73,85 @@ function ProtocolTag({ type }: { type: string }) {
   return <span className="ui-tag">{PROTOCOL_LABELS[type.trim().toLowerCase()] || type}</span>
 }
 
-const DETAIL_SECTIONS = ['inbounds', 'outbounds', 'rules', 'rulesets'] as const
+const DETAIL_SECTIONS = ['inbounds', 'rules', 'logs'] as const
 type DetailSection = typeof DETAIL_SECTIONS[number]
+
+function ServerDetailSkeleton() {
+  return (
+    <div className="sd-page sd-skeleton" role="status" aria-label="加载中">
+      <div className="ui-page-head">
+        <div className="ui-page-title">
+          <span className="sd-skel-bar sd-skel-title" />
+          <span className="sd-skel-bar sd-skel-meta" />
+        </div>
+        <div className="ui-page-actions">
+          <span className="sd-skel-bar sd-skel-btn-icon" />
+          <span className="sd-skel-bar sd-skel-btn" />
+          <span className="sd-skel-bar sd-skel-btn" />
+        </div>
+      </div>
+
+      <div className="tr-overview">
+        <div className="ui-stats">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="ui-stat">
+              <span className="sd-skel-bar sd-skel-stat-label" />
+              <span className="sd-skel-bar sd-skel-stat-value" />
+              <span className="sd-skel-bar sd-skel-stat-hint" />
+            </div>
+          ))}
+        </div>
+        <div className="tr-grid">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <section key={i} className="ui-card tr-panel">
+              <header className="tr-panel-head">
+                <span className="sd-skel-bar sd-skel-panel-title" />
+                <span className="sd-skel-bar sd-skel-panel-ctrl" />
+              </header>
+              <span className="sd-skel-bar sd-skel-chart" />
+            </section>
+          ))}
+        </div>
+      </div>
+
+      <div className="ui-pills-row">
+        <span className="sd-skel-bar sd-skel-pills" />
+        <span className="sd-skel-bar sd-skel-add" />
+      </div>
+
+      <div className="ui-table-wrapper">
+        <div className="sd-skel-table-head">
+          <span className="sd-skel-bar sd-skel-cell" />
+          <span className="sd-skel-bar sd-skel-cell-sm" />
+          <span className="sd-skel-bar sd-skel-cell-sm" />
+          <span className="sd-skel-bar sd-skel-cell-right" />
+        </div>
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="sd-skel-table-row">
+            <span className="sd-skel-bar sd-skel-cell" />
+            <span className="sd-skel-bar sd-skel-cell-sm" />
+            <span className="sd-skel-bar sd-skel-cell-sm" />
+            <span className="sd-skel-bar sd-skel-cell-right" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export default function ServerDetail() {
   const { id, section: sectionParam } = useParams()
   const navigate = useNavigate()
   const section: DetailSection = (DETAIL_SECTIONS as readonly string[]).includes(sectionParam || '') ? sectionParam as DetailSection : 'inbounds'
   const sid = Number(id)
+  useEffect(() => {
+    if (sectionParam === 'outbounds') navigate(`/admin/servers/${id}/rules`, { replace: true })
+    if (sectionParam === 'traffic') navigate(`/admin/servers/${id}`, { replace: true })
+    if (sectionParam === 'rulesets') navigate('/admin/rulesets', { replace: true })
+  }, [id, sectionParam, navigate])
   const [server, setServer] = useState<Server | null>(null)
+  const [trafficData, setTrafficData] = useState<TrafficSeries | null>(null)
+  const [trafficReloadKey, setTrafficReloadKey] = useState(0)
   const [pageLoading, setPageLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [sectionError, setSectionError] = useState<string | null>(null)
@@ -102,22 +174,22 @@ export default function ServerDetail() {
     saving: boolean
   } | null>(null)
 
-  // 节点格式弹窗状态
-  const [fmtOpen, setFmtOpen] = useState(false)
+  // 节点详情与编辑弹窗状态
+  const [viewingInbound, setViewingInbound] = useState<Inbound | null>(null)
+  const [serverEditOpen, setServerEditOpen] = useState(false)
+  const [serverEditSaving, setServerEditSaving] = useState(false)
+  const [serverEditForm] = Form.useForm()
+  const serverEditLockRef = useRef(false)
 
-  const [outbounds, setOutbounds] = useState<Outbound[]>([])
+  const [routingNodes, setRoutingNodes] = useState<RoutingNode[]>([])
   const [rules, setRules] = useState<RouteRule[]>([])
   const [ruleSets, setRuleSets] = useState<RuleSet[]>([])
-  const [obOpen, setObOpen] = useState(false)
-  const [obEditing, setObEditing] = useState<Outbound | null>(null)
   const [ruleOpen, setRuleOpen] = useState(false)
   const [ruleEditing, setRuleEditing] = useState<RouteRule | null>(null)
-  const [ruleSetCreate, setRuleSetCreate] = useState(0)
+  const [togglingRuleIDs, setTogglingRuleIDs] = useState<Set<number>>(() => new Set())
   const [importOpen, setImportOpen] = useState(false)
   const [importSum, setImportSum] = useState<ImportSummary | null>(null)
   const [importing, setImporting] = useState(false)
-  const [obTests, setObTests] = useState<Record<number, OutboundTest>>({})
-  const [testing, setTesting] = useState<Set<number>>(() => new Set())
 
   const loadAbortRef = useRef<AbortController | null>(null)
   const loadGenerationRef = useRef(0)
@@ -177,20 +249,20 @@ export default function ServerDetail() {
       setServer(d.server)
       setInstall(d.install_command)
       setPublicURL(d.public_url)
-      const [outboundRows, ruleRows, ruleSetRows] = await Promise.allSettled([
-        listOutbounds(targetSID, controller.signal),
+      const [nodeRows, ruleRows, ruleSetRows] = await Promise.allSettled([
+        listRoutingNodes(controller.signal, targetSID),
         listRules(targetSID, controller.signal),
-        listRuleSets(targetSID, controller.signal),
+        listRuleSets(controller.signal),
       ])
       if (generation !== loadGenerationRef.current || currentSIDRef.current !== targetSID) return
-      if (outboundRows.status === 'fulfilled') setOutbounds(outboundRows.value)
+      if (nodeRows.status === 'fulfilled') setRoutingNodes(nodeRows.value)
       if (ruleRows.status === 'fulfilled' && ruleOrderGeneration === ruleOrderGenerationRef.current) {
         ruleOrderRef.current = ruleRows.value
         setRules(ruleRows.value)
       }
       if (ruleSetRows.status === 'fulfilled') setRuleSets(ruleSetRows.value)
       const failures = [
-        outboundRows.status === 'rejected' ? `出站：${errMsg(outboundRows.reason)}` : '',
+        nodeRows.status === 'rejected' ? `节点：${errMsg(nodeRows.reason)}` : '',
         ruleRows.status === 'rejected' ? `规则：${errMsg(ruleRows.reason)}` : '',
         ruleSetRows.status === 'rejected' ? `规则集：${errMsg(ruleSetRows.reason)}` : '',
       ].filter(Boolean)
@@ -316,7 +388,8 @@ export default function ServerDetail() {
 
   useEffect(() => {
     setServer(null)
-    setOutbounds([])
+    setTrafficData(null)
+    setRoutingNodes([])
     setRules([])
     ruleOrderRef.current = []
     setRuleSets([])
@@ -325,19 +398,18 @@ export default function ServerDetail() {
     setCfgText('')
     setCfgLoading(false)
     setCfgSaving(false)
-    setFmtOpen(false)
+    setViewingInbound(null)
+    setServerEditOpen(false)
+    setServerEditSaving(false)
     setImportOpen(false)
     setImportSum(null)
     setImporting(false)
     setFormOpen(false)
     setEditing(null)
-    setObOpen(false)
-    setObEditing(null)
     setRuleOpen(false)
     setRuleEditing(null)
+    setTogglingRuleIDs(new Set())
     setBusy('')
-    setTesting(new Set())
-    setObTests({})
     void load().catch((error) => {
       if (!isCanceledRequest(error)) message.error(errMsg(error))
     })
@@ -365,6 +437,7 @@ export default function ServerDetail() {
       if (currentSIDRef.current !== targetSID) return
       await load()
       if (currentSIDRef.current !== targetSID) return
+      setTrafficReloadKey((value) => value + 1)
       if (server?.online) message.success('已从 Agent 获取最新状态')
       else message.info('节点当前离线，已刷新面板状态')
     } catch (e) {
@@ -377,7 +450,6 @@ export default function ServerDetail() {
     }
   }
 
-  const outboundTags = outbounds.map((o) => o.tag)
   const inboundTags = (server?.inbounds || []).map((i) => i.tag)
 
   const onSetFinal = (v: string) => run('final', () => setFinalOutbound(sid, v), 'final 出站已更新')
@@ -417,43 +489,12 @@ export default function ServerDetail() {
       if (currentSIDRef.current !== targetSID) return
       message.success('已导入到面板')
       setImportOpen(false)
+      setTrafficReloadKey((value) => value + 1)
       void load().catch(() => {})
     } catch (e) {
       if (currentSIDRef.current === targetSID) message.error(errMsg(e))
     } finally {
       if (currentSIDRef.current === targetSID) setImporting(false)
-    }
-  }
-
-  // Reachability is measured from the node, not from the panel.
-  const runTest = async (o: Outbound) => {
-    if (testing.has(o.id)) return
-    const targetSID = sid
-    const controller = scopedController()
-    setTesting((prev) => new Set(prev).add(o.id))
-    try {
-      const r = await testOutbound(targetSID, o.id, controller.signal)
-      if (currentSIDRef.current !== targetSID) return
-      setObTests((prev) => ({ ...prev, [o.id]: r }))
-      // Successful results stay in the fixed-width connectivity cell. This
-      // avoids a second transient notification while the administrator tests
-      // several outbounds in sequence.
-      if (r.inconclusive) {
-        message.info(`${o.tag}：${r.note || '无法直接探测端口'}`)
-      } else if (!r.ok) {
-        message.error(`${o.tag} 不通：${r.error || '连接失败'}`)
-      }
-    } catch (e) {
-      if (!controller.signal.aborted && currentSIDRef.current === targetSID) message.error(errMsg(e))
-    } finally {
-      releaseScopedController(controller)
-      if (currentSIDRef.current === targetSID) {
-        setTesting((prev) => {
-          const next = new Set(prev)
-          next.delete(o.id)
-          return next
-        })
-      }
     }
   }
 
@@ -611,21 +652,6 @@ export default function ServerDetail() {
     })
   }
 
-  const onDeleteOutbound = (o: Outbound) => {
-    const targetSID = sid
-    return Modal.confirm({
-      title: '删除出站',
-      content: `确认删除「${o.tag}」？`,
-      okType: 'danger',
-      okText: '删除',
-      cancelText: '取消',
-      onOk: () => {
-        if (currentSIDRef.current !== targetSID) return
-        applyWithToast(`outbound-del-${o.id}`, () => deleteOutbound(targetSID, o.id)).then(loadCurrentServer)
-      },
-    })
-  }
-
   const onDeleteRule = (r: RouteRule) => {
     const targetSID = sid
     return Modal.confirm({
@@ -641,6 +667,42 @@ export default function ServerDetail() {
     })
   }
 
+  const onToggleRule = async (r: RouteRule, enabled: boolean) => {
+    const targetSID = sid
+    if (currentSIDRef.current !== targetSID || togglingRuleIDs.has(r.id)) return
+    setTogglingRuleIDs((prev) => new Set(prev).add(r.id))
+    const patchRules = (list: RouteRule[], nextEnabled: boolean) =>
+      list.map((item) => (item.id === r.id ? { ...item, enabled: nextEnabled } : item))
+    ruleOrderRef.current = patchRules(ruleOrderRef.current, enabled)
+    setRules((prev) => patchRules(prev, enabled))
+    try {
+      const saved = await applyWithToast(`rule-toggle-${r.id}`, () =>
+        updateRule(targetSID, r.id, {
+          match: r.match,
+          outbound: r.outbound,
+          remark: r.remark || '',
+          sort: r.sort,
+          enabled,
+        }),
+      )
+      if (currentSIDRef.current !== targetSID) return
+      if (!saved) {
+        ruleOrderRef.current = patchRules(ruleOrderRef.current, r.enabled)
+        setRules((prev) => patchRules(prev, r.enabled))
+      } else {
+        loadCurrentServer()
+      }
+    } finally {
+      if (currentSIDRef.current === targetSID) {
+        setTogglingRuleIDs((prev) => {
+          const next = new Set(prev)
+          next.delete(r.id)
+          return next
+        })
+      }
+    }
+  }
+
   const run = async (label: string, fn: () => Promise<unknown>, ok = '操作完成') => {
     const targetSID = sid
     if (currentSIDRef.current !== targetSID) return
@@ -650,6 +712,7 @@ export default function ServerDetail() {
       if (currentSIDRef.current !== targetSID) return
       if (isConfigApplyResult(result)) showConfigApplyResult(result)
       else message.success(ok)
+      setTrafficReloadKey((value) => value + 1)
       void load().catch(() => {})
     } catch (e) {
       if (currentSIDRef.current === targetSID) message.error(errMsg(e))
@@ -727,6 +790,7 @@ export default function ServerDetail() {
         message.warning({ content: `安全提醒：${warning}`, duration: 10 })
       }
       closeConfigEditor()
+      setTrafficReloadKey((value) => value + 1)
       void load().catch(() => {})
     } catch (e) {
       if (isCurrentSession()) message.error(errMsg(e))
@@ -740,28 +804,77 @@ export default function ServerDetail() {
 
   const loadCurrentServer = () => {
     if (currentSIDRef.current !== sid) return
+    setTrafficReloadKey((value) => value + 1)
     void load().catch((error) => {
       if (!isCanceledRequest(error)) message.error(errMsg(error))
     })
   }
 
+  const openEditServer = () => {
+    if (!server) return
+    serverEditForm.resetFields()
+    serverEditForm.setFieldsValue({
+      name: server.name,
+      address: server.address,
+      remark: server.remark,
+      traffic_reset_day: server.traffic_reset_day ?? 1,
+    })
+    setServerEditOpen(true)
+  }
 
+  const submitEditServer = async () => {
+    if (serverEditLockRef.current) return
+    const targetSID = sid
+    serverEditLockRef.current = true
+    setServerEditSaving(true)
+    try {
+      const values = await serverEditForm.validateFields()
+      await updateServer(targetSID, values)
+      if (currentSIDRef.current !== targetSID) return
+      message.success('已保存')
+      setServerEditOpen(false)
+      setTrafficReloadKey((value) => value + 1)
+      loadCurrentServer()
+    } catch (e) {
+      if (currentSIDRef.current === targetSID) message.error(errMsg(e))
+    } finally {
+      serverEditLockRef.current = false
+      if (currentSIDRef.current === targetSID) setServerEditSaving(false)
+    }
+  }
+
+
+
+  const { portTrafficById, portTrafficByTag } = useMemo(() => {
+    const byId = new Map<number, { upload: number; download: number }>()
+    const byTag = new Map<string, { upload: number; download: number }>()
+    for (const port of trafficData?.ports ?? []) {
+      const entry = { upload: port.upload, download: port.download }
+      byId.set(port.inbound_id, entry)
+      if (port.tag) byTag.set(port.tag, entry)
+    }
+    return { portTrafficById: byId, portTrafficByTag: byTag }
+  }, [trafficData])
+  const getInboundTraffic = (ib: Inbound) => portTrafficById.get(ib.id) ?? portTrafficByTag.get(ib.tag)
 
   if (!server) {
-    return <RequestState loading={pageLoading} error={loadError} hasData={false} onRetry={loadCurrentServer}><span /></RequestState>
+    if (pageLoading) return <ServerDetailSkeleton />
+    return <RequestState loading={false} error={loadError} hasData={false} onRetry={loadCurrentServer}><span /></RequestState>
   }
   const rawMode = server.config_mode === 'raw'
   const finalOutbound = server.final_outbound || 'direct'
-  const memPct = server.mem_total ? Math.round((server.mem_used / server.mem_total) * 100) : null
+  const trafficAvailable = !!trafficData && (!!trafficData.available || !!trafficData.updated_at)
+  const unattributedUpload = trafficData?.unattributed_upload ?? 0
+  const unattributedDownload = trafficData?.unattributed_download ?? 0
   const goSection = (key: string) => navigate(key === 'inbounds' ? `/admin/servers/${sid}` : `/admin/servers/${sid}/${key}`)
   const addButton: Record<DetailSection, ReactNode> = {
     inbounds: <Button type="primary" icon={<Plus />} disabled={rawMode} onClick={() => { setEditing(null); setFormOpen(true) }}>新增入站</Button>,
-    outbounds: <Button type="primary" icon={<Plus />} disabled={rawMode} onClick={() => { setObEditing(null); setObOpen(true) }}>新增出站</Button>,
     rules: <Button type="primary" icon={<Plus />} disabled={rawMode} onClick={() => { setRuleEditing(null); setRuleOpen(true) }}>新增规则</Button>,
-    rulesets: <Button type="primary" icon={<Plus />} disabled={rawMode} onClick={() => setRuleSetCreate((n) => n + 1)}>新增规则集</Button>,
+    logs: null,
   }
-  const rowActions = (onEdit: () => void, onDelete: () => void, label: string) => (
+  const rowActions = (onEdit: () => void, onDelete: () => void, label: string, onView?: () => void) => (
     <span className="ui-row-actions">
+      {onView && <Button size="small" type="text" icon={<Eye />} title="查看详情" aria-label={`查看 ${label}`} onClick={onView} />}
       <Button size="small" type="text" icon={<Pencil />} aria-label={`编辑 ${label}`} disabled={rawMode} onClick={onEdit} />
       <Button size="small" type="text" icon={<Trash2 />} aria-label={`删除 ${label}`} disabled={rawMode} onClick={onDelete} />
     </span>
@@ -769,58 +882,68 @@ export default function ServerDetail() {
 
   const inboundTable = (
     <Table
+      className="tr-port-table"
       rowKey="id"
-      scroll={{ x: 560 }}
+      scroll={{ x: 760 }}
       dataSource={server.inbounds || []}
       locale={{ emptyText: '暂无入站' }}
       rowClassName={(ib: Inbound) => (ib.enabled === false ? 'is-disabled' : '')}
       columns={[
         { title: '标签', dataIndex: 'tag', render: (v: string) => <span className="sd-strong">{v}</span> },
         { title: '协议', dataIndex: 'type', render: (v: string) => <ProtocolTag type={v} /> },
-        { title: '端口', dataIndex: 'listen_port', render: (v: number) => <span className="mono">{v}</span> },
+        { title: '端口', dataIndex: 'listen_port', sorter: (a: Inbound, b: Inbound) => a.listen_port - b.listen_port, render: (v: number) => <span className="mono">{v}</span> },
         { title: '用户', render: (_, ib: Inbound) => <span className="muted">{ib.settings?.multi_user ? '多用户' : '单用户'}</span> },
-        { title: '', width: 88, align: 'right', render: (_, ib: Inbound) => rowActions(() => { setEditing(ib); setFormOpen(true) }, () => onDeleteInbound(ib), `入站 ${ib.tag}`) },
-      ]}
-    />
-  )
-
-  const outboundTable = (
-    <Table
-      rowKey="id"
-      tableLayout="fixed"
-      scroll={{ x: 720 }}
-      dataSource={outbounds}
-      locale={{ emptyText: '暂无出站' }}
-      columns={[
-        { title: '标签', dataIndex: 'tag', width: 160, ellipsis: true, render: (v: string) => <span className="sd-strong">{v}</span> },
-        { title: '类型', dataIndex: 'type', width: 120, render: (v: string) => <ProtocolTag type={v} /> },
-        { title: '地址', width: 240, ellipsis: true, render: (_, o: Outbound) => <span className="mono">{`${o.settings?.server || '—'}:${o.settings?.server_port || ''}`}</span> },
         {
-          title: '连通性',
-          width: 150,
-          render: (_, o: Outbound) => {
-            const t = obTests[o.id]
-            const isTesting = testing.has(o.id)
-            return (
-              <span className="sd-test">
-                <span className="sd-test-result">
-                  {isTesting
-                    ? <span className="faint">测试中…</span>
-                    : !t
-                      ? <span className="faint">—</span>
-                      : t.ok
-                        ? <Status tone="ok">{t.latency_ms} ms</Status>
-                        : t.inconclusive
-                          ? <span title={t.note}><Status tone="warn">仅解析</Status></span>
-                          : <span title={t.error}><Status tone="error">不通</Status></span>}
-                </span>
-                <Button size="small" type="text" icon={<RotateCw />} loading={isTesting} onClick={() => void runTest(o)} aria-label={`测试 ${o.tag} 连通性`} />
-              </span>
-            )
+          title: '下载',
+          align: 'right',
+          sorter: (a: Inbound, b: Inbound) => (getInboundTraffic(a)?.download ?? 0) - (getInboundTraffic(b)?.download ?? 0),
+          render: (_, ib: Inbound) => <span className="mono">{trafficAvailable ? formatBytes(getInboundTraffic(ib)?.download ?? 0) : '—'}</span>,
+        },
+        {
+          title: '上传',
+          align: 'right',
+          sorter: (a: Inbound, b: Inbound) => (getInboundTraffic(a)?.upload ?? 0) - (getInboundTraffic(b)?.upload ?? 0),
+          render: (_, ib: Inbound) => <span className="mono muted">{trafficAvailable ? formatBytes(getInboundTraffic(ib)?.upload ?? 0) : '—'}</span>,
+        },
+        {
+          title: '合计',
+          align: 'right',
+          sorter: (a: Inbound, b: Inbound) => {
+            const totalA = (getInboundTraffic(a)?.upload ?? 0) + (getInboundTraffic(a)?.download ?? 0)
+            const totalB = (getInboundTraffic(b)?.upload ?? 0) + (getInboundTraffic(b)?.download ?? 0)
+            return totalA - totalB
+          },
+          render: (_, ib: Inbound) => {
+            const traffic = getInboundTraffic(ib)
+            return <span className="mono sd-strong">{trafficAvailable ? formatBytes((traffic?.upload ?? 0) + (traffic?.download ?? 0)) : '—'}</span>
           },
         },
-        { title: '', width: 88, align: 'right', render: (_, o: Outbound) => rowActions(() => { setObEditing(o); setObOpen(true) }, () => onDeleteOutbound(o), `出站 ${o.tag}`) },
+        {
+          title: '',
+          width: 112,
+          align: 'right',
+          render: (_, ib: Inbound) => rowActions(
+            () => { setEditing(ib); setFormOpen(true) },
+            () => onDeleteInbound(ib),
+            `入站 ${ib.tag}`,
+            () => setViewingInbound(ib),
+          ),
+        },
       ]}
+      summary={() => (trafficAvailable && unattributedUpload + unattributedDownload > 0 ? (
+        <Table.Summary fixed>
+          <Table.Summary.Row className="tr-summary-row">
+            <Table.Summary.Cell index={0}><span className="muted">未归属</span></Table.Summary.Cell>
+            <Table.Summary.Cell index={1}><span className="faint">—</span></Table.Summary.Cell>
+            <Table.Summary.Cell index={2}><span className="faint">—</span></Table.Summary.Cell>
+            <Table.Summary.Cell index={3}><span className="faint">—</span></Table.Summary.Cell>
+            <Table.Summary.Cell index={4} align="right"><span className="mono">{formatBytes(unattributedDownload)}</span></Table.Summary.Cell>
+            <Table.Summary.Cell index={5} align="right"><span className="mono muted">{formatBytes(unattributedUpload)}</span></Table.Summary.Cell>
+            <Table.Summary.Cell index={6} align="right"><span className="mono sd-strong">{formatBytes(unattributedUpload + unattributedDownload)}</span></Table.Summary.Cell>
+            <Table.Summary.Cell index={7} />
+          </Table.Summary.Row>
+        </Table.Summary>
+      ) : null)}
     />
   )
 
@@ -842,7 +965,8 @@ export default function ServerDetail() {
     if (act === 'reject' || v === 'block' || v === 'reject') return r.match?.method === 'drop' ? '静默丢弃' : '快速拒绝'
     if (act === 'sniff' || v === 'sniff') return 'sniff'
     if (act === 'hijack-dns' || v === 'hijack-dns') return 'hijack-dns'
-    return v
+    if (v === 'direct') return 'Direct · 直出'
+    return routingNodes.find((node) => node.tag === v)?.name || v
   }
 
   const rulesTable = (
@@ -901,38 +1025,49 @@ export default function ServerDetail() {
           },
           { title: '匹配', render: (_, r: RouteRule) => <span className="sd-chips">{matchChips(r)}</span> },
           { title: '出站', width: 160, render: (_, r: RouteRule) => <span className="mono">{ruleTarget(r)}</span> },
-          { title: '状态', dataIndex: 'enabled', width: 90, render: (v: boolean) => <Status tone={v ? 'ok' : 'off'}>{v ? '启用' : '停用'}</Status> },
+          { title: '备注', dataIndex: 'remark', width: 180, render: (v: string) => v ? <span className="muted">{v}</span> : <span className="faint">—</span> },
+          {
+            title: '状态',
+            dataIndex: 'enabled',
+            width: 90,
+            render: (v: boolean, r: RouteRule) => (
+              <Switch
+                size="small"
+                checked={v}
+                disabled={rawMode || togglingRuleIDs.has(r.id)}
+                aria-label={`${v ? '停用' : '启用'}规则 ${r.remark || r.id}`}
+                onChange={(checked) => void onToggleRule(r, checked)}
+              />
+            ),
+          },
           { title: '', width: 88, align: 'right', render: (_, r: RouteRule) => rowActions(() => { setRuleEditing(r); setRuleOpen(true) }, () => onDeleteRule(r), `规则 ${r.id}`) },
         ]}
       />
       <div className="sd-final">
-        <span>其余流量</span>
+        <span>默认出站流量</span>
         <Select
           size="small"
-          aria-label="兜底出站"
+          aria-label="默认出站流量"
+          showSearch
           value={finalOutbound}
           disabled={rawMode || busy === 'final'}
           loading={busy === 'final'}
           popupMatchSelectWidth={false}
           onChange={(v) => { if (v !== finalOutbound) void onSetFinal(v) }}
-          options={[...new Set(['direct', finalOutbound, ...outboundTags])].map((tag) => ({ value: tag, label: tag }))}
+          options={[...new Set(['direct', finalOutbound, ...routingNodes.map((node) => node.tag)])].map((tag) => ({
+            value: tag,
+            label: tag === 'direct' ? 'Direct · 直出' : (routingNodes.find((node) => node.tag === tag)?.name || tag),
+          }))}
         />
       </div>
     </>
   )
 
-  const ruleSetView = (
-    <RuleSetsTab
-      key={sid}
-      serverId={sid}
-      ruleSets={ruleSets}
-      outbounds={outbounds}
-      onRefresh={loadCurrentServer}
-      rawMode={rawMode}
-      createSignal={ruleSetCreate}
-    />
-  )
-  const views: Record<DetailSection, ReactNode> = { inbounds: inboundTable, outbounds: outboundTable, rules: rulesTable, rulesets: ruleSetView }
+  const views: Record<DetailSection, ReactNode> = {
+    inbounds: inboundTable,
+    rules: rulesTable,
+    logs: <Logs key={sid} serverId={sid} serverOnline={server.online} />,
+  }
 
   return (
     <RequestState loading={pageLoading} error={loadError || sectionError} hasData onRetry={loadCurrentServer}>
@@ -943,6 +1078,7 @@ export default function ServerDetail() {
         busy={busy}
         refreshing={refreshing}
         onRefresh={refresh}
+        onEditServer={openEditServer}
         onInstallSingbox={() => setInstallOpen(true)}
         onUninstallSingbox={confirmUninstallSingbox}
         onInstallAgent={installOrUpgradeAgent}
@@ -950,15 +1086,15 @@ export default function ServerDetail() {
         onImport={openImport}
         onEditConfig={openConfigEditor}
         onRestart={() => run('restart', () => serviceAction(sid, 'restart'), 'sing-box 已重启')}
-        onExport={() => setFmtOpen(true)}
       />
 
-      <Stats items={[
-        { label: '下行速率', value: server.online && server.traffic_available ? `${formatBytes(server.traffic_download_rate ?? 0)}/s` : '—' },
-        { label: '上行速率', value: server.online && server.traffic_available ? `${formatBytes(server.traffic_upload_rate ?? 0)}/s` : '—' },
-        { label: '负载', value: server.online ? server.load1?.toFixed(2) : '—' },
-        { label: '内存', value: server.online && memPct !== null ? `${memPct}%` : '—', hint: server.online && server.mem_total ? `${formatBytes(server.mem_used)} / ${formatBytes(server.mem_total)}` : undefined },
-      ]} />
+      <ServerTraffic
+        key={sid}
+        serverId={sid}
+        server={server}
+        reloadKey={trafficReloadKey}
+        onDataChange={setTrafficData}
+      />
 
       {rawMode && (
         <Alert
@@ -977,9 +1113,8 @@ export default function ServerDetail() {
         actions={addButton[section]}
         items={[
           { key: 'inbounds', label: '入站', count: server.inbounds?.length || 0 },
-          { key: 'outbounds', label: '出站', count: outbounds.length },
           { key: 'rules', label: '路由', count: rules.length },
-          { key: 'rulesets', label: '规则集', count: ruleSets.length },
+          { key: 'logs', label: '日志' },
         ]}
       />
       {views[section]}
@@ -993,20 +1128,11 @@ export default function ServerDetail() {
         onSaved={loadCurrentServer}
       />
 
-      <OutboundForm
-        key={`outbound-${sid}`}
-        serverId={sid}
-        outbound={obEditing}
-        open={obOpen}
-        onClose={() => setObOpen(false)}
-        onSaved={loadCurrentServer}
-      />
-
       <RuleForm
         key={`rule-${sid}`}
         serverId={sid}
         rule={ruleEditing}
-        outboundTags={outboundTags}
+        routingNodes={routingNodes}
         inboundTags={inboundTags}
         ruleSets={ruleSets}
         open={ruleOpen}
@@ -1040,7 +1166,22 @@ export default function ServerDetail() {
         onConfirm={doInstall}
       />
 
-      <NodeFormatsExportModal serverId={sid} open={fmtOpen} onCancel={() => setFmtOpen(false)} />
+      <ServerEditModal
+        title={`编辑 ${server.name}`}
+        open={serverEditOpen}
+        saving={serverEditSaving}
+        form={serverEditForm}
+        onCancel={() => setServerEditOpen(false)}
+        onConfirm={submitEditServer}
+      />
+
+      <NodeFormatsExportModal
+        serverId={sid}
+        open={!!viewingInbound}
+        inboundTag={viewingInbound?.tag}
+        multiUser={Boolean(viewingInbound?.settings?.multi_user)}
+        onCancel={() => setViewingInbound(null)}
+      />
 
       <span id="rule-sort-help" className="sr-only">使用上方向键或下方向键调整规则顺序</span>
       <div className="sr-only" aria-live="polite" aria-atomic="true">{sortAnnouncement}</div>

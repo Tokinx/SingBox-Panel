@@ -1,18 +1,17 @@
-/* Design A — 流量 (/admin/traffic) and 日志 (/admin/logs). */
+/* Design A — 服务器流量概览与日志 (/admin/servers/:id). */
 
 /* ---------- Shared header controls ---------- */
 .tr-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
-.tr-server-select { width: 220px; }
-.tr-server-option, .lg-server-option { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
-.tr-server-option .faint, .lg-server-option .faint { font-size: 12px; }
 
 /* ---------- 流量 ---------- */
-.tr-page { min-width: 0; }
-.tr-range { flex: none; }
+.tr-overview { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-bottom: 32px; min-width: 0; }
+.tr-overview > .ui-stats, .tr-overview > .tr-grid { margin-bottom: 0; }
+.tr-range.ui-segmented { flex: none; padding: 2px; gap: 1px; border-radius: 6px; }
+.tr-range .ui-segmented-item { height: 20px; padding: 0 4px; border-radius: 4px; font-size: 12px; line-height: 20px; }
 .tr-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-bottom: 32px; }
 .tr-panel { min-width: 0; padding: 16px 20px 12px; }
-.tr-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 24px; }
-.tr-panel-head h3 { display: inline-flex; align-items: baseline; gap: 8px; margin: 0; font-size: 14px; font-weight: 600; color: var(--console-ink); }
+.tr-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 26px; }
+.tr-panel-head h3 { display: inline-flex; align-items: baseline; gap: 8px; margin: 0; font-size: 14px; line-height: 20px; font-weight: 600; color: var(--console-ink); }
 .tr-panel-note { color: var(--console-faint); font-size: 12px; font-weight: 400; }
 .tr-legend { display: inline-flex; align-items: center; gap: 14px; color: var(--console-muted); font-size: 12px; }
 .tr-legend span { display: inline-flex; align-items: center; gap: 6px; }
@@ -152,27 +151,27 @@
 .lg-line:hover .lg-copy-button, .lg-copy-button:focus-visible { opacity: 1; }
 .lg-copy-button:hover { background: var(--console-selected); color: var(--console-ink); }
 .lg-copy-button:focus-visible { outline: 2px solid var(--console-focus); outline-offset: 1px; }
-.lg-jump-latest { position: absolute; right: 16px; top: 14px; z-index: 2; box-shadow: 0 6px 20px rgb(0 0 0 / 18%); }
+.lg-jump-latest { position: absolute; right: 16px; top: 44px; z-index: 4; box-shadow: 0 6px 20px rgb(0 0 0 / 18%); }
 
 /* ---------- Mobile ---------- */
 @media (max-width: 1023px) {
   .tr-grid { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 767px) {
-  .tr-page .ui-page-actions, .tr-actions { width: 100%; }
-  .tr-server-select { flex: 1 1 0; width: auto; min-width: 0; }
   .tr-panel { padding: 14px 14px 8px; }
   .tr-chart svg { height: 220px; }
 
   .lg-toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .lg-server-select, .lg-search { grid-column: 1 / -1; width: 100%; min-width: 0; max-width: none; }
   .lg-filter-select { width: 100%; min-width: 0; }
-  .lg-toggle { grid-column: 1 / -1; margin-left: 0; padding: 2px 0; }
+  .lg-toggle { grid-column: 1; margin-left: 0; padding: 2px 0; }
+  .lg-toolbar > .ui-btn { grid-column: 2; justify-self: end; }
   .lg-statusbar { padding-left: 12px; }
   .lg-count { display: none; }
   .lg-viewer, .lg-empty { height: clamp(320px, calc(60 * var(--dvh)), 600px); }
   /* The header strip is desktop-only; phones keep the two-line card rows. */
   .lg-thead { display: none; }
+  .lg-jump-latest { top: 12px; right: 14px; }
   .lg-line { padding: 6px 12px; border-bottom: 1px solid var(--console-border); }
   /* Two-line cards: time, direction, protocol/tag, user on the first line,
      the target and its error text below. */

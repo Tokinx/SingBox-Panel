@@ -18,7 +18,7 @@ func TestRuleSetSourceMatchAPIAndConfig(t *testing.T) {
 	mustCreate(t, db, &server)
 	mustCreate(t, db, &model.Inbound{ServerID: server.ID, Tag: "dmit-in", Type: model.InboundSocks,
 		ListenPort: 1080, Enabled: true, Settings: model.JSONText(`{"username":"test","password":"test"}`)})
-	ruleSet := model.RuleSet{ServerID: server.ID, Tag: "geoip-cn", Type: "local", Format: "source", Path: "/etc/sing-box/cn.json"}
+	ruleSet := model.RuleSet{Tag: "geoip-cn", Type: "local", Format: "source", Path: "/etc/sing-box/cn.json"}
 	mustCreate(t, db, &ruleSet)
 	app := &App{db: db, orch: NewOrchestrator(db, NewHub(db))}
 	router := gin.New()
@@ -44,7 +44,7 @@ func TestRuleSetSourceMatchAPIAndConfig(t *testing.T) {
 	if err := db.Model(&ruleSet).Update("tag", "cn-renamed").Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := renameRuleSetRefs(db, server.ID, "geoip-cn", "cn-renamed"); err != nil {
+	if err := renameRuleSetRefs(db, 0, "geoip-cn", "cn-renamed"); err != nil {
 		t.Fatal(err)
 	}
 	raw, err := app.orch.BuildServerConfig(&server)

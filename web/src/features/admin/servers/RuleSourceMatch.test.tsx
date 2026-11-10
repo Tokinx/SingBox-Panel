@@ -26,8 +26,8 @@ const sourceRejectRule: RouteRule = {
 }
 
 function renderRule(rule: RouteRule | null = null) {
-  return render(<RuleForm serverId={1} rule={rule} outboundTags={[]} inboundTags={['dmit-in']}
-    ruleSets={[{ id: 1, server_id: 1, tag: 'geoip-cn', type: 'remote', format: 'binary', url: 'https://example.com/cn.srs' }]}
+  return render(<RuleForm serverId={1} rule={rule} routingNodes={[]} inboundTags={['dmit-in']}
+    ruleSets={[{ id: 1, tag: 'geoip-cn', type: 'remote', format: 'binary', url: 'https://example.com/cn.srs' }]}
     open onClose={vi.fn()} onSaved={vi.fn()} />)
 }
 
