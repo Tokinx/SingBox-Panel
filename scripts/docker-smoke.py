@@ -178,13 +178,20 @@ def main():
             while time.monotonic() < deadline:
                 after = command("docker", "inspect", "--format", "{{.RestartCount}}", container)
                 if after != before:
-                    # Ephemeral published ports can change after a Docker restart.
-                    base = "http://" + compose("port", "panel", "8080")
+                    # Ephemeral published ports are re-created after a restart.
+                    # docker compose port can be empty for a short window while
+                    # the container is running but the mapping is not ready yet.
                     try:
-                        if api("/api/ready")["ok"]:
-                            break
-                    except (URLError, OSError, AssertionError):
-                        pass
+                        published = compose("port", "panel", "8080")
+                    except subprocess.CalledProcessError:
+                        published = ""
+                    if published:
+                        base = "http://" + published
+                        try:
+                            if api("/api/ready")["ok"]:
+                                break
+                        except (URLError, OSError, AssertionError):
+                            pass
                 time.sleep(1)
             else:
                 raise AssertionError("restore did not restart the container and become ready")
