@@ -59,8 +59,8 @@ func (s InboundSettings) validateRealityGuard(typ string) error {
 		return fmt.Errorf("REALITY 前置入站标签不能包含首尾空白或控制字符")
 	}
 	if g.SniffTimeout != "" {
-		if d, err := time.ParseDuration(g.SniffTimeout); err != nil || d <= 0 {
-			return fmt.Errorf("SNI 嗅探超时必须为正时长，例如 300ms")
+		if d, err := time.ParseDuration(g.SniffTimeout); err != nil || d < 0 {
+			return fmt.Errorf("SNI 嗅探超时必须为非负时长，例如 300ms")
 		}
 	}
 	clientName := s.TLS.ServerName

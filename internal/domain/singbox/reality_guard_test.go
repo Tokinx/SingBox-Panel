@@ -43,6 +43,41 @@ func TestRealityMaxTimeDifferenceDefaultAndExplicitZero(t *testing.T) {
 	}
 }
 
+func TestRealityGuardSniffTimeoutDefaultAndExplicitZero(t *testing.T) {
+	for _, tc := range []struct {
+		name, value, want string
+	}{
+		{"missing", "", "300ms"},
+		{"zero", "0", "0"},
+		{"zero milliseconds", "0ms", "0ms"},
+		{"custom", "500ms", "500ms"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := testGuardInbound()
+			in.Settings.TLS.Reality.Guard.SniffTimeout = tc.value
+			raw, err := BuildServerConfig(ServerConfigInput{Inbounds: []InboundInput{in}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var root map[string]any
+			if err := json.Unmarshal(raw, &root); err != nil {
+				t.Fatal(err)
+			}
+			sniff := mSlice(mMap(root, "route"), "rules")[0].(map[string]any)
+			if got := mStr(sniff, "timeout"); got != tc.want {
+				t.Fatalf("sniff timeout = %q, want %q", got, tc.want)
+			}
+			parsed, err := ParseServerConfig(raw)
+			if err != nil || len(parsed.Inbounds) != 1 || parsed.Inbounds[0].Settings.TLS.Reality.Guard == nil {
+				t.Fatalf("parse generated guard: %+v, %v", parsed, err)
+			}
+			if got := parsed.Inbounds[0].Settings.TLS.Reality.Guard.SniffTimeout; got != tc.want {
+				t.Fatalf("parsed sniff timeout = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRealityGuardBuildKeepsPublicSubscriptionAndLocalIdentity(t *testing.T) {
 	in := testGuardInbound()
 	raw, err := BuildServerConfig(ServerConfigInput{Inbounds: []InboundInput{in}, StatsController: "127.0.0.1:29091", StatsSecret: "secret"})
@@ -149,7 +184,7 @@ func TestRealityGuardRejectsInvalidSettings(t *testing.T) {
 		"wildcard":                 func(in *InboundInput) { in.Settings.TLS.Reality.Guard.ServerNames = []string{"*.apple.com"} },
 		"IP SNI":                   func(in *InboundInput) { in.Settings.TLS.Reality.Guard.ServerNames = []string{"127.0.0.1"} },
 		"bad timeout":              func(in *InboundInput) { in.Settings.TLS.Reality.Guard.SniffTimeout = "slow" },
-		"zero timeout":             func(in *InboundInput) { in.Settings.TLS.Reality.Guard.SniffTimeout = "0s" },
+		"negative timeout":         func(in *InboundInput) { in.Settings.TLS.Reality.Guard.SniffTimeout = "-1ms" },
 		"negative time difference": func(in *InboundInput) { in.Settings.TLS.Reality.MaxTimeDifference = "-1m" },
 	}
 	for name, mutate := range cases {

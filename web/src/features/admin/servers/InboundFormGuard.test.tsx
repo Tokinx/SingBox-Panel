@@ -64,6 +64,7 @@ describe('REALITY front SNI guard form', () => {
     fireEvent.click(await screen.findByRole('option', { name: 'vless' }))
 
     expect((screen.getByLabelText('握手端口') as HTMLInputElement).value).toBe('443')
+    expect((screen.getByLabelText('ALPN') as HTMLInputElement).value).toBe('h2, http/1.1')
     expect((screen.getByLabelText('最大时间差') as HTMLInputElement).value).toBe('1m')
     expect(screen.queryByText('留空不检查客户端时间差')).toBeNull()
     expect(screen.queryByText('留空沿用握手域名')).toBeNull()
@@ -79,6 +80,7 @@ describe('REALITY front SNI guard form', () => {
     await waitFor(() => expect(createInbound).toHaveBeenCalledOnce())
     expect(vi.mocked(createInbound).mock.calls[0][1].settings?.tls).toMatchObject({
       server_name: 'www.apple.com',
+      alpn: ['h2', 'http/1.1'],
       fingerprint: 'chrome',
       reality: {
         handshake_server_port: 443,
@@ -87,6 +89,43 @@ describe('REALITY front SNI guard form', () => {
       },
     })
     expect(vi.mocked(createInbound).mock.calls[0][1].settings?.tls?.reality?.guard?.server_names).toBeUndefined()
+  })
+
+  it('updates ALPN defaults when switching protocol and transport while keeping custom values', async () => {
+    render(<InboundForm serverId={1} inbound={null} open onClose={vi.fn()} onSaved={vi.fn()} />)
+    const chooseProtocol = async (value: string) => {
+      fireEvent.click(screen.getByLabelText(/^协议/))
+      fireEvent.click(await screen.findByRole('option', { name: value }))
+      // Let Radix restore focus before opening another dropdown.
+      await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText(/^协议/)))
+    }
+    const chooseTransport = async (value: string) => {
+      fireEvent.click(screen.getByLabelText('传输层'))
+      fireEvent.click(await screen.findByRole('option', { name: value }))
+      await waitFor(() => expect(screen.getByLabelText('传输层').textContent).toContain(value))
+      await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText('传输层')))
+    }
+    const alpn = () => (screen.getByLabelText('ALPN') as HTMLInputElement).value
+
+    await chooseProtocol('tuic')
+    expect(alpn()).toBe('h3')
+    await chooseProtocol('hysteria2')
+    expect(alpn()).toBe('h3')
+    await chooseProtocol('vless')
+    expect(alpn()).toBe('h2, http/1.1')
+    fireEvent.click(screen.getByText('传输'))
+    await chooseTransport('WebSocket')
+    expect(alpn()).toBe('http/1.1')
+    await chooseTransport('HTTPUpgrade')
+    expect(alpn()).toBe('http/1.1')
+    await chooseTransport('TCP')
+    expect(alpn()).toBe('h2, http/1.1')
+
+    fireEvent.change(screen.getByLabelText('ALPN'), { target: { value: 'custom-alpn' } })
+    await chooseTransport('WebSocket')
+    expect(alpn()).toBe('custom-alpn')
+    await chooseProtocol('trojan')
+    expect(alpn()).toBe('custom-alpn')
   })
 
   it('updates empty SNI placeholders with the effective handshake domain', async () => {
@@ -106,6 +145,23 @@ describe('REALITY front SNI guard form', () => {
     expect(whitelist.placeholder).toBe('cdn.example.com')
     fireEvent.change(sni, { target: { value: '' } })
     expect(whitelist.placeholder).toBe('new.example.com')
+  })
+
+  it.each([
+    ['', '300ms'],
+    ['0', '0'],
+    ['0ms', '0ms'],
+  ])('saves sniff timeout %s as %s without the default hint', async (value, expected) => {
+    render(<InboundForm serverId={1} inbound={realityInbound} open onClose={vi.fn()} onSaved={vi.fn()} />)
+    fireEvent.click(await screen.findByLabelText('前置 SNI 过滤'))
+    const timeout = screen.getByLabelText('嗅探超时') as HTMLInputElement
+    expect(timeout.value).toBe('300ms')
+    expect(screen.queryByText('留空使用 sing-box 默认值（300ms）')).toBeNull()
+    fireEvent.change(timeout, { target: { value } })
+    save()
+
+    await waitFor(() => expect(updateInbound).toHaveBeenCalledOnce())
+    expect(vi.mocked(updateInbound).mock.calls[0][2].settings?.tls?.reality?.guard?.sniff_timeout).toBe(expected)
   })
 
   it('skips public, internal and reserved ports and keeps a manual port on re-enable', async () => {

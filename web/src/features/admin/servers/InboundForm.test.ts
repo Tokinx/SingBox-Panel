@@ -79,6 +79,40 @@ describe('inbound form round trip', () => {
   })
 })
 
+describe('inbound ALPN defaults', () => {
+  it.each([
+    ['vless', 'tcp', 'h2, http/1.1'],
+    ['vmess', 'tcp', 'h2, http/1.1'],
+    ['trojan', 'tcp', 'h2, http/1.1'],
+    ['anytls', 'tcp', 'h2, http/1.1'],
+    ['hysteria2', 'tcp', 'h3'],
+    ['tuic', 'tcp', 'h3'],
+    ['vless', 'ws', 'http/1.1'],
+    ['vmess', 'httpupgrade', 'http/1.1'],
+    ['trojan', 'ws', 'http/1.1'],
+    ['shadowsocks', 'tcp', undefined],
+    ['snell', 'tcp', undefined],
+    ['socks', 'tcp', undefined],
+  ] as const)('presets %s over %s to %s', (type, transport, expected) => {
+    const item: Inbound = { ...inbound, type, settings: {
+      tls: { enabled: true }, transport: { type: transport },
+    } }
+    const values = toForm(item)
+    expect(values.tls_alpn).toBe(expected)
+    const saved = assembleSettings(item.settings, { ...values, tls_mode: 'tls' }, type)
+    expect(saved.tls?.alpn).toEqual(expected?.split(', '))
+  })
+
+  it('keeps a saved custom ALPN list and order', () => {
+    const item: Inbound = { ...inbound, type: 'tuic', settings: {
+      tls: { enabled: true, alpn: ['custom', 'h3'] },
+    } }
+    const values = toForm(item)
+    expect(values.tls_alpn).toBe('custom, h3')
+    expect(assembleSettings(item.settings, values, item.type).tls?.alpn).toEqual(['custom', 'h3'])
+  })
+})
+
 const realityInbound = {
   id: 2, server_id: 1, type: 'vless', tag: 'reality', listen_port: 443, enabled: true, remark: '',
   created_at: '2026-09-06T00:00:00Z', updated_at: '2026-09-06T00:00:00Z',
@@ -196,9 +230,16 @@ describe('REALITY front SNI guard', () => {
     expect(toForm({ ...realityInbound, settings: saved }).reality_max_time_difference).toBe('0')
   })
 
-  it('omits an empty sniff timeout instead of storing an invalid duration', () => {
-    const saved = assembleSettings(realityInbound.settings, { ...guardValues, guard_sniff_timeout: ' ' }, 'vless')
-    expect(saved.tls?.reality?.guard?.sniff_timeout).toBeUndefined()
+  it.each(['', ' ', undefined])('defaults an empty sniff timeout (%s) to 300ms', (value) => {
+    const saved = assembleSettings(realityInbound.settings, { ...guardValues, guard_sniff_timeout: value }, 'vless')
+    expect(saved.tls?.reality?.guard?.sniff_timeout).toBe('300ms')
+    expect(toForm({ ...realityInbound, settings: saved }).guard_sniff_timeout).toBe('300ms')
+  })
+
+  it.each(['0', 0, '0ms', '500ms'])('preserves an explicit sniff timeout (%s)', (value) => {
+    const saved = assembleSettings(realityInbound.settings, { ...guardValues, guard_sniff_timeout: value }, 'vless')
+    expect(saved.tls?.reality?.guard?.sniff_timeout).toBe(String(value))
+    expect(toForm({ ...realityInbound, settings: saved }).guard_sniff_timeout).toBe(String(value))
   })
 
   it('keeps the guard only for a VLESS TCP inbound', () => {
@@ -224,9 +265,10 @@ describe('REALITY guard validation', () => {
     }
   })
 
-  it('accepts positive Go durations and rejects zero or malformed values', () => {
+  it('accepts Go durations and allows explicit zero when requested', () => {
     for (const value of ['300ms', '2m30s', '1.5s', '.5s', '+300ms', '1μs', '']) expect(validateGuardTimeout(value)).toBeUndefined()
     expect(validateGuardTimeout('0ms')).toContain('大于 0')
+    for (const value of ['0', '0ms']) expect(validateGuardTimeout(value, true)).toBeUndefined()
     expect(validateGuardTimeout('5')).toContain('请输入时长')
     expect(validateGuardTimeout('-1s')).toContain('请输入时长')
   })

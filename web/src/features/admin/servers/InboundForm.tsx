@@ -50,6 +50,13 @@ function parseALPN(value: unknown): string[] | undefined {
   return values.length ? [...new Set(values)] : undefined
 }
 
+function defaultALPN(type: InboundType, transportType = 'tcp'): string | undefined {
+  if (NO_TLS.has(type)) return undefined
+  if (type === 'hysteria2' || type === 'tuic') return 'h3'
+  if (WS_TYPES.has(type) && (transportType === 'ws' || transportType === 'httpupgrade')) return 'http/1.1'
+  return 'h2, http/1.1'
+}
+
 // parseServerNames splits the comma/space separated editor value into the
 // exact SNI list the guard matches on.
 export function parseServerNames(value: unknown): string[] | undefined {
@@ -66,7 +73,7 @@ function buildRealityGuard(v: FormVals, type: InboundType, prev?: RealityGuardSe
     enabled: true,
     internal_port: Number(v.guard_internal_port || 0),
     server_names: parseServerNames(v.guard_server_names),
-    sniff_timeout: String(v.guard_sniff_timeout || '').trim() || undefined,
+    sniff_timeout: String(v.guard_sniff_timeout ?? '').trim() || '300ms',
     ...(prev?.tag ? { tag: prev.tag } : {}),
   }
 }
@@ -200,12 +207,12 @@ export function toForm(ib: Inbound | null): FormVals {
     gecko_min_packet_size: s.gecko_min_packet_size ?? undefined,
     gecko_max_packet_size: s.gecko_max_packet_size ?? undefined,
     tls_mode,
-    tls_alpn: tls.alpn?.join(', '),
+    tls_alpn: tls.alpn?.join(', ') ?? defaultALPN(ib.type, s.transport?.type),
     reality_handshake_server: tls.reality?.handshake_server || undefined,
     reality_handshake_port: tls.reality?.handshake_server_port || undefined,
     guard_enabled: !!tls.reality?.guard?.enabled,
     guard_internal_port: tls.reality?.guard?.internal_port || undefined,
-    guard_sniff_timeout: tls.reality?.guard?.sniff_timeout ?? '',
+    guard_sniff_timeout: tls.reality?.guard?.sniff_timeout?.trim() || '300ms',
     guard_server_names: tls.reality?.guard?.server_names?.join(', ') ?? '',
     reality_max_time_difference: tls.reality?.max_time_difference?.trim() || '1m',
     tls_server_name: tls.reality?.enabled && tls.server_name === tls.reality.handshake_server ? undefined : tls.server_name,
@@ -508,6 +515,12 @@ export default function InboundForm({
   const jsonField = (key: string, value: unknown) => {
     if (form.getFieldValue(key) === undefined) form.setFieldValue(key, value)
   }
+  const updateALPNDefault = (nextType: InboundType, nextTransport: string | undefined) => {
+    const current = parseALPN(form.getFieldValue('tls_alpn'))?.join(', ')
+    if (!current || current === defaultALPN(type, transportType)) {
+      form.setFieldValue('tls_alpn', defaultALPN(nextType, nextTransport))
+    }
+  }
 
   return (
     <Modal
@@ -529,6 +542,7 @@ export default function InboundForm({
               options={TYPES}
               disabled={!!inbound}
               onChange={(t: InboundType) => {
+                updateALPNDefault(t, form.getFieldValue('transport_type'))
                 if (!GUARD_TYPES.has(t)) form.setFieldValue('guard_enabled', false)
                 const allowed = tlsModeOptions(t).map((o) => o.value)
                 if (!allowed.includes(form.getFieldValue('tls_mode'))) {
@@ -815,7 +829,7 @@ export default function InboundForm({
         {showTransport && (
           <FormGroup title="传输" panel="inbound">
             <Form.Item name="transport_type" label="传输层" className="fm-full">
-              <Select options={[
+              <Select onChange={(value: string) => updateALPNDefault(type, value)} options={[
                 { value: 'tcp', label: 'TCP' },
                 { value: 'ws', label: 'WebSocket' },
                 { value: 'httpupgrade', label: 'HTTPUpgrade' },
@@ -998,13 +1012,12 @@ export default function InboundForm({
                           rules={[
                             () => ({
                               validator(_, value) {
-                                const error = validateGuardTimeout(value)
+                                const error = validateGuardTimeout(value, true)
                                 if (!error) return Promise.resolve()
                                 return Promise.reject(new Error(error))
                               },
                             }),
                           ]}
-                          extra="留空使用 sing-box 默认值（300ms）"
                         >
                           <Input className="mono" />
                         </Form.Item>
