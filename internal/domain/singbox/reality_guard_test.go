@@ -17,6 +17,32 @@ func testGuardInbound() InboundInput {
 	}}
 }
 
+func TestRealityMaxTimeDifferenceDefaultAndExplicitZero(t *testing.T) {
+	for _, tc := range []struct {
+		name, value, want string
+	}{
+		{"missing", "", "1m"},
+		{"disabled", "0", "0"},
+		{"custom", "2m", "2m"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in := testGuardInbound()
+			in.Settings.TLS.Reality.MaxTimeDifference = tc.value
+			raw, err := BuildInbound(in)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var root map[string]any
+			if err := json.Unmarshal(raw, &root); err != nil {
+				t.Fatal(err)
+			}
+			if got := mStr(mMap(mMap(root, "tls"), "reality"), "max_time_difference"); got != tc.want {
+				t.Fatalf("max_time_difference = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestRealityGuardBuildKeepsPublicSubscriptionAndLocalIdentity(t *testing.T) {
 	in := testGuardInbound()
 	raw, err := BuildServerConfig(ServerConfigInput{Inbounds: []InboundInput{in}, StatsController: "127.0.0.1:29091", StatsSecret: "secret"})

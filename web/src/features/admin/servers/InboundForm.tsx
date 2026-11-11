@@ -207,7 +207,7 @@ export function toForm(ib: Inbound | null): FormVals {
     guard_internal_port: tls.reality?.guard?.internal_port || undefined,
     guard_sniff_timeout: tls.reality?.guard?.sniff_timeout ?? '',
     guard_server_names: tls.reality?.guard?.server_names?.join(', ') ?? '',
-    reality_max_time_difference: tls.reality?.max_time_difference ?? '',
+    reality_max_time_difference: tls.reality?.max_time_difference?.trim() || '1m',
     tls_server_name: tls.reality?.enabled && tls.server_name === tls.reality.handshake_server ? undefined : tls.server_name,
     tls_cert_path: tls.certificate_path,
     tls_key_path: tls.key_path,
@@ -327,7 +327,7 @@ export function assembleSettings(base: InboundSettings, v: FormVals, type: Inbou
         enabled: true,
         handshake_server: v.reality_handshake_server,
         handshake_server_port: v.reality_handshake_port || 443,
-        max_time_difference: String(v.reality_max_time_difference || '').trim() || undefined,
+        max_time_difference: String(v.reality_max_time_difference ?? '').trim() || '1m',
       }
       // The guard is panel-only metadata; never carry a stale entry into a
       // config the front filter cannot run.
@@ -905,10 +905,10 @@ export default function InboundForm({
                 <Form.Item name="reality_handshake_port" label="握手端口">
                   <InputNumber precision={0} min={1} max={65535} className="mono" />
                 </Form.Item>
-                <Form.Item name="tls_server_name" label="SNI" extra="留空沿用握手域名">
+                <Form.Item name="tls_server_name" label="SNI">
                   <Input className="mono" placeholder={handshakeServer} />
                 </Form.Item>
-                <Form.Item name="reality_max_time_difference" label="时间差限制" extra="留空不检查客户端时间差" rules={[
+                <Form.Item name="reality_max_time_difference" label="最大时间差" rules={[
                   { validator: (_, value) => {
                     const error = validateGuardTimeout(value, true)
                     return error ? Promise.reject(new Error(error)) : Promise.resolve()

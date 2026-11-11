@@ -84,6 +84,10 @@ func buildTLS(t TLSSettings) *tlsInbound {
 	out := &tlsInbound{Enabled: true, ServerName: t.ServerName, ALPN: t.ALPN}
 	switch {
 	case t.Reality.Enabled:
+		maxTimeDifference := t.Reality.MaxTimeDifference
+		if maxTimeDifference == "" {
+			maxTimeDifference = "1m"
+		}
 		out.Reality = &realityInbound{
 			Enabled: true,
 			Handshake: realityHandshake{
@@ -92,7 +96,7 @@ func buildTLS(t TLSSettings) *tlsInbound {
 			},
 			PrivateKey:        t.Reality.PrivateKey,
 			ShortID:           t.Reality.ShortID,
-			MaxTimeDifference: t.Reality.MaxTimeDifference,
+			MaxTimeDifference: maxTimeDifference,
 		}
 		if out.ServerName == "" {
 			out.ServerName = t.Reality.HandshakeServer

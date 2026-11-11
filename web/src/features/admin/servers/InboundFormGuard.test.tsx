@@ -64,7 +64,9 @@ describe('REALITY front SNI guard form', () => {
     fireEvent.click(await screen.findByRole('option', { name: 'vless' }))
 
     expect((screen.getByLabelText('握手端口') as HTMLInputElement).value).toBe('443')
-    expect((screen.getByLabelText('时间差限制') as HTMLInputElement).value).toBe('1m')
+    expect((screen.getByLabelText('最大时间差') as HTMLInputElement).value).toBe('1m')
+    expect(screen.queryByText('留空不检查客户端时间差')).toBeNull()
+    expect(screen.queryByText('留空沿用握手域名')).toBeNull()
     expect(screen.getByLabelText('uTLS 指纹').textContent).toContain('chrome')
     fireEvent.change(screen.getByLabelText(/^握手域名/), { target: { value: 'www.apple.com' } })
     fireEvent.click(screen.getByLabelText('前置 SNI 过滤'))
@@ -185,7 +187,7 @@ describe('REALITY front SNI guard form', () => {
     fireEvent.change(screen.getByLabelText(/^内部端口/), { target: { value: '20123' } })
     fireEvent.change(screen.getByLabelText(/^SNI 白名单/), { target: { value: 'www.apple.com, cdn.example.com' } })
     fireEvent.change(screen.getByLabelText('嗅探超时'), { target: { value: '500ms' } })
-    fireEvent.change(screen.getByLabelText('时间差限制'), { target: { value: '1m' } })
+    fireEvent.change(screen.getByLabelText('最大时间差'), { target: { value: '1m' } })
     save()
 
     await waitFor(() => expect(updateInbound).toHaveBeenCalledOnce())

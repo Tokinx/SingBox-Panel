@@ -759,7 +759,7 @@ func (s InboundSettings) Validate(typ string) error {
 	}
 	if value := s.TLS.Reality.MaxTimeDifference; s.TLS.Reality.Enabled && value != "" {
 		if duration, err := time.ParseDuration(value); err != nil || duration < 0 {
-			return fmt.Errorf("REALITY 时间差限制必须为非负时长，例如 1m")
+			return fmt.Errorf("REALITY 最大时间差必须为非负时长，例如 1m")
 		}
 	}
 	return s.TLS.validateInbound()

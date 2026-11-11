@@ -116,7 +116,7 @@ describe('REALITY front SNI guard', () => {
     })
   })
 
-  it('preserves saved defaults and an existing disabled time check', () => {
+  it('preserves saved defaults and fills a missing time limit', () => {
     const item: Inbound = { ...realityInbound, settings: { ...realityInbound.settings, tls: {
       ...realityInbound.settings.tls, fingerprint: 'firefox', reality: {
         ...realityInbound.settings.tls.reality,
@@ -129,7 +129,7 @@ describe('REALITY front SNI guard', () => {
       reality_max_time_difference: '2m',
       tls_fingerprint: 'firefox',
     })
-    expect(toForm(realityInbound).reality_max_time_difference).toBe('')
+    expect(toForm(realityInbound).reality_max_time_difference).toBe('1m')
   })
 
   it('round-trips the saved guard settings through the form', () => {
@@ -182,12 +182,18 @@ describe('REALITY front SNI guard', () => {
     expect(saved.tls?.reality?.guard?.tag).toBeUndefined()
   })
 
-  it('preserves a distinct imported SNI and allows clearing the time limit', () => {
+  it.each(['', ' ', undefined])('uses one minute for an empty time limit (%s) and preserves a distinct SNI', (value) => {
     const base = assembleSettings(realityInbound.settings, { ...guardValues, tls_server_name: 'cdn.example.com' }, 'vless')
-    const saved = assembleSettings(base, { ...toForm({ ...realityInbound, settings: base }), reality_max_time_difference: '' }, 'vless')
+    const saved = assembleSettings(base, { ...toForm({ ...realityInbound, settings: base }), reality_max_time_difference: value }, 'vless')
     expect(saved.tls?.server_name).toBe('cdn.example.com')
     expect(saved.tls?.reality?.handshake_server).toBe('www.apple.com')
-    expect(saved.tls?.reality?.max_time_difference).toBeUndefined()
+    expect(saved.tls?.reality?.max_time_difference).toBe('1m')
+  })
+
+  it.each(['0', 0])('only disables the time check with an explicit zero (%s)', (value) => {
+    const saved = assembleSettings(realityInbound.settings, { ...guardValues, reality_max_time_difference: value }, 'vless')
+    expect(saved.tls?.reality?.max_time_difference).toBe('0')
+    expect(toForm({ ...realityInbound, settings: saved }).reality_max_time_difference).toBe('0')
   })
 
   it('omits an empty sniff timeout instead of storing an invalid duration', () => {
