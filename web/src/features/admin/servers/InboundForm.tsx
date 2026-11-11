@@ -37,6 +37,8 @@ const GUARD_TIMEOUT_RE = /^\+?(?:(?:\d+(?:\.\d*)?|\.\d+)(?:ns|us|µs|μs|ms|s|m|
 const GUARD_TIMEOUT_PART_RE = /(\d+(?:\.\d*)?|\.\d+)(ns|us|µs|μs|ms|s|m|h)/g
 const GUARD_TIMEOUT_SCALE: Record<string, number> = { ns: 1e-9, us: 1e-6, 'µs': 1e-6, 'μs': 1e-6, ms: 1e-3, s: 1, m: 60, h: 3600 }
 const GUARD_IPV4_RE = /^(?:\d{1,3}\.){3}\d{1,3}$/
+const RESERVED_PORTS = [29091, 29092]
+const TLS_FINGERPRINTS = ['chrome', 'firefox', 'safari', 'ios', 'random', 'randomized']
 
 const VMESS_SECURITIES = ['auto', 'none', 'zero', 'aes-128-gcm', 'chacha20-poly1305', 'aes-128-cfb']
 
@@ -113,6 +115,14 @@ function randomPort(): number {
   return Math.floor(Math.random() * 50000) + 10000
 }
 
+function randomAvailablePort(usedPorts: ReadonlySet<number>): number | undefined {
+  const start = randomPort() - 10000
+  for (let offset = 0; offset < 50000; offset++) {
+    const port = 10000 + (start + offset) % 50000
+    if (!usedPorts.has(port)) return port
+  }
+}
+
 function supportsMultiUser(type: InboundType, method?: string): boolean {
   if (!MULTI_USER_TYPES.has(type)) return false
   if (type === 'shadowsocks') return method === '2022-blake3-aes-128-gcm' || method === '2022-blake3-aes-256-gcm'
@@ -136,12 +146,13 @@ export function toForm(ib: Inbound | null): FormVals {
       tls_mode: 'reality',
       // REALITY camouflage target is the operator's choice — do not prefill one.
       reality_handshake_server: undefined,
-      reality_handshake_port: undefined,
+      reality_handshake_port: 443,
       guard_enabled: false,
       guard_internal_port: undefined,
       guard_sniff_timeout: '300ms',
       guard_server_names: '',
-      reality_max_time_difference: undefined,
+      reality_max_time_difference: '1m',
+      tls_fingerprint: TLS_FINGERPRINTS[0],
       transport_type: 'tcp',
       snell_version: 5,
       snell_obfs_mode: 'none',
@@ -373,6 +384,7 @@ export function assembleSettings(base: InboundSettings, v: FormVals, type: Inbou
 export default function InboundForm({
   serverId,
   inbound,
+  inbounds,
   prefill,
   preview = false,
   onPreview,
@@ -382,6 +394,7 @@ export default function InboundForm({
 }: {
   serverId: number
   inbound: Inbound | null
+  inbounds?: Inbound[]
   prefill?: Record<string, any>
   preview?: boolean
   onPreview?: (body: Record<string, unknown>) => void
@@ -404,6 +417,15 @@ export default function InboundForm({
   const invalidSSMultiUser = type === 'shadowsocks' && method === SS2022_CHACHA_METHOD && requestedMultiUser
   const guardEnabled = !!Form.useWatch('guard_enabled', form)
   const guardPort = Form.useWatch('guard_internal_port', form)
+  const handshakeServer = Form.useWatch('reality_handshake_server', form)?.trim()
+  const serverName = Form.useWatch('tls_server_name', form)?.trim()
+  const usedPorts = new Set(RESERVED_PORTS)
+  for (const item of inbounds ?? []) {
+    if (item.id === inbound?.id) continue
+    usedPorts.add(item.listen_port)
+    const guard = item.settings?.tls?.reality?.guard
+    if (guard?.enabled && guard.internal_port) usedPorts.add(guard.internal_port)
+  }
 
   useLayoutEffect(() => {
     submitSessionRef.current += 1
@@ -884,7 +906,7 @@ export default function InboundForm({
                   <InputNumber precision={0} min={1} max={65535} className="mono" />
                 </Form.Item>
                 <Form.Item name="tls_server_name" label="SNI" extra="留空沿用握手域名">
-                  <Input className="mono" />
+                  <Input className="mono" placeholder={handshakeServer} />
                 </Form.Item>
                 <Form.Item name="reality_max_time_difference" label="时间差限制" extra="留空不检查客户端时间差" rules={[
                   { validator: (_, value) => {
@@ -912,7 +934,15 @@ export default function InboundForm({
                           }),
                         ]}
                       >
-                        <Switch />
+                        <Switch onChange={(enabled) => {
+                          if (!enabled) return
+                          const excluded = new Set(usedPorts)
+                          excluded.add(Number(form.getFieldValue('listen_port')))
+                          const currentPort = Number(form.getFieldValue('guard_internal_port'))
+                          if (!currentPort || excluded.has(currentPort)) {
+                            form.setFieldValue('guard_internal_port', randomAvailablePort(excluded))
+                          }
+                        }} />
                       </Form.Item>
                       <p className="text-xs text-muted-foreground">
                         {transportType === 'tcp'
@@ -933,6 +963,7 @@ export default function InboundForm({
                                 if (!value) return Promise.resolve()
                                 if (!Number.isInteger(Number(value)) || Number(value) < 1 || Number(value) > 65535) return Promise.reject(new Error('内部端口必须在 1-65535 之间'))
                                 if (Number(value) === Number(getFieldValue('listen_port'))) return Promise.reject(new Error('内部端口不能与公网端口相同'))
+                                if (usedPorts.has(Number(value))) return Promise.reject(new Error('内部端口已被其他入站或统计服务占用'))
                                 return Promise.resolve()
                               },
                             }),
@@ -959,7 +990,7 @@ export default function InboundForm({
                             }),
                           ]}
                         >
-                          <Input className="mono" />
+                          <Input className="mono" placeholder={serverName || handshakeServer} />
                         </Form.Item>
                         <Form.Item
                           name="guard_sniff_timeout"
@@ -1016,7 +1047,7 @@ export default function InboundForm({
               <Form.Item name="tls_fingerprint" label="uTLS 指纹">
                 <Select
                   placeholder="不指定"
-                  options={['chrome', 'firefox', 'safari', 'ios', 'random', 'randomized'].map((v) => ({ value: v, label: v }))}
+                  options={TLS_FINGERPRINTS.map((v) => ({ value: v, label: v }))}
                 />
               </Form.Item>
             )}

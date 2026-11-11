@@ -1123,6 +1123,7 @@ export default function ServerDetail() {
         key={`inbound-${sid}`}
         serverId={sid}
         inbound={editing}
+        inbounds={server.inbounds}
         open={formOpen}
         onClose={() => setFormOpen(false)}
         onSaved={loadCurrentServer}

@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import InboundForm from './InboundForm'
-import { updateInbound } from '../../../api'
+import { createInbound, updateInbound } from '../../../api'
 import type { Inbound } from '../../../types'
 
 vi.mock('../../../api', () => ({
@@ -45,6 +45,7 @@ beforeEach(() => {
     disconnect() {}
   })
   Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, writable: true, value: vi.fn() })
+  vi.mocked(createInbound).mockResolvedValue({ apply_state: 'pending' } as unknown as Awaited<ReturnType<typeof createInbound>>)
   vi.mocked(updateInbound).mockResolvedValue({ apply_state: 'pending' } as unknown as Awaited<ReturnType<typeof updateInbound>>)
 })
 afterEach(() => {
@@ -57,6 +58,105 @@ afterEach(() => {
 const save = () => fireEvent.click(screen.getByRole('button', { name: '应用' }))
 
 describe('REALITY front SNI guard form', () => {
+  it('prefills new REALITY defaults and saves the generated internal port', async () => {
+    render(<InboundForm serverId={1} inbound={null} open onClose={vi.fn()} onSaved={vi.fn()} />)
+    fireEvent.click(screen.getByLabelText(/^协议/))
+    fireEvent.click(await screen.findByRole('option', { name: 'vless' }))
+
+    expect((screen.getByLabelText('握手端口') as HTMLInputElement).value).toBe('443')
+    expect((screen.getByLabelText('时间差限制') as HTMLInputElement).value).toBe('1m')
+    expect(screen.getByLabelText('uTLS 指纹').textContent).toContain('chrome')
+    fireEvent.change(screen.getByLabelText(/^握手域名/), { target: { value: 'www.apple.com' } })
+    fireEvent.click(screen.getByLabelText('前置 SNI 过滤'))
+    const port = Number((screen.getByLabelText(/^内部端口/) as HTMLInputElement).value)
+    expect(port).toBeGreaterThanOrEqual(10000)
+    expect(port).toBeLessThan(60000)
+    expect(port).not.toBe(Number((screen.getByLabelText('端口') as HTMLInputElement).value))
+    save()
+
+    await waitFor(() => expect(createInbound).toHaveBeenCalledOnce())
+    expect(vi.mocked(createInbound).mock.calls[0][1].settings?.tls).toMatchObject({
+      server_name: 'www.apple.com',
+      fingerprint: 'chrome',
+      reality: {
+        handshake_server_port: 443,
+        max_time_difference: '1m',
+        guard: { enabled: true, internal_port: port },
+      },
+    })
+    expect(vi.mocked(createInbound).mock.calls[0][1].settings?.tls?.reality?.guard?.server_names).toBeUndefined()
+  })
+
+  it('updates empty SNI placeholders with the effective handshake domain', async () => {
+    render(<InboundForm serverId={1} inbound={realityInbound} open onClose={vi.fn()} onSaved={vi.fn()} />)
+    fireEvent.click(await screen.findByLabelText('前置 SNI 过滤'))
+    const sni = screen.getByLabelText('SNI') as HTMLInputElement
+    const whitelist = screen.getByLabelText(/^SNI 白名单/) as HTMLInputElement
+    expect(sni.value).toBe('')
+    expect(whitelist.value).toBe('')
+    expect(sni.placeholder).toBe('www.apple.com')
+    expect(whitelist.placeholder).toBe('www.apple.com')
+
+    fireEvent.change(screen.getByLabelText(/^握手域名/), { target: { value: 'new.example.com' } })
+    expect(sni.placeholder).toBe('new.example.com')
+    expect(whitelist.placeholder).toBe('new.example.com')
+    fireEvent.change(sni, { target: { value: 'cdn.example.com' } })
+    expect(whitelist.placeholder).toBe('cdn.example.com')
+    fireEvent.change(sni, { target: { value: '' } })
+    expect(whitelist.placeholder).toBe('new.example.com')
+  })
+
+  it('skips public, internal and reserved ports and keeps a manual port on re-enable', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue((29090.5 - 10000) / 50000)
+    const item = { ...realityInbound, listen_port: 29090 }
+    const other: Inbound = {
+      ...realityInbound, id: 3, listen_port: 29093, enabled: false,
+      settings: { ...realityInbound.settings, tls: { ...realityInbound.settings.tls, reality: {
+        ...realityInbound.settings.tls.reality, guard: { enabled: true, internal_port: 29094 },
+      } } },
+    }
+    render(<InboundForm serverId={1} inbound={item} inbounds={[item, other]} open onClose={vi.fn()} onSaved={vi.fn()} />)
+    const toggle = await screen.findByLabelText('前置 SNI 过滤')
+    fireEvent.click(toggle)
+    expect((screen.getByLabelText(/^内部端口/) as HTMLInputElement).value).toBe('29095')
+
+    fireEvent.change(screen.getByLabelText(/^内部端口/), { target: { value: '20123' } })
+    fireEvent.click(toggle)
+    fireEvent.click(toggle)
+    expect((screen.getByLabelText(/^内部端口/) as HTMLInputElement).value).toBe('20123')
+  })
+
+  it('keeps the edited inbound own internal port available', async () => {
+    const item: Inbound = {
+      ...realityInbound,
+      settings: { ...realityInbound.settings, tls: { ...realityInbound.settings.tls, reality: {
+        ...realityInbound.settings.tls.reality, guard: { enabled: true, internal_port: 20123 },
+      } } },
+    }
+    render(<InboundForm serverId={1} inbound={item} inbounds={[item]} open onClose={vi.fn()} onSaved={vi.fn()} />)
+    expect((await screen.findByLabelText(/^内部端口/) as HTMLInputElement).value).toBe('20123')
+    save()
+
+    await waitFor(() => expect(updateInbound).toHaveBeenCalledOnce())
+    expect(vi.mocked(updateInbound).mock.calls[0][2].settings?.tls?.reality?.guard?.internal_port).toBe(20123)
+  })
+
+  it.each([29091, 29092, 20123, 20124])('rejects a manually entered occupied port %s', async (port) => {
+    const other: Inbound = {
+      ...realityInbound, id: 3, listen_port: 20123,
+      settings: { ...realityInbound.settings, tls: { ...realityInbound.settings.tls, reality: {
+        ...realityInbound.settings.tls.reality, guard: { enabled: true, internal_port: 20124 },
+      } } },
+    }
+    render(<InboundForm serverId={1} inbound={realityInbound} inbounds={[realityInbound, other]} open onClose={vi.fn()} onSaved={vi.fn()} />)
+    fireEvent.click(await screen.findByLabelText('前置 SNI 过滤'))
+    fireEvent.change(screen.getByLabelText(/^内部端口/), { target: { value: String(port) } })
+    save()
+
+    await screen.findByText('内部端口已被其他入站或统计服务占用')
+    expect(updateInbound).not.toHaveBeenCalled()
+  })
+
   it('submits a preview payload without saving or closing the dialog', async () => {
     const onClose = vi.fn(), onPreview = vi.fn()
     render(<InboundForm serverId={1} inbound={realityInbound} preview open onClose={onClose} onSaved={vi.fn()} onPreview={onPreview} />)

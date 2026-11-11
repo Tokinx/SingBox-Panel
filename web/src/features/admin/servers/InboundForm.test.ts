@@ -108,6 +108,30 @@ const guardValues = {
 }
 
 describe('REALITY front SNI guard', () => {
+  it('uses the requested defaults for new inbounds', () => {
+    expect(toForm(null)).toMatchObject({
+      reality_handshake_port: 443,
+      reality_max_time_difference: '1m',
+      tls_fingerprint: 'chrome',
+    })
+  })
+
+  it('preserves saved defaults and an existing disabled time check', () => {
+    const item: Inbound = { ...realityInbound, settings: { ...realityInbound.settings, tls: {
+      ...realityInbound.settings.tls, fingerprint: 'firefox', reality: {
+        ...realityInbound.settings.tls.reality,
+        handshake_server_port: 8443,
+        max_time_difference: '2m',
+      },
+    } } }
+    expect(toForm(item)).toMatchObject({
+      reality_handshake_port: 8443,
+      reality_max_time_difference: '2m',
+      tls_fingerprint: 'firefox',
+    })
+    expect(toForm(realityInbound).reality_max_time_difference).toBe('')
+  })
+
   it('round-trips the saved guard settings through the form', () => {
     const saved = assembleSettings(realityInbound.settings, guardValues, 'vless')
     expect(saved.tls?.reality?.guard).toEqual({
