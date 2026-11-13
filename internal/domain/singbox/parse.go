@@ -40,6 +40,7 @@ type ParsedRule struct {
 // ParsedConfig is everything the panel can adopt from an existing config.json.
 type ParsedConfig struct {
 	Inbounds  []ParsedInbound
+	Forwards  []ForwardInput
 	Outbounds []ParsedOutbound
 	Rules     []ParsedRule
 	RuleSets  []RuleSetInput
@@ -491,13 +492,28 @@ func ParseServerConfig(raw []byte) (*ParsedConfig, error) {
 		}
 	}
 
+	forwardImports, forwardSkippedNotes := findForwardImports(root, guardInbounds, guardRules)
+	forwardInboundIdx := make(map[int]bool, len(forwardImports))
+	forwardRules := make(map[int]bool, len(forwardImports))
+	for _, fi := range forwardImports {
+		forwardInboundIdx[fi.inboundIndex] = true
+		if fi.ruleIndex >= 0 {
+			forwardRules[fi.ruleIndex] = true
+		}
+		out.Forwards = append(out.Forwards, fi.forward)
+	}
+
 	providers := taggedObjects(root, "certificate_providers")
 	for index, e := range mSlice(root, "inbounds") {
-		if guardInbounds[index] {
+		if guardInbounds[index] || forwardInboundIdx[index] {
 			continue
 		}
 		m, ok := e.(map[string]any)
 		if !ok {
+			continue
+		}
+		if note := forwardSkippedNotes[index]; note != "" {
+			out.Skipped = append(out.Skipped, note)
 			continue
 		}
 		if note := resolveCertificateProvider(m, providers); note != "" {
@@ -539,7 +555,7 @@ func ParseServerConfig(raw []byte) (*ParsedConfig, error) {
 			out.Final = f
 		}
 		for index, e := range mSlice(route, "rules") {
-			if guardRules[index] {
+			if guardRules[index] || forwardRules[index] {
 				continue
 			}
 			m, ok := e.(map[string]any)
@@ -610,6 +626,17 @@ func ParseServerConfig(raw []byte) (*ParsedConfig, error) {
 		kept = append(kept, r)
 	}
 	out.Rules = kept
+
+	keptForwards := out.Forwards[:0]
+	for _, f := range out.Forwards {
+		if !known[f.Outbound] || f.Outbound == "block" || f.Outbound == "reject" || f.Outbound == "sniff" || f.Outbound == "hijack-dns" {
+			out.Skipped = append(out.Skipped,
+				fmt.Sprintf("端口转发 %s → %s：该出站未被导入，转发已跳过", f.Tag, f.Outbound))
+			continue
+		}
+		keptForwards = append(keptForwards, f)
+	}
+	out.Forwards = keptForwards
 
 	return out, nil
 }

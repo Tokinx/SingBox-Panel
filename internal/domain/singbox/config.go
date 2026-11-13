@@ -12,6 +12,7 @@ type ServerConfigInput struct {
 	// LogLevel defaults to "warn".
 	LogLevel string
 	Inbounds []InboundInput
+	Forwards []ForwardInput
 
 	// Outbounds/Rules/RuleSets/Final drive routing (transit / landing). A
 	// "direct" outbound is always included. Final is the default outbound tag.
@@ -70,7 +71,10 @@ func BuildServerConfig(in ServerConfigInput) ([]byte, error) {
 	if err := ValidateRealityGuardLayout(in.Inbounds); err != nil {
 		return nil, err
 	}
-	inbounds := make([]json.RawMessage, 0, len(in.Inbounds))
+	if err := ValidateForwardLayout(in.Inbounds, in.Forwards, in.StatsController, in.StatsAPI); err != nil {
+		return nil, err
+	}
+	inbounds := make([]json.RawMessage, 0, len(in.Inbounds)+len(in.Forwards))
 	var guardRules []map[string]any
 	for _, ib := range in.Inbounds {
 		if ib.Settings.RealityGuardEnabled() {
@@ -140,10 +144,20 @@ func BuildServerConfig(in ServerConfigInput) ([]byte, error) {
 	// Gate traffic must reach only its own local VLESS listener before the
 	// general loopback protection. The terminal reject isolates all other
 	// gate traffic from user rules and the global sniff fallback.
+	var forwardRules []map[string]any
+	for _, f := range in.Forwards {
+		rawFwd, err := BuildForwardInbound(f)
+		if err != nil {
+			return nil, err
+		}
+		inbounds = append(inbounds, rawFwd)
+		forwardRules = append(forwardRules, BuildForwardRule(f))
+	}
 	rules := append([]map[string]any{}, guardRules...)
 	if in.StatsController != "" {
 		rules = append(rules, LoopbackGuardRule())
 	}
+	rules = append(rules, forwardRules...)
 	if needSniff && !hasGlobalSniff {
 		rules = append(rules, map[string]any{"action": "sniff"})
 	}
