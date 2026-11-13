@@ -109,8 +109,8 @@ func (a *App) restoreBackup(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的 multipart 上传"})
 		return
 	}
-	// An encrypted backup needs its passphrase, which the client must send as a
-	// "passphrase" field before the file part because the upload is streamed.
+	// "passphrase" is still read for archives written by releases that encrypted
+	// backups. Current exports are plain .tar.gz and send no such field.
 	passphrase := ""
 	for parts := 0; parts < 32; parts++ {
 		part, partErr := multipartReader.NextPart()
@@ -459,7 +459,7 @@ func (a *App) restoreOneDriveSettings(staged *gorm.DB, current oneDriveSettings,
 		log.Printf("restore: discard unreadable archived OneDrive authorization: %v", err)
 		// A broken cloud credential must not block data recovery or prevent a
 		// subsequent device-code login from replacing it.
-		return "备份中的 OneDrive 配置无法解密，已清除；请重新连接并设置备份口令", target.saveOneDriveSettings(defaultOneDriveSettings())
+		return "备份中的 OneDrive 配置无法解密，已清除；请重新连接 OneDrive", target.saveOneDriveSettings(defaultOneDriveSettings())
 	}
 	return "", target.saveOneDriveSettings(archived)
 }
