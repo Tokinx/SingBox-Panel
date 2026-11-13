@@ -4,7 +4,6 @@ import { Button, Input, Select, Switch, message } from '../../../ui'
 import {
   Copy,
   Download,
-  RotateCw,
   Search,
   ArrowUpToLine,
 } from 'lucide-react'
@@ -639,7 +638,6 @@ export default function Logs({ serverId, serverOnline }: { serverId?: number; se
           <Switch size="small" checked={hideNoise} onChange={setHideNoise} />
           <span>过滤噪音</span>
         </label>
-        <Button icon={<RotateCw />} loading={loading} onClick={() => load()}>刷新</Button>
       </div>
 
       <div className="lg-box">

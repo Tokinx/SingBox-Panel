@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Button, Input, Modal, Popconfirm, Select, Tooltip, Typography, Upload, message } from '../../../ui'
 import type { UploadFile } from '../../../ui'
-import { Trash2, Download, Inbox, Link, RotateCw } from 'lucide-react'
+import { Trash2, Download, Inbox, Link } from 'lucide-react'
 import {
   listPanelReleases,
   deleteOneDriveBackup,
@@ -433,7 +433,6 @@ export default function Settings() {
     poll()
   }
 
-  const refreshAll = () => { load(true); void loadCloud() }
   const cloudError = cloud?.connected ? (cloud.last_error || cloud.cloud_error) : undefined
   const authLink = authPending ? (authPending.verification_uri_complete || authPending.verification_uri) : ''
 
@@ -527,7 +526,6 @@ export default function Settings() {
         <div className="settings-row">
           <div className="settings-row-main">
             <b>本地备份</b>
-            <span className="settings-row-meta mono">.tar.gz</span>
           </div>
           <div className="settings-actions">
             <Button icon={<Download />} loading={backing} onClick={doBackup}>下载</Button>
@@ -572,11 +570,6 @@ export default function Settings() {
         <section className="settings-cloud">
           <header className="ui-section-head">
             <h2>云端备份{cloud.files?.length ? <span className="settings-count">{cloud.files.length}</span> : null}</h2>
-            <div className="ui-section-actions">
-              <Tooltip title="刷新">
-                <Button type="text" icon={<RotateCw />} aria-label="刷新云端备份" onClick={loadCloud} loading={cloudLoading} />
-              </Tooltip>
-            </div>
           </header>
           <div className="ui-card settings-files">
             {(cloud.files ?? []).length === 0 ? (
@@ -640,10 +633,7 @@ export default function Settings() {
 
   return (
     <div className="settings-page">
-      <PageHeader
-        title="设置"
-        actions={<Button icon={<RotateCw />} loading={loading} onClick={refreshAll} disabled={updating}>刷新</Button>}
-      />
+      <PageHeader title="设置" />
       <Pills label="设置分类" items={VIEWS} active={view} onChange={(key) => setView(key as SettingsView)} />
       <div className="settings-view">
         {view === 'version' ? versionView : view === 'backup' ? (

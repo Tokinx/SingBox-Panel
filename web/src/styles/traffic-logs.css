@@ -161,8 +161,7 @@
   .lg-toolbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .lg-server-select, .lg-search { grid-column: 1 / -1; width: 100%; min-width: 0; max-width: none; }
   .lg-filter-select { width: 100%; min-width: 0; }
-  .lg-toggle { grid-column: 1; margin-left: 0; padding: 2px 0; }
-  .lg-toolbar > .ui-btn { grid-column: 2; justify-self: end; }
+  .lg-toggle { grid-column: 1 / -1; margin-left: 0; padding: 2px 0; }
   .lg-statusbar { padding-left: 12px; }
   .lg-count { display: none; }
   .lg-viewer, .lg-empty { height: clamp(320px, calc(60 * var(--dvh)), 600px); }
