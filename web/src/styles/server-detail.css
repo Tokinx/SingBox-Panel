@@ -9,12 +9,20 @@
 .sd-remark { flex-basis: 100%; min-width: 0; color: var(--console-muted); white-space: pre-wrap; overflow-wrap: anywhere; }
 .sd-raw { margin: -12px 0 24px; }
 .sd-page :is(.ui-table-tbody > tr.is-disabled > td) { color: var(--console-faint); }
+.sd-cell-ellipsis { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sd-tag-cell { max-width: 200px; }
+.sd-outbound-cell { max-width: 180px; }
+.sd-forward-target { display: flex; flex-direction: column; gap: 2px; min-width: 180px; max-width: 360px; line-height: 1.4; }
+.sd-forward-target-name, .sd-forward-target-addr { display: block; min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sd-forward-target-addr { font-size: 12px; }
+.sd-forward-target-endpoint { display: block; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sd-remark-cell { display: block; min-width: 100px; max-width: 240px; overflow-wrap: break-word; }
 .sd-test { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .sd-test-result { display: inline-flex; min-width: 76px; }
 .sd-test .ui-btn { color: var(--console-faint); }
-.sd-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.sd-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 180px; }
 .sd-chip { display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%; padding: 2px 8px; border: 1px solid var(--console-border); border-radius: 6px; font-family: var(--app-mono); font-size: 12px; line-height: 18px; overflow-wrap: anywhere; }
-.sd-chip > span { font-family: var(--app-font); color: var(--console-faint); }
+.sd-chip > span { flex: none; white-space: nowrap; font-family: var(--app-font); color: var(--console-faint); }
 .sd-drag.rule-drag-handle { width: 28px; height: 28px; border-radius: 6px; color: var(--console-faint); }
 .sd-drag.rule-drag-handle:hover:not(:disabled) { color: var(--console-ink); background: var(--console-hover); }
 .sd-drag.rule-drag-handle:focus-visible { outline: 2px solid var(--console-focus); }

@@ -107,14 +107,14 @@ function formatForwardTarget(fwd: PortForward) {
       : ''
   if (fwd.target_type === 'inbound') {
     const label = `${fwd.target_server_name || `服务器 #${fwd.target_server_id}`} · ${fwd.target_inbound_tag || `节点 #${fwd.target_inbound_id}`}`
-    return endpoint ? (
-      <span>
-        <span>{label}</span>{' '}
-        <span className="mono muted">({endpoint})</span>
-      </span>
-    ) : <span>{label}</span>
+    return (
+      <div className="sd-forward-target" title={endpoint ? `${label} (${endpoint})` : label}>
+        <span className="sd-forward-target-name">{label}</span>
+        {endpoint && <span className="sd-forward-target-addr mono muted">({endpoint})</span>}
+      </div>
+    )
   }
-  return endpoint ? <span className="mono">{endpoint}</span> : <span className="faint">—</span>
+  return endpoint ? <span className="sd-forward-target-endpoint mono" title={endpoint}>{endpoint}</span> : <span className="faint">—</span>
 }
 
 function ServerDetailSkeleton() {
@@ -978,18 +978,21 @@ export default function ServerDetail() {
     {
       title: '下载',
       align: 'right' as const,
+      nowrap: true,
       sorter: (a: T, b: T) => (getTraffic(a)?.download ?? 0) - (getTraffic(b)?.download ?? 0),
       render: (_: unknown, row: T) => <span className="mono">{trafficAvailable ? formatBytes(getTraffic(row)?.download ?? 0) : '—'}</span>,
     },
     {
       title: '上传',
       align: 'right' as const,
+      nowrap: true,
       sorter: (a: T, b: T) => (getTraffic(a)?.upload ?? 0) - (getTraffic(b)?.upload ?? 0),
       render: (_: unknown, row: T) => <span className="mono muted">{trafficAvailable ? formatBytes(getTraffic(row)?.upload ?? 0) : '—'}</span>,
     },
     {
       title: '合计',
       align: 'right' as const,
+      nowrap: true,
       sorter: (a: T, b: T) => {
         const totalA = (getTraffic(a)?.upload ?? 0) + (getTraffic(a)?.download ?? 0)
         const totalB = (getTraffic(b)?.upload ?? 0) + (getTraffic(b)?.download ?? 0)
@@ -1005,21 +1008,23 @@ export default function ServerDetail() {
   const inboundTable = (
     <Table
       className="tr-port-table"
+      ariaLabel="入站列表"
       rowKey="id"
       scroll={{ x: 760 }}
       dataSource={server.inbounds || []}
       locale={{ emptyText: '暂无入站' }}
       rowClassName={(ib: Inbound) => (ib.enabled === false ? 'is-disabled' : '')}
       columns={[
-        { title: '标签', dataIndex: 'tag', render: (v: string) => <span className="sd-strong">{v}</span> },
-        { title: '协议', dataIndex: 'type', render: (v: string) => <ProtocolTag type={v} /> },
-        { title: '端口', dataIndex: 'listen_port', sorter: (a: Inbound, b: Inbound) => a.listen_port - b.listen_port, render: (v: number) => <span className="mono">{v}</span> },
-        { title: '用户', render: (_, ib: Inbound) => <span className="muted">{ib.settings?.multi_user ? '多用户' : '单用户'}</span> },
+        { title: '标签', dataIndex: 'tag', nowrap: true, render: (v: string) => <span className="sd-strong sd-cell-ellipsis sd-tag-cell" title={v}>{v}</span> },
+        { title: '协议', dataIndex: 'type', nowrap: true, render: (v: string) => <ProtocolTag type={v} /> },
+        { title: '端口', dataIndex: 'listen_port', nowrap: true, sorter: (a: Inbound, b: Inbound) => a.listen_port - b.listen_port, render: (v: number) => <span className="mono">{v}</span> },
+        { title: '用户', nowrap: true, render: (_, ib: Inbound) => <span className="muted">{ib.settings?.multi_user ? '多用户' : '单用户'}</span> },
         ...trafficColumns(getInboundTraffic),
         {
-          title: '',
-          width: 112,
+          title: <span className="sr-only">操作</span>,
+          width: 120,
           align: 'right',
+          nowrap: true,
           render: (_, ib: Inbound) => rowActions(
             () => { setEditing(ib); setFormOpen(true) },
             () => onDeleteInbound(ib),
@@ -1070,7 +1075,8 @@ export default function ServerDetail() {
     <>
       <Table
         rowKey="id"
-        scroll={{ x: 640 }}
+        ariaLabel="路由规则列表"
+        scroll={{ x: 760 }}
         dataSource={rules}
         locale={{ emptyText: '暂无规则' }}
         rowClassName={(r: RouteRule) => (r.enabled ? '' : 'is-disabled')}
@@ -1095,9 +1101,10 @@ export default function ServerDetail() {
         })}
         columns={[
           {
-            title: '',
-            width: 44,
+            title: <span className="sr-only">排序</span>,
+            width: 48,
             align: 'center',
+            nowrap: true,
             render: (_, __, index) => (
               <button
                 type="button"
@@ -1121,12 +1128,21 @@ export default function ServerDetail() {
             ),
           },
           { title: '匹配', render: (_, r: RouteRule) => <span className="sd-chips">{matchChips(r)}</span> },
-          { title: '出站', width: 160, render: (_, r: RouteRule) => <span className="mono">{ruleTarget(r)}</span> },
-          { title: '备注', dataIndex: 'remark', width: 180, render: (v: string) => v ? <span className="muted">{v}</span> : <span className="faint">—</span> },
+          {
+            title: '出站',
+            width: 160,
+            nowrap: true,
+            render: (_, r: RouteRule) => {
+              const target = ruleTarget(r)
+              return <span className="mono sd-cell-ellipsis sd-outbound-cell" title={target}>{target}</span>
+            },
+          },
+          { title: '备注', dataIndex: 'remark', width: 180, render: (v: string) => v ? <span className="muted sd-remark-cell">{v}</span> : <span className="faint">—</span> },
           {
             title: '状态',
             dataIndex: 'enabled',
-            width: 90,
+            width: 72,
+            nowrap: true,
             render: (v: boolean, r: RouteRule) => (
               <Switch
                 size="small"
@@ -1137,7 +1153,7 @@ export default function ServerDetail() {
               />
             ),
           },
-          { title: '', width: 88, align: 'right', render: (_, r: RouteRule) => rowActions(() => { setRuleEditing(r); setRuleOpen(true) }, () => onDeleteRule(r), `规则 ${r.id}`) },
+          { title: <span className="sr-only">操作</span>, width: 92, align: 'right', nowrap: true, render: (_, r: RouteRule) => rowActions(() => { setRuleEditing(r); setRuleOpen(true) }, () => onDeleteRule(r), `规则 ${r.id}`) },
         ]}
       />
       <div className="sd-final">
@@ -1163,31 +1179,33 @@ export default function ServerDetail() {
   const forwardTable = (
     <Table
       className="tr-port-table"
+      ariaLabel="转发列表"
       rowKey="id"
-      scroll={{ x: 920 }}
+      scroll={{ x: 960 }}
       dataSource={forwards}
       locale={{ emptyText: '暂无转发' }}
       rowClassName={(fwd: PortForward) => (fwd.enabled ? '' : 'is-disabled')}
       columns={[
-        { title: '标签', dataIndex: 'tag', render: (v: string) => <span className="sd-strong">{v}</span> },
-        { title: '协议', dataIndex: 'network', render: (v: ForwardNetwork) => <span className="ui-tag mono">{formatForwardNetwork(v)}</span> },
-        { title: '监听端口', dataIndex: 'listen_port', sorter: (a: PortForward, b: PortForward) => a.listen_port - b.listen_port, render: (v: number) => <span className="mono">{v}</span> },
+        { title: '标签', dataIndex: 'tag', nowrap: true, render: (v: string) => <span className="sd-strong sd-cell-ellipsis sd-tag-cell" title={v}>{v}</span> },
+        { title: '协议', dataIndex: 'network', nowrap: true, render: (v: ForwardNetwork) => <span className="ui-tag mono">{formatForwardNetwork(v)}</span> },
+        { title: '监听端口', dataIndex: 'listen_port', nowrap: true, sorter: (a: PortForward, b: PortForward) => a.listen_port - b.listen_port, render: (v: number) => <span className="mono">{v}</span> },
         { title: '转发目标', render: (_, fwd: PortForward) => formatForwardTarget(fwd) },
         {
           title: '中转',
           dataIndex: 'outbound',
-          render: (v: string) =>
-            !v || v === 'direct' ? (
-              <span className="muted">直连</span>
-            ) : (
-              <span className="mono">{formatOutboundLabel(v, routingNodes)}</span>
-            ),
+          nowrap: true,
+          render: (v: string) => {
+            if (!v || v === 'direct') return <span className="muted">直连</span>
+            const label = formatOutboundLabel(v, routingNodes)
+            return <span className="mono sd-cell-ellipsis sd-outbound-cell" title={label}>{label}</span>
+          },
         },
         ...trafficColumns(getForwardTraffic),
         {
           title: '状态',
           dataIndex: 'enabled',
-          width: 90,
+          width: 72,
+          nowrap: true,
           render: (v: boolean, fwd: PortForward) => (
             <Switch
               size="small"
@@ -1199,9 +1217,10 @@ export default function ServerDetail() {
           ),
         },
         {
-          title: '',
-          width: 88,
+          title: <span className="sr-only">操作</span>,
+          width: 92,
           align: 'right',
+          nowrap: true,
           render: (_, fwd: PortForward) => rowActions(
             () => { setForwardEditing(fwd); setForwardOpen(true) },
             () => onDeleteForward(fwd),

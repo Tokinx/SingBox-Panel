@@ -40,13 +40,15 @@ export function ImportPreviewModal({
             <Table
               size="small"
               rowKey="tag"
+              scroll={{ x: 'max-content' }}
               dataSource={summary.inbounds || []}
               columns={[
-                { title: '标签', dataIndex: 'tag' },
-                { title: '协议', dataIndex: 'type', render: (value) => <span className="ui-tag">{value}</span> },
-                { title: '端口', dataIndex: 'listen_port', render: (value) => <span className="mono">{value}</span> },
+                { title: '标签', dataIndex: 'tag', nowrap: true },
+                { title: '协议', dataIndex: 'type', nowrap: true, render: (value) => <span className="ui-tag">{value}</span> },
+                { title: '端口', dataIndex: 'listen_port', nowrap: true, render: (value) => <span className="mono">{value}</span> },
                 {
                   title: '模式',
+                  nowrap: true,
                   render: (_, row: { single_user: boolean; users: number }) => row.single_user
                     ? <span className="muted">单用户</span>
                     : <span>多用户 <span className="mono">{row.users}</span></span>,
@@ -58,19 +60,22 @@ export function ImportPreviewModal({
             <Table
               size="small"
               rowKey="tag"
+              scroll={{ x: 'max-content' }}
               dataSource={summary.forwards || []}
               columns={[
-                { title: '标签', dataIndex: 'tag' },
+                { title: '标签', dataIndex: 'tag', nowrap: true },
                 {
                   title: '协议',
                   dataIndex: 'network',
+                  nowrap: true,
                   render: (value: string) => <span className="ui-tag mono">{formatForwardNetwork(value)}</span>,
                 },
-                { title: '监听端口', dataIndex: 'listen_port', render: (value: number) => <span className="mono">{value}</span> },
-                { title: '转发目标', dataIndex: 'target', render: (value: string) => <span className="mono">{value}</span> },
+                { title: '监听端口', dataIndex: 'listen_port', nowrap: true, render: (value: number) => <span className="mono">{value}</span> },
+                { title: '转发目标', dataIndex: 'target', nowrap: true, render: (value: string) => <span className="mono">{value}</span> },
                 {
                   title: '中转',
                   dataIndex: 'outbound',
+                  nowrap: true,
                   render: (value: string) =>
                     !value || value === 'direct' ? (
                       <span className="muted">直连</span>
@@ -85,11 +90,12 @@ export function ImportPreviewModal({
             <Table
               size="small"
               rowKey="tag"
+              scroll={{ x: 'max-content' }}
               dataSource={summary.outbounds || []}
               columns={[
-                { title: '标签', dataIndex: 'tag' },
-                { title: '类型', dataIndex: 'type', render: (value) => <span className="ui-tag">{value}</span> },
-                { title: '目标地址', dataIndex: 'info', render: (value) => <span className="mono">{value}</span> },
+                { title: '标签', dataIndex: 'tag', nowrap: true },
+                { title: '类型', dataIndex: 'type', nowrap: true, render: (value) => <span className="ui-tag">{value}</span> },
+                { title: '目标地址', dataIndex: 'info', nowrap: true, render: (value) => <span className="mono">{value}</span> },
               ]}
             />
           </PreviewGroup>
@@ -97,11 +103,12 @@ export function ImportPreviewModal({
             <Table
               size="small"
               rowKey={(_, index) => String(index)}
+              scroll={{ x: 'max-content' }}
               dataSource={summary.rules || []}
               columns={[
-                { title: '匹配入站', render: (_, row: { inbound: string[] | null }) => row.inbound?.length ? row.inbound.join(', ') : <span className="faint">不限</span> },
+                { title: '匹配入站', nowrap: true, render: (_, row: { inbound: string[] | null }) => row.inbound?.length ? row.inbound.join(', ') : <span className="faint">不限</span> },
                 { title: '其它匹配', dataIndex: 'info', render: (value) => value || <span className="faint">—</span> },
-                { title: '出站', dataIndex: 'outbound', render: (value) => <span className="mono">{value}</span> },
+                { title: '出站', dataIndex: 'outbound', nowrap: true, render: (value) => <span className="mono">{value}</span> },
               ]}
             />
           </PreviewGroup>

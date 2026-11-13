@@ -230,6 +230,17 @@ describe('ServerDetail forwards tab', () => {
     expect(screen.getByText(formatBytes(4096))).toBeTruthy()
     expect(screen.getByText(formatBytes(2048))).toBeTruthy()
     expect(screen.getByText(formatBytes(6144))).toBeTruthy()
+
+    const tableRegion = screen.getByRole('region', { name: '转发列表' })
+    expect(tableRegion).toBeTruthy()
+    expect(screen.getByText('fwd-custom').closest('td')?.classList.contains('ui-table-cell-nowrap')).toBe(true)
+    expect(screen.getByText('直连').closest('td')?.classList.contains('ui-table-cell-nowrap')).toBe(true)
+    expect(screen.getByText(formatBytes(4096)).closest('td')?.classList.contains('ui-table-cell-nowrap')).toBe(true)
+    expect(screen.getByText('JP Edge · jp-vless').closest('.sd-forward-target')).toBeTruthy()
+
+    const listenPortHeader = screen.getByRole('columnheader', { name: '监听端口' })
+    fireEvent.click(screen.getByRole('button', { name: '监听端口' }))
+    expect(listenPortHeader.getAttribute('aria-sort')).toBe('ascending')
   })
 
   it('toggles forward enabled state and deletes a forward after confirmation', async () => {

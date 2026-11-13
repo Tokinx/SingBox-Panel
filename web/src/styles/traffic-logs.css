@@ -37,10 +37,11 @@
 .tr-chart-empty { display: grid; place-items: center; height: 258px; color: var(--console-faint); font-size: 13px; }
 
 .tr-port-table .tr-tag-name { font-weight: 500; }
+.tr-port-table .ui-table-cell { padding: 12px; }
 .tr-port-table :is(.ui-table-thead, .ui-table-tbody, .ui-table-summary) > tr > :first-child { padding-left: 20px; }
 .tr-port-table :is(.ui-table-thead, .ui-table-tbody, .ui-table-summary) > tr > :last-child { padding-right: 20px; }
 .tr-port-table .tr-strong { font-weight: 600; color: var(--console-ink); }
-.tr-port-table .ui-table-summary > tr > td { background: var(--console-surface); border-top: 1px solid var(--console-border); border-bottom: 0; }
+.tr-port-table .ui-table-summary > tr > td { background: var(--console-surface); border-top: 1px solid var(--console-border); border-bottom: 0; white-space: nowrap; }
 .tr-port-table .ui-table-thead > tr > th { background: var(--console-surface); color: var(--console-muted); }
 .tr-unavailable { display: flex; flex-direction: column; gap: 4px; }
 .tr-unavailable strong { color: var(--console-ink); font-weight: 500; }
