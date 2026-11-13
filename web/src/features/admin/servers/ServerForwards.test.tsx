@@ -219,7 +219,7 @@ describe('ServerDetail forwards tab', () => {
     expect(await screen.findByText('fwd-custom')).toBeTruthy()
     expect(screen.getByText('TCP+UDP')).toBeTruthy()
     expect(screen.getByText('203.0.113.10:443')).toBeTruthy()
-    expect(screen.getByText('Direct · 直出')).toBeTruthy()
+    expect(screen.getByText('直连')).toBeTruthy()
 
     expect(screen.getByText('fwd-linked')).toBeTruthy()
     expect(screen.getByText('TCP')).toBeTruthy()

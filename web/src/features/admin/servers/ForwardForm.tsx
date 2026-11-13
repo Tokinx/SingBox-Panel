@@ -120,6 +120,7 @@ export function ForwardForm({
   const targetServerId: number | undefined = Form.useWatch('target_server_id', form)
   const targetInboundId: number | undefined = Form.useWatch('target_inbound_id', form)
   const listenPort: number | undefined = Form.useWatch('listen_port', form)
+  const useRelay = !!Form.useWatch('use_relay', form)
 
   const allServers = providedServers ?? loadedServers
   const targetServers = useMemo(
@@ -173,6 +174,7 @@ export function ForwardForm({
     if (!open) return
     form.resetFields()
     if (forward) {
+      const hasRelay = Boolean(forward.outbound && forward.outbound !== 'direct')
       form.setFieldsValue({
         tag: forward.tag,
         listen_port: forward.listen_port,
@@ -182,7 +184,8 @@ export function ForwardForm({
         target_inbound_id: forward.target_inbound_id || undefined,
         target_address: forward.target_address || '',
         target_port: forward.target_port || undefined,
-        outbound: forward.outbound || 'direct',
+        use_relay: hasRelay,
+        outbound: hasRelay ? forward.outbound : undefined,
         remark: forward.remark || '',
         enabled: forward.enabled ?? true,
       })
@@ -196,7 +199,8 @@ export function ForwardForm({
         target_inbound_id: undefined,
         target_address: '',
         target_port: undefined,
-        outbound: 'direct',
+        use_relay: false,
+        outbound: undefined,
         remark: '',
         enabled: true,
       })
@@ -232,12 +236,13 @@ export function ForwardForm({
       if (session !== submitSessionRef.current) return
 
       const rawTag = String(v.tag || '').trim()
+      const outbound = v.use_relay ? String(v.outbound || '').trim() || 'direct' : 'direct'
       const body: ForwardBody = {
         tag: rawTag || `fwd-${v.listen_port}`,
         listen_port: Number(v.listen_port),
         network: (v.network === 'all' ? '' : v.network || '') as ForwardNetwork,
         target_type: (v.target_type || 'custom') as ForwardTargetType,
-        outbound: String(v.outbound || 'direct').trim() || 'direct',
+        outbound,
         remark: String(v.remark || '').trim(),
         enabled: v.enabled ?? true,
       }
@@ -263,12 +268,9 @@ export function ForwardForm({
     }
   }
 
-  const outboundOptions = useMemo(() => {
-    const base = [
-      { value: 'direct', label: 'Direct · 直出' },
-      ...routingNodes.map((node) => ({ value: node.tag, label: node.name })),
-    ]
-    if (forward?.outbound && !base.some((o) => o.value === forward.outbound)) {
+  const relayOutboundOptions = useMemo(() => {
+    const base = routingNodes.map((node) => ({ value: node.tag, label: node.name }))
+    if (forward?.outbound && forward.outbound !== 'direct' && !base.some((o) => o.value === forward.outbound)) {
       base.push({ value: forward.outbound, label: `${forward.outbound}（当前配置）` })
     }
     return base
@@ -462,22 +464,45 @@ export function ForwardForm({
             )}
           </FormGroup>
 
-          <FormGroup title="出口与状态">
-            <Form.Item
-              name="outbound"
-              label="出站路由"
-              extra="Direct · 直出直接连通目标；也可选择上级代理/专线节点做多跳串联。"
-            >
-              <Select showSearch options={outboundOptions} />
-            </Form.Item>
-            <Form.Item name="remark" label="备注">
+          <FormGroup title="状态与选项">
+            <Form.Item name="remark" label="备注" className="fm-full">
               <Input placeholder="可选备注，例如 HK IPLC -> JP VLESS" />
             </Form.Item>
             <div className="fm-switches">
               <Form.Item name="enabled" label="启用此端口转发" valuePropName="checked" className="fm-switch">
                 <Switch />
               </Form.Item>
+              <Form.Item name="use_relay" label="通过出站节点中转" valuePropName="checked" className="fm-switch">
+                <Switch />
+              </Form.Item>
             </div>
+            {useRelay && (
+              <Form.Item
+                name="outbound"
+                label="中转出站"
+                className="fm-full"
+                extra="默认直连目标地址；开启中转后，经由所选出站节点二次转发至目标（如专线/上级代理串联）。"
+                rules={[
+                  {
+                    validator: (_rule, val) => {
+                      if (!form.getFieldValue('use_relay')) return Promise.resolve()
+                      const trimmed = String(val || '').trim()
+                      return trimmed && trimmed !== 'direct'
+                        ? Promise.resolve()
+                        : Promise.reject(new Error('请选择中转出站'))
+                    },
+                  },
+                ]}
+              >
+                <Select
+                  showSearch
+                  options={relayOutboundOptions}
+                  placeholder={
+                    relayOutboundOptions.length ? '选择中转出站节点' : '当前服务器暂无可用出站节点'
+                  }
+                />
+              </Form.Item>
+            )}
           </FormGroup>
         </Form>
       </fieldset>

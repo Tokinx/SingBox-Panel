@@ -1173,7 +1173,16 @@ export default function ServerDetail() {
         { title: '协议', dataIndex: 'network', render: (v: ForwardNetwork) => <span className="ui-tag mono">{formatForwardNetwork(v)}</span> },
         { title: '监听端口', dataIndex: 'listen_port', sorter: (a: PortForward, b: PortForward) => a.listen_port - b.listen_port, render: (v: number) => <span className="mono">{v}</span> },
         { title: '转发目标', render: (_, fwd: PortForward) => formatForwardTarget(fwd) },
-        { title: '出站路由', dataIndex: 'outbound', render: (v: string) => <span className="mono">{formatOutboundLabel(v, routingNodes)}</span> },
+        {
+          title: '中转',
+          dataIndex: 'outbound',
+          render: (v: string) =>
+            !v || v === 'direct' ? (
+              <span className="muted">直连</span>
+            ) : (
+              <span className="mono">{formatOutboundLabel(v, routingNodes)}</span>
+            ),
+        },
         ...trafficColumns(getForwardTraffic),
         {
           title: '状态',

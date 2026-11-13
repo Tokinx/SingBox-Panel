@@ -68,7 +68,16 @@ export function ImportPreviewModal({
                 },
                 { title: '监听端口', dataIndex: 'listen_port', render: (value: number) => <span className="mono">{value}</span> },
                 { title: '转发目标', dataIndex: 'target', render: (value: string) => <span className="mono">{value}</span> },
-                { title: '出站', dataIndex: 'outbound', render: (value: string) => <span className="mono">{value || 'direct'}</span> },
+                {
+                  title: '中转',
+                  dataIndex: 'outbound',
+                  render: (value: string) =>
+                    !value || value === 'direct' ? (
+                      <span className="muted">直连</span>
+                    ) : (
+                      <span className="mono">{value}</span>
+                    ),
+                },
               ]}
             />
           </PreviewGroup>

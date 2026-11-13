@@ -206,6 +206,8 @@ describe('ForwardForm', () => {
       />,
     )
 
+    expect(screen.queryByLabelText('中转出站')).toBeNull()
+
     fireEvent.change(screen.getByLabelText(/^监听端口/), { target: { value: '18443' } })
     fireEvent.change(screen.getByLabelText(/^目标地址/), { target: { value: ' 203.0.113.50 ' } })
     fireEvent.change(screen.getByLabelText(/^目标端口/), { target: { value: '9443' } })
@@ -306,9 +308,17 @@ describe('ForwardForm', () => {
     fireEvent.click(await screen.findByRole('option', { name: 'jp-vless · vless :9443' }))
     await waitFor(() => expect(screen.getByLabelText(/^目标入站/).textContent).toContain('jp-vless'))
 
-    fireEvent.click(screen.getByLabelText('出站路由'))
+    expect(screen.queryByLabelText('中转出站')).toBeNull()
+    fireEvent.click(screen.getByLabelText('通过出站节点中转'))
+    const outboundSelect = await screen.findByLabelText('中转出站')
+    submitCreate()
+    await screen.findByText('请选择中转出站')
+    expect(createForward).not.toHaveBeenCalled()
+
+    fireEvent.click(outboundSelect)
+    expect(screen.queryByRole('option', { name: /Direct/ })).toBeNull()
     fireEvent.click(await screen.findByRole('option', { name: 'HK · IPLC' }))
-    await waitFor(() => expect(screen.getByLabelText('出站路由').textContent).toContain('HK · IPLC'))
+    await waitFor(() => expect(screen.getByLabelText('中转出站').textContent).toContain('HK · IPLC'))
     submitCreate()
 
     await waitFor(() => expect(createForward).toHaveBeenCalledOnce())
@@ -360,6 +370,33 @@ describe('ForwardForm', () => {
       },
     ])
   })
+
+  it('reveals preselected transit outbound when editing a relayed forward and reverts to direct when toggled off', async () => {
+    const relayedForward: PortForward = { ...existingForward, id: 8, tag: 'fwd-relayed', outbound: 'hk-transit' }
+    render(
+      <ForwardForm
+        serverId={1}
+        forward={relayedForward}
+        inbounds={localInbounds}
+        forwards={[relayedForward]}
+        routingNodes={routingNodes}
+        servers={targetServers}
+        open
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    )
+
+    const outboundSelect = await screen.findByLabelText('中转出站')
+    expect(outboundSelect.textContent).toContain('HK · IPLC')
+
+    fireEvent.click(screen.getByLabelText('通过出站节点中转'))
+    await waitFor(() => expect(screen.queryByLabelText('中转出站')).toBeNull())
+    submitEdit()
+
+    await waitFor(() => expect(updateForward).toHaveBeenCalledOnce())
+    expect(vi.mocked(updateForward).mock.calls[0][2].outbound).toBe('direct')
+  })
 })
 
 describe('port forward integration points', () => {
@@ -382,8 +419,10 @@ describe('port forward integration points', () => {
     expect(screen.getByText('fwd-hk')).toBeTruthy()
     expect(screen.getByText('TCP+UDP')).toBeTruthy()
     expect(screen.getByText('203.0.113.10:80')).toBeTruthy()
+    expect(screen.getByText('直连')).toBeTruthy()
     expect(screen.getByText('fwd-tcp')).toBeTruthy()
     expect(screen.getByText('jp.example.com:443')).toBeTruthy()
+    expect(screen.getByText('transit')).toBeTruthy()
   })
 
   it('prevents a REALITY front SNI guard internal port from colliding with an existing port forward', async () => {
