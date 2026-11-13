@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import {
@@ -17,6 +17,7 @@ type Column<T> = {
   width?: number | string
   align?: 'left' | 'center' | 'right'
   ellipsis?: boolean
+  nowrap?: boolean
   render?: (value: any, record: T, index: number) => React.ReactNode
   sorter?: ((a: T, b: T) => number) | boolean
   defaultSortOrder?: 'ascend' | 'descend'
@@ -39,6 +40,7 @@ type TableProps<T> = {
   tableLayout?: 'auto' | 'fixed'
   locale?: { emptyText?: React.ReactNode }
   summary?: (data: T[]) => React.ReactNode
+  ariaLabel?: string
 }
 function TableRoot<T extends object>({
   columns = [],
@@ -54,6 +56,7 @@ function TableRoot<T extends object>({
   tableLayout,
   locale,
   summary,
+  ariaLabel,
 }: TableProps<T>) {
   const breakpoint = useBreakpoint()
   const visible = columns.filter(
@@ -82,6 +85,20 @@ function TableRoot<T extends object>({
       : dataSource
   }, [dataSource, columns, sorting])
   const viewport = useRef<HTMLDivElement>(null)
+  const [scrollable, setScrollable] = useState(false)
+  useEffect(() => {
+    const el = viewport.current
+    if (!el) return
+    const check = () => {
+      setScrollable(el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1)
+    }
+    check()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(check)
+    observer.observe(el)
+    if (el.firstElementChild) observer.observe(el.firstElementChild)
+    return () => observer.disconnect()
+  }, [rows.length, visible.length, scroll?.x, scroll?.y])
   const getKey = (row: T, index: number) =>
     typeof rowKey === 'function'
       ? rowKey(row, index)
@@ -124,6 +141,7 @@ function TableRoot<T extends object>({
               key={column.key ?? i}
               className={cn(
                 'ui-table-cell',
+                column.nowrap && 'ui-table-cell-nowrap',
                 column.ellipsis && 'ui-table-cell-ellipsis',
                 column.className,
               )}
@@ -154,6 +172,9 @@ function TableRoot<T extends object>({
       <div
         className="ui-table-container"
         ref={viewport}
+        role={ariaLabel || scrollable ? 'region' : undefined}
+        aria-label={ariaLabel || (scrollable ? '数据表格' : undefined)}
+        tabIndex={scrollable ? 0 : undefined}
         style={{ maxHeight: scroll?.y, overflow: 'auto' }}
       >
         <table
@@ -170,8 +191,11 @@ function TableRoot<T extends object>({
             <TableRow>
               {visible.map((column, i) => {
                 const index = columns.indexOf(column)
+                const sortOrder = sorting?.index === index ? sorting.order : undefined
                 return (
                   <TableHead
+                    scope="col"
+                    aria-sort={sortOrder ? (sortOrder === 'ascend' ? 'ascending' : 'descending') : undefined}
                     className="ui-table-cell"
                     key={column.key ?? i}
                     style={{
@@ -200,17 +224,17 @@ function TableRoot<T extends object>({
                                 : null,
                           )
                         }
-                        aria-label={`排序 ${typeof column.title === 'string' ? column.title : ''}`}
+                        aria-label={typeof column.title === 'string' ? undefined : '排序'}
                       >
                         {column.title}
                         {sorting?.index === index ? (
                           sorting.order === 'ascend' ? (
-                            <ArrowUp size={12} />
+                            <ArrowUp size={12} aria-hidden="true" />
                           ) : (
-                            <ArrowDown size={12} />
+                            <ArrowDown size={12} aria-hidden="true" />
                           )
                         ) : (
-                          <ArrowUpDown size={12} />
+                          <ArrowUpDown size={12} aria-hidden="true" />
                         )}
                       </button>
                     ) : (
@@ -281,9 +305,19 @@ const Summary = Object.assign(SummaryRoot, {
   Cell: ({
     index,
     children,
+    className,
+    align,
+    style,
     ...props
-  }: React.TdHTMLAttributes<HTMLTableCellElement> & { index: number }) => (
-    <td {...props} className="ui-table-cell">
+  }: Omit<React.TdHTMLAttributes<HTMLTableCellElement>, 'align'> & {
+    index: number
+    align?: 'left' | 'center' | 'right'
+  }) => (
+    <td
+      {...props}
+      className={cn('ui-table-cell', className)}
+      style={{ textAlign: align, ...style }}
+    >
       {children}
     </td>
   ),
