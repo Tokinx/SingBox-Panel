@@ -165,12 +165,17 @@ func (o *Orchestrator) BuildServerConfig(srv *model.Server) ([]byte, error) {
 	if len(ruleSetTags) > 0 {
 		return nil, fmt.Errorf("路由引用不存在的全局规则集: %s", strings.Join(mapKeys(ruleSetTags), ", "))
 	}
+	fwdInputs, err := buildServerForwardInputs(o.db, srv.ID, nodeTags)
+	if err != nil {
+		return nil, err
+	}
 	nodeOutbounds, err := buildRoutingNodeOutbounds(o.db, srv.ID, nodeTags)
 	if err != nil {
 		return nil, err
 	}
 	raw, err := singbox.BuildServerConfig(singbox.ServerConfigInput{
 		Inbounds:        ins,
+		Forwards:        fwdInputs,
 		Rules:           rules,
 		RuleSets:        rsets,
 		Final:           srv.FinalOutbound,
@@ -431,6 +436,12 @@ func (o *Orchestrator) serverIsManaged(serverID uint) (bool, error) {
 		return true, nil
 	}
 	if err := o.db.Model(&model.RouteRule{}).Where("server_id = ?", serverID).Count(&n).Error; err != nil {
+		return false, err
+	}
+	if n > 0 {
+		return true, nil
+	}
+	if err := o.db.Model(&model.PortForward{}).Where("server_id = ?", serverID).Count(&n).Error; err != nil {
 		return false, err
 	}
 	if n > 0 {

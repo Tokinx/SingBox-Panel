@@ -81,6 +81,10 @@ func recordTimestampedTraffic(db *gorm.DB, serverID uint, snapshot *protocol.Tra
 		if err != nil {
 			return err
 		}
+		fwdByTag, _, err := loadTrafficForwards(tx, serverID)
+		if err != nil {
+			return err
+		}
 		inboundIDs := make(map[string]uint, len(inbounds))
 		for _, inbound := range inbounds {
 			inboundIDs[inbound.Tag] = inbound.ID
@@ -102,6 +106,12 @@ func recordTimestampedTraffic(db *gorm.DB, serverID uint, snapshot *protocol.Tra
 				if id := inboundIDs[port.Inbound]; id != 0 {
 					deltas = append(deltas, trafficBucketDelta{
 						Key: trafficBucketKey{ServerID: serverID, InboundID: id, Bucket: at},
+						Value: trafficBucketValue{Upload: port.Upload, Download: port.Download,
+							UploadRate: port.UploadRate, DownloadRate: port.DownloadRate},
+					})
+				} else if fwd, ok := fwdByTag[port.Inbound]; ok && fwd.ForwardID != 0 {
+					deltas = append(deltas, trafficBucketDelta{
+						Key: trafficBucketKey{ServerID: serverID, ForwardID: fwd.ForwardID, Bucket: at},
 						Value: trafficBucketValue{Upload: port.Upload, Download: port.Download,
 							UploadRate: port.UploadRate, DownloadRate: port.DownloadRate},
 					})

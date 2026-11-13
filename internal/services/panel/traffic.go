@@ -70,6 +70,7 @@ func maxUint64(a, b uint64) uint64 {
 type trafficBucketKey struct {
 	ServerID  uint
 	InboundID uint
+	ForwardID uint
 	Bucket    time.Time
 }
 
@@ -319,22 +320,34 @@ func applyServerTraffic(db *gorm.DB, serverID uint, snapshot *protocol.TrafficSn
 		if err != nil {
 			return err
 		}
+		fwdByTag, _, err := loadTrafficForwards(tx, serverID)
+		if err != nil {
+			return err
+		}
 		inboundIDs := make(map[string]uint, len(inbounds))
 		for _, inbound := range inbounds {
 			inboundIDs[inbound.Tag] = inbound.ID
 		}
 		for _, port := range snapshot.Ports {
-			inboundID := inboundIDs[port.Inbound]
-			if inboundID == 0 {
+			if inboundID := inboundIDs[port.Inbound]; inboundID != 0 {
+				deltas = append(deltas, trafficBucketDelta{
+					Key: trafficBucketKey{ServerID: serverID, InboundID: inboundID, Bucket: bucket},
+					Value: trafficBucketValue{
+						Upload: port.Upload, Download: port.Download,
+						UploadRate: port.UploadRate, DownloadRate: port.DownloadRate,
+					},
+				})
 				continue
 			}
-			deltas = append(deltas, trafficBucketDelta{
-				Key: trafficBucketKey{ServerID: serverID, InboundID: inboundID, Bucket: bucket},
-				Value: trafficBucketValue{
-					Upload: port.Upload, Download: port.Download,
-					UploadRate: port.UploadRate, DownloadRate: port.DownloadRate,
-				},
-			})
+			if fwd, ok := fwdByTag[port.Inbound]; ok && fwd.ForwardID != 0 {
+				deltas = append(deltas, trafficBucketDelta{
+					Key: trafficBucketKey{ServerID: serverID, ForwardID: fwd.ForwardID, Bucket: bucket},
+					Value: trafficBucketValue{
+						Upload: port.Upload, Download: port.Download,
+						UploadRate: port.UploadRate, DownloadRate: port.DownloadRate,
+					},
+				})
+			}
 		}
 		// Raw-mode configs carry user names the panel did not issue, which could
 		// match panel users by accident; only managed configs are attributed.
@@ -388,43 +401,71 @@ func trafficUpsertSet(db *gorm.DB, table string, connectionsMax bool) clause.Set
 }
 
 var trafficConflictColumns = []clause.Column{{Name: "server_id"}, {Name: "inbound_id"}, {Name: "bucket"}}
+var forwardTrafficConflictColumns = []clause.Column{{Name: "server_id"}, {Name: "forward_id"}, {Name: "bucket"}}
+
+func accumulateHourlyTraffic(hourlyByKey map[trafficBucketKey]trafficBucketValue, hourKey trafficBucketKey, v trafficBucketValue) {
+	hour := hourlyByKey[hourKey]
+	hour.Upload += v.Upload
+	hour.Download += v.Download
+	hour.UploadRate = maxUint64(hour.UploadRate, v.UploadRate)
+	hour.DownloadRate = maxUint64(hour.DownloadRate, v.DownloadRate)
+	if v.TCPConnections > hour.TCPConnections {
+		hour.TCPConnections = v.TCPConnections
+	}
+	if v.UDPConnections > hour.UDPConnections {
+		hour.UDPConnections = v.UDPConnections
+	}
+	hourlyByKey[hourKey] = hour
+}
 
 // writeTrafficBuckets upserts minute buckets and their hourly rollups.
 func writeTrafficBuckets(db *gorm.DB, deltas []trafficBucketDelta) error {
 	minute := make([]model.TrafficRecord, 0, len(deltas))
 	hourlyByKey := map[trafficBucketKey]trafficBucketValue{}
+	fwdMinute := make([]model.TrafficForwardRecord, 0)
+	fwdHourlyByKey := map[trafficBucketKey]trafficBucketValue{}
+
 	for _, delta := range deltas {
 		if delta.Value.empty() {
 			continue
 		}
 		v := delta.Value
+		b := delta.Key.Bucket.UTC()
+		hourKey := delta.Key
+		hourKey.Bucket = b.Truncate(trafficHourlyBucket)
+
+		if delta.Key.ForwardID != 0 {
+			fwdMinute = append(fwdMinute, model.TrafficForwardRecord{
+				ServerID: delta.Key.ServerID, ForwardID: delta.Key.ForwardID, Bucket: b,
+				Upload: v.Upload, Download: v.Download, UploadRate: v.UploadRate, DownloadRate: v.DownloadRate,
+				TCPConnections: v.TCPConnections, UDPConnections: v.UDPConnections,
+			})
+			accumulateHourlyTraffic(fwdHourlyByKey, hourKey, v)
+			continue
+		}
+
 		minute = append(minute, model.TrafficRecord{
-			ServerID: delta.Key.ServerID, InboundID: delta.Key.InboundID, Bucket: delta.Key.Bucket.UTC(),
+			ServerID: delta.Key.ServerID, InboundID: delta.Key.InboundID, Bucket: b,
 			Upload: v.Upload, Download: v.Download, UploadRate: v.UploadRate, DownloadRate: v.DownloadRate,
 			TCPConnections: v.TCPConnections, UDPConnections: v.UDPConnections,
 		})
-		hourKey := delta.Key
-		hourKey.Bucket = delta.Key.Bucket.UTC().Truncate(trafficHourlyBucket)
-		hour := hourlyByKey[hourKey]
-		hour.Upload += v.Upload
-		hour.Download += v.Download
-		hour.UploadRate = maxUint64(hour.UploadRate, v.UploadRate)
-		hour.DownloadRate = maxUint64(hour.DownloadRate, v.DownloadRate)
-		if v.TCPConnections > hour.TCPConnections {
-			hour.TCPConnections = v.TCPConnections
-		}
-		if v.UDPConnections > hour.UDPConnections {
-			hour.UDPConnections = v.UDPConnections
-		}
-		hourlyByKey[hourKey] = hour
+		accumulateHourlyTraffic(hourlyByKey, hourKey, v)
 	}
-	if len(minute) == 0 {
+	if len(minute) == 0 && len(fwdMinute) == 0 {
 		return nil
 	}
 	hourly := make([]model.TrafficHourly, 0, len(hourlyByKey))
 	for key, v := range hourlyByKey {
 		hourly = append(hourly, model.TrafficHourly{
 			ServerID: key.ServerID, InboundID: key.InboundID, Bucket: key.Bucket,
+			Upload: v.Upload, Download: v.Download, UploadRate: v.UploadRate, DownloadRate: v.DownloadRate,
+			TCPConnections: v.TCPConnections, UDPConnections: v.UDPConnections,
+		})
+	}
+	fwdHourly := make([]model.TrafficForwardHourly, 0, len(fwdHourlyByKey))
+	for key, v := range fwdHourlyByKey {
+		fwdHourly = append(fwdHourly, model.TrafficForwardHourly{
+			ServerID: key.ServerID, ForwardID: key.ForwardID, Bucket: key.Bucket,
 			Upload: v.Upload, Download: v.Download, UploadRate: v.UploadRate, DownloadRate: v.DownloadRate,
 			TCPConnections: v.TCPConnections, UDPConnections: v.UDPConnections,
 		})
@@ -436,15 +477,33 @@ func writeTrafficBuckets(db *gorm.DB, deltas []trafficBucketDelta) error {
 	sort.Slice(hourly, func(i, j int) bool {
 		return trafficRowLess(hourly[i].ServerID, hourly[i].InboundID, hourly[i].Bucket, hourly[j].ServerID, hourly[j].InboundID, hourly[j].Bucket)
 	})
+	sort.Slice(fwdMinute, func(i, j int) bool {
+		return trafficRowLess(fwdMinute[i].ServerID, fwdMinute[i].ForwardID, fwdMinute[i].Bucket, fwdMinute[j].ServerID, fwdMinute[j].ForwardID, fwdMinute[j].Bucket)
+	})
+	sort.Slice(fwdHourly, func(i, j int) bool {
+		return trafficRowLess(fwdHourly[i].ServerID, fwdHourly[i].ForwardID, fwdHourly[i].Bucket, fwdHourly[j].ServerID, fwdHourly[j].ForwardID, fwdHourly[j].Bucket)
+	})
 
 	return db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Clauses(clause.OnConflict{Columns: trafficConflictColumns, DoUpdates: trafficUpsertSet(tx, "traffic_records", false)}).
-			CreateInBatches(&minute, 200).Error; err != nil {
-			return fmt.Errorf("upsert minute buckets: %w", err)
+		if len(minute) > 0 {
+			if err := tx.Clauses(clause.OnConflict{Columns: trafficConflictColumns, DoUpdates: trafficUpsertSet(tx, "traffic_records", false)}).
+				CreateInBatches(&minute, 200).Error; err != nil {
+				return fmt.Errorf("upsert minute buckets: %w", err)
+			}
+			if err := tx.Clauses(clause.OnConflict{Columns: trafficConflictColumns, DoUpdates: trafficUpsertSet(tx, "traffic_hourly", true)}).
+				CreateInBatches(&hourly, 200).Error; err != nil {
+				return fmt.Errorf("upsert hourly buckets: %w", err)
+			}
 		}
-		if err := tx.Clauses(clause.OnConflict{Columns: trafficConflictColumns, DoUpdates: trafficUpsertSet(tx, "traffic_hourly", true)}).
-			CreateInBatches(&hourly, 200).Error; err != nil {
-			return fmt.Errorf("upsert hourly buckets: %w", err)
+		if len(fwdMinute) > 0 {
+			if err := tx.Clauses(clause.OnConflict{Columns: forwardTrafficConflictColumns, DoUpdates: trafficUpsertSet(tx, "traffic_forward_records", false)}).
+				CreateInBatches(&fwdMinute, 200).Error; err != nil {
+				return fmt.Errorf("upsert forward minute buckets: %w", err)
+			}
+			if err := tx.Clauses(clause.OnConflict{Columns: forwardTrafficConflictColumns, DoUpdates: trafficUpsertSet(tx, "traffic_forward_hourly", true)}).
+				CreateInBatches(&fwdHourly, 200).Error; err != nil {
+				return fmt.Errorf("upsert forward hourly buckets: %w", err)
+			}
 		}
 		return nil
 	})
@@ -482,23 +541,34 @@ type trafficPortSeries struct {
 	Points    []trafficPoint `json:"points"`
 }
 
+type trafficForwardSeries struct {
+	ForwardID uint           `json:"forward_id"`
+	Tag       string         `json:"tag"`
+	Port      int            `json:"port"`
+	Network   string         `json:"network"`
+	Upload    uint64         `json:"upload"`
+	Download  uint64         `json:"download"`
+	Points    []trafficPoint `json:"points"`
+}
+
 type trafficSeries struct {
-	Available        bool                `json:"available"`
-	Range            string              `json:"range"`
-	StepSeconds      int64               `json:"step_seconds"`
-	Timezone         string              `json:"timezone"`
-	TrafficResetDay  int                 `json:"traffic_reset_day"`
-	UpdatedAt        *time.Time          `json:"updated_at"`
-	Upload           uint64              `json:"upload"`
-	Download         uint64              `json:"download"`
-	PeakUploadRate   uint64              `json:"peak_upload_rate"`
-	PeakDownloadRate uint64              `json:"peak_download_rate"`
-	UploadRate       uint64              `json:"upload_rate"`
-	DownloadRate     uint64              `json:"download_rate"`
-	TCPConnections   int                 `json:"tcp_connections"`
-	UDPConnections   int                 `json:"udp_connections"`
-	Points           []trafficPoint      `json:"points"`
-	Ports            []trafficPortSeries `json:"ports"`
+	Available        bool                   `json:"available"`
+	Range            string                 `json:"range"`
+	StepSeconds      int64                  `json:"step_seconds"`
+	Timezone         string                 `json:"timezone"`
+	TrafficResetDay  int                    `json:"traffic_reset_day"`
+	UpdatedAt        *time.Time             `json:"updated_at"`
+	Upload           uint64                 `json:"upload"`
+	Download         uint64                 `json:"download"`
+	PeakUploadRate   uint64                 `json:"peak_upload_rate"`
+	PeakDownloadRate uint64                 `json:"peak_download_rate"`
+	UploadRate       uint64                 `json:"upload_rate"`
+	DownloadRate     uint64                 `json:"download_rate"`
+	TCPConnections   int                    `json:"tcp_connections"`
+	UDPConnections   int                    `json:"udp_connections"`
+	Points           []trafficPoint         `json:"points"`
+	Ports            []trafficPortSeries    `json:"ports"`
+	Forwards         []trafficForwardSeries `json:"forwards"`
 	// Unattributed is node traffic that could not be assigned to a known
 	// inbound: inbounds managed outside the panel, and (on nodes without the
 	// sing-box 1.14+ API service) connections that closed between samples.
@@ -594,6 +664,7 @@ func trafficBucketExpression(db *gorm.DB, stepSeconds, offsetSeconds int64) (str
 
 type trafficQuery struct {
 	hourly   bool
+	forwards bool
 	start    time.Time
 	end      time.Time
 	step     time.Duration
@@ -601,10 +672,23 @@ type trafficQuery struct {
 }
 
 func (q trafficQuery) model() any {
+	if q.forwards {
+		if q.hourly {
+			return &model.TrafficForwardHourly{}
+		}
+		return &model.TrafficForwardRecord{}
+	}
 	if q.hourly {
 		return &model.TrafficHourly{}
 	}
 	return &model.TrafficRecord{}
+}
+
+func (q trafficQuery) idColumn() string {
+	if q.forwards {
+		return "forward_id"
+	}
+	return "inbound_id"
 }
 
 func queryTrafficBuckets(db *gorm.DB, q trafficQuery) ([]aggregatedTrafficRecord, error) {
@@ -617,7 +701,8 @@ func queryTrafficBuckets(db *gorm.DB, q trafficQuery) ([]aggregatedTrafficRecord
 	if err != nil {
 		return nil, err
 	}
-	selectExpression := "server_id, inbound_id, " + bucketExpression + " AS bucket_index, " +
+	idCol := q.idColumn()
+	selectExpression := "server_id, " + idCol + " AS inbound_id, " + bucketExpression + " AS bucket_index, " +
 		"SUM(upload) AS upload, SUM(download) AS download, " +
 		"MAX(upload_rate) AS upload_rate, MAX(download_rate) AS download_rate, " +
 		"MAX(tcp_connections) AS tcp_connections, MAX(udp_connections) AS udp_connections"
@@ -627,8 +712,8 @@ func queryTrafficBuckets(db *gorm.DB, q trafficQuery) ([]aggregatedTrafficRecord
 	}
 	var rows []aggregatedTrafficRecord
 	if err := query.
-		Group("server_id, inbound_id, " + bucketExpression).
-		Order("bucket_index, server_id, inbound_id").
+		Group("server_id, " + idCol + ", " + bucketExpression).
+		Order("bucket_index, server_id, " + idCol).
 		Limit(maxTrafficQueryRows + 1).
 		Scan(&rows).Error; err != nil {
 		return nil, err
@@ -771,6 +856,45 @@ func (a *App) serverTraffic(c *gin.Context) {
 			portDownload += download
 		}
 	}
+
+	fwdRecords, err := queryTrafficBuckets(a.db, trafficQuery{
+		hourly: rangeConfig.hourly, forwards: true, start: usageStart, end: end, step: rangeConfig.step, serverID: serverID,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	_, byForward := buildAggregatedTrafficPoints(fwdRecords, start, end, rangeConfig.step)
+	var serverForwards []model.PortForward
+	if err := a.db.Where("server_id = ?", serverID).Order("listen_port, id").Find(&serverForwards).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	forwards := make([]trafficForwardSeries, 0, len(serverForwards))
+	knownForwardIDs := make(map[uint]bool, len(serverForwards))
+	for _, fwd := range serverForwards {
+		knownForwardIDs[fwd.ID] = true
+		points := byForward[fwd.ID]
+		if points == nil {
+			points = emptyTrafficPoints(start, end, rangeConfig.step)
+		}
+		upload, download := sumTraffic(points)
+		portUpload += upload
+		portDownload += download
+		forwards = append(forwards, trafficForwardSeries{
+			ForwardID: fwd.ID, Tag: fwd.Tag, Port: fwd.ListenPort, Network: fwd.Network,
+			Upload: upload, Download: download, Points: points,
+		})
+	}
+	// Rows for deleted port forwards still count towards the attributed share.
+	for fwdID, points := range byForward {
+		if !knownForwardIDs[fwdID] {
+			upload, download := sumTraffic(points)
+			portUpload += upload
+			portDownload += download
+		}
+	}
+
 	var unattributedUpload, unattributedDownload uint64
 	if totalUpload > portUpload {
 		unattributedUpload = totalUpload - portUpload
@@ -788,7 +912,7 @@ func (a *App) serverTraffic(c *gin.Context) {
 		PeakUploadRate: peakUpload, PeakDownloadRate: peakDownload,
 		UploadRate: server.TrafficUploadRate, DownloadRate: server.TrafficDownloadRate,
 		TCPConnections: server.TrafficTCPConnections, UDPConnections: server.TrafficUDPConnections,
-		Points: totalPoints, Ports: ports,
+		Points: totalPoints, Ports: ports, Forwards: forwards,
 		UnattributedUpload: unattributedUpload, UnattributedDownload: unattributedDownload,
 	})
 }
@@ -800,8 +924,14 @@ func pruneTrafficRecords(db *gorm.DB, now time.Time) error {
 	if err := db.Where("bucket < ?", minuteCutoff).Delete(&model.TrafficRecord{}).Error; err != nil {
 		return err
 	}
+	if err := db.Where("bucket < ?", minuteCutoff).Delete(&model.TrafficForwardRecord{}).Error; err != nil {
+		return err
+	}
 	hourlyCutoff := now.UTC().Add(-trafficHourlyRetention).Truncate(24 * time.Hour)
 	if err := db.Where("bucket < ?", hourlyCutoff).Delete(&model.TrafficHourly{}).Error; err != nil {
+		return err
+	}
+	if err := db.Where("bucket < ?", hourlyCutoff).Delete(&model.TrafficForwardHourly{}).Error; err != nil {
 		return err
 	}
 	return db.Where("bucket < ?", hourlyCutoff).Delete(&model.TrafficUserHourly{}).Error

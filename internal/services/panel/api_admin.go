@@ -342,6 +342,10 @@ func (a *App) updateServer(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "节点连接地址格式无效: " + err.Error()})
 			return
 		}
+		if err := checkServerAddressForForwards(a.db, id, address); err != nil {
+			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+			return
+		}
 		updates["address"] = address
 	}
 	if req.Region != nil {
@@ -364,6 +368,7 @@ func (a *App) updateServer(c *gin.Context) {
 	// A connection address only affects other servers that use its inbounds.
 	if address, changed := updates["address"].(string); changed && address != before.Address {
 		go a.refreshManagedInboundReferences(id)
+		go a.pushForwardsReferencingServer(id)
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
@@ -394,6 +399,13 @@ func (a *App) deleteServer(c *gin.Context) {
 			status = http.StatusConflict
 		}
 		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	if fwdRefs, err := serverInboundForwardReferences(a.db, id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	} else if fwdRefs > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "该服务器的入站仍被其他服务器的端口转发引用，请先修改或删除相关端口转发"})
 		return
 	}
 	previousRoutingTags, err := collectServerManagedRoutingTags(a.db, id)
@@ -441,6 +453,11 @@ func (a *App) deleteServer(c *gin.Context) {
 			return
 		}
 	}
+	if err := deleteServerForwardState(tx, id); err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	if err := deleteUserNodeOrderRefs(tx, userNodeTypeManaged, inboundIDs); err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -463,7 +480,11 @@ func (a *App) deleteServer(c *gin.Context) {
 	go a.refreshManagedRoutingTags(previousRoutingTags...)
 	if a.hub != nil {
 		a.hub.traffic.dropServer(id)
-		for _, row := range []any{&model.TrafficRecord{}, &model.TrafficHourly{}, &model.TrafficUserHourly{}, &model.TrafficReportCursor{}} {
+		for _, row := range []any{
+			&model.TrafficRecord{}, &model.TrafficHourly{},
+			&model.TrafficForwardRecord{}, &model.TrafficForwardHourly{},
+			&model.TrafficUserHourly{}, &model.TrafficReportCursor{},
+		} {
 			if err := a.db.Where("server_id = ?", id).Delete(row).Error; err != nil {
 				log.Printf("delete server %d: final traffic cleanup failed: %v", id, err)
 			}
@@ -905,9 +926,17 @@ func (a *App) applyRawConfig(c *gin.Context) {
 		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
+	if err := validateImportedForwardTrafficTags(a.db, id, raw, parsed.Forwards); err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, errInboundTrafficTagReserved) || errors.Is(err, errForwardTrafficTagReserved) {
+			status = http.StatusBadRequest
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
 	if err := rejectManagedInboundRawImport(a.db, id); err != nil {
 		status := http.StatusInternalServerError
-		if errors.Is(err, errManagedInboundRoutingProtected) {
+		if errors.Is(err, errManagedInboundRoutingProtected) || errors.Is(err, errManagedInboundForwardProtected) {
 			status = http.StatusConflict
 		}
 		c.JSON(status, gin.H{"error": err.Error()})
@@ -1122,6 +1151,15 @@ func (a *App) updateInbound(c *gin.Context) {
 			c.JSON(status, gin.H{"error": err.Error()})
 			return
 		}
+		_, enabledFwds, _, err := inboundForwardReferences(a.db, ib.ID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if enabledFwds > 0 {
+			c.JSON(http.StatusConflict, gin.H{"error": "该入站正被已启用的端口转发引用，请先停用或调整相关端口转发"})
+			return
+		}
 	}
 	nextTag := ib.Tag
 	if req.Tag != "" {
@@ -1238,6 +1276,7 @@ func (a *App) updateInbound(c *gin.Context) {
 		return
 	}
 	go a.pushManagedRoutingNodeChanges([]uint{ib.ID})
+	go a.pushForwardsReferencingInbound(ib.ID)
 	a.applyConfigAndRespond(c, sid, gin.H{"inbound": ib})
 }
 
@@ -1275,6 +1314,15 @@ func (a *App) deleteInbound(c *gin.Context) {
 	}
 	if referenced {
 		c.JSON(http.StatusConflict, gin.H{"error": "该入站仍被分流规则引用，请先修改或删除相关规则"})
+		return
+	}
+	fwdTotal, _, _, err := inboundForwardReferences(a.db, ib.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if fwdTotal > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "该入站仍被端口转发引用，请先修改或删除相关端口转发"})
 		return
 	}
 	a.userAccessMu.Lock()

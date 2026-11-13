@@ -255,6 +255,17 @@ func rewriteServerOutboundTargets(tx *gorm.DB, serverID uint, targets map[string
 			}
 		}
 	}
+	var forwards []model.PortForward
+	if err := tx.Where("server_id = ?", serverID).Find(&forwards).Error; err != nil {
+		return err
+	}
+	for _, fwd := range forwards {
+		if target, ok := targets[fwd.Outbound]; ok {
+			if err := tx.Model(&fwd).Update("outbound", target).Error; err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 

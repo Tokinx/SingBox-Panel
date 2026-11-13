@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -29,11 +30,20 @@ type importReq struct {
 // importSummary is what the UI shows before/after an import.
 type importSummary struct {
 	Inbounds  []importedInbound `json:"inbounds"`
+	Forwards  []importedForward `json:"forwards"`
 	Outbounds []importedItem    `json:"outbounds"`
 	Rules     []importedRule    `json:"rules"`
 	RuleSets  []importedItem    `json:"rulesets"`
 	Final     string            `json:"final"`
 	Skipped   []string          `json:"skipped"`
+}
+
+type importedForward struct {
+	Tag        string `json:"tag"`
+	ListenPort int    `json:"listen_port"`
+	Network    string `json:"network"`
+	Target     string `json:"target"`
+	Outbound   string `json:"outbound"`
 }
 
 type importedInbound struct {
@@ -119,9 +129,9 @@ func (a *App) importRemoteConfig(c *gin.Context) {
 	// what is already running there.
 	if err := a.applyImport(&srv, parsed, []byte(raw)); err != nil {
 		status := http.StatusInternalServerError
-		if errors.Is(err, errInboundTrafficTagReserved) {
+		if errors.Is(err, errInboundTrafficTagReserved) || errors.Is(err, errForwardTrafficTagReserved) {
 			status = http.StatusBadRequest
-		} else if errors.Is(err, errRoutingNodeInUse) || errors.Is(err, errManagedInboundRoutingProtected) {
+		} else if errors.Is(err, errRoutingNodeInUse) || errors.Is(err, errManagedInboundRoutingProtected) || errors.Is(err, errManagedInboundForwardProtected) {
 			status = http.StatusConflict
 		}
 		c.JSON(status, gin.H{"error": err.Error()})
@@ -155,6 +165,19 @@ func buildImportSummary(p *singbox.ParsedConfig) importSummary {
 	}
 	for _, rs := range p.RuleSets {
 		sum.RuleSets = append(sum.RuleSets, importedItem{Tag: rs.Tag, Type: rs.Format, Info: rs.URL})
+	}
+	for _, fwd := range p.Forwards {
+		outbound := strings.TrimSpace(fwd.Outbound)
+		if outbound == "" {
+			outbound = "direct"
+		}
+		sum.Forwards = append(sum.Forwards, importedForward{
+			Tag:        fwd.Tag,
+			ListenPort: fwd.ListenPort,
+			Network:    fwd.Network,
+			Target:     net.JoinHostPort(fwd.OverrideAddress, strconv.Itoa(fwd.OverridePort)),
+			Outbound:   outbound,
+		})
 	}
 	return sum
 }
@@ -199,6 +222,9 @@ func (a *App) applyImportUnlocked(srv *model.Server, p *singbox.ParsedConfig, ra
 		if err := validateImportedInboundTrafficTags(tx, srv.ID, raw); err != nil {
 			return err
 		}
+		if err := validateImportedForwardTrafficTags(tx, srv.ID, raw, p.Forwards); err != nil {
+			return err
+		}
 		if err := syncImportedInbounds(tx, srv.ID, p.Inbounds); err != nil {
 			return err
 		}
@@ -209,6 +235,9 @@ func (a *App) applyImportUnlocked(srv *model.Server, p *singbox.ParsedConfig, ra
 			return err
 		}
 		if err := syncImportedRuleSets(tx, srv.ID, p.RuleSets); err != nil {
+			return err
+		}
+		if err := syncImportedForwards(tx, srv.ID, mode, p.Forwards); err != nil {
 			return err
 		}
 		if err := tx.Model(&model.Server{}).Where("id = ?", srv.ID).Updates(map[string]any{
@@ -268,6 +297,14 @@ func importedConfigMode(p *singbox.ParsedConfig, raw []byte) string {
 			}
 		}
 	}
+	for _, fwd := range p.Forwards {
+		if fwd.ListenPort == localTrafficPort() || fwd.ListenPort == addressPort(protocol.LocalStatsAPIAddress) {
+			return model.ConfigModeRaw
+		}
+		if singbox.IsDisallowedForwardTarget(fwd.OverrideAddress) || singbox.ValidateForwardInput(fwd) != nil {
+			return model.ConfigModeRaw
+		}
+	}
 	generated, err := buildManagedConfigFromImport(p, raw)
 	if err != nil {
 		return model.ConfigModeRaw
@@ -311,7 +348,7 @@ func buildManagedConfigFromImport(p *singbox.ParsedConfig, raw []byte) ([]byte, 
 	}
 	statsController, statsSecretValue, statsAPI := importedStatsSettings(raw)
 	return singbox.BuildServerConfig(singbox.ServerConfigInput{
-		Inbounds: inbounds, Outbounds: outbounds, Rules: rules,
+		Inbounds: inbounds, Outbounds: outbounds, Forwards: p.Forwards, Rules: rules,
 		RuleSets: p.RuleSets, Final: p.Final, StatsController: statsController,
 		StatsSecret: statsSecretValue, StatsAPI: statsAPI,
 	})
@@ -464,6 +501,9 @@ func syncImportedInbounds(tx *gorm.DB, serverID uint, parsed []singbox.ParsedInb
 	if err := rejectInboundRoutingReferences(tx, removedIDs, 0); err != nil {
 		return err
 	}
+	if err := rejectInboundForwardReferences(tx, removedIDs); err != nil {
+		return err
+	}
 	if err := deleteUserNodeOrderRefs(tx, userNodeTypeManaged, removedIDs); err != nil {
 		return err
 	}
@@ -572,4 +612,102 @@ func syncImportedRuleSets(tx *gorm.DB, serverID uint, parsed []singbox.RuleSetIn
 		keepIDs = append(keepIDs, row.ID)
 	}
 	return deleteRowsExcept(tx, serverID, keepIDs, &model.RuleSet{})
+}
+
+func syncImportedForwards(tx *gorm.DB, serverID uint, mode string, parsed []singbox.ForwardInput) error {
+	var existing []model.PortForward
+	if err := tx.Where("server_id = ?", serverID).Find(&existing).Error; err != nil {
+		return err
+	}
+	byTag := make(map[string]*model.PortForward, len(existing))
+	for i := range existing {
+		if err := rememberForwardTrafficTag(tx, serverID, existing[i].ID, existing[i].Tag); err != nil {
+			return err
+		}
+		byTag[existing[i].Tag] = &existing[i]
+	}
+	keepIDs := make([]uint, 0, len(parsed))
+	statsPortA := localTrafficPort()
+	statsPortB := addressPort(protocol.LocalStatsAPIAddress)
+	for _, fwd := range parsed {
+		if mode == model.ConfigModeRaw {
+			if fwd.ListenPort == statsPortA || fwd.ListenPort == statsPortB ||
+				singbox.IsDisallowedForwardTarget(fwd.OverrideAddress) ||
+				singbox.ValidateForwardInput(fwd) != nil {
+				continue
+			}
+		}
+		netProto, err := singbox.NormalizeForwardNetwork(fwd.Network)
+		if err != nil {
+			if mode == model.ConfigModeRaw {
+				continue
+			}
+			return err
+		}
+		outbound := strings.TrimSpace(fwd.Outbound)
+		if outbound == "" {
+			outbound = "direct"
+		}
+		targetType := model.ForwardTargetCustom
+		var targetServerID uint
+		var targetInboundID uint
+		targetAddr := strings.TrimSpace(fwd.OverrideAddress)
+		targetPort := fwd.OverridePort
+
+		row := byTag[fwd.Tag]
+		if row != nil && row.TargetType == model.ForwardTargetInbound && row.TargetInboundID > 0 {
+			if addr, port, srv, ib, err := resolveForwardTarget(tx, serverID, row, false); err == nil && addr == targetAddr && port == targetPort {
+				targetType = model.ForwardTargetInbound
+				targetServerID = srv.ID
+				targetInboundID = ib.ID
+				targetAddr = ""
+				targetPort = 0
+			}
+		}
+
+		if row == nil {
+			row = &model.PortForward{
+				ServerID:        serverID,
+				Tag:             fwd.Tag,
+				ListenPort:      fwd.ListenPort,
+				Network:         netProto,
+				TargetType:      targetType,
+				TargetServerID:  targetServerID,
+				TargetInboundID: targetInboundID,
+				TargetAddress:   targetAddr,
+				TargetPort:      targetPort,
+				Outbound:        outbound,
+				Enabled:         true,
+				Remark:          "同步自服务器配置",
+			}
+			if err := tx.Create(row).Error; err != nil {
+				return err
+			}
+			byTag[fwd.Tag] = row
+			if err := rememberForwardTrafficTag(tx, serverID, row.ID, row.Tag); err != nil {
+				return err
+			}
+		} else {
+			remark := row.Remark
+			if remark == "" {
+				remark = "同步自服务器配置"
+			}
+			if err := tx.Model(row).Updates(map[string]any{
+				"listen_port":       fwd.ListenPort,
+				"network":           netProto,
+				"target_type":       targetType,
+				"target_server_id":  targetServerID,
+				"target_inbound_id": targetInboundID,
+				"target_address":    targetAddr,
+				"target_port":       targetPort,
+				"outbound":          outbound,
+				"enabled":           true,
+				"remark":            remark,
+			}).Error; err != nil {
+				return err
+			}
+		}
+		keepIDs = append(keepIDs, row.ID)
+	}
+	return deleteRowsExcept(tx, serverID, keepIDs, &model.PortForward{})
 }

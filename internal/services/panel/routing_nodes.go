@@ -95,7 +95,7 @@ func rejectRoutingTagsInUse(db *gorm.DB, tags []string, excludedServerID uint) e
 		model  any
 		column string
 	}{
-		{&model.RouteRule{}, "outbound"}, {&model.Server{}, "final_outbound"}, {&model.RuleSet{}, "download_detour"},
+		{&model.RouteRule{}, "outbound"}, {&model.PortForward{}, "outbound"}, {&model.Server{}, "final_outbound"}, {&model.RuleSet{}, "download_detour"},
 	} {
 		var count int64
 		q := db.Model(query.model).Where(query.column+" IN ?", tags)
@@ -103,7 +103,7 @@ func rejectRoutingTagsInUse(db *gorm.DB, tags []string, excludedServerID uint) e
 			switch query.model.(type) {
 			case *model.Server:
 				q = q.Where("id <> ?", excludedServerID)
-			case *model.RouteRule:
+			case *model.RouteRule, *model.PortForward:
 				q = q.Where("server_id <> ?", excludedServerID)
 			}
 		}
@@ -197,6 +197,15 @@ func routingTagsAffectedServers(db *gorm.DB, tags []string) ([]uint, error) {
 				affected[r.ServerID] = true
 				break
 			}
+		}
+	}
+	var forwards []model.PortForward
+	if err := db.Where("enabled = ? AND outbound IN ?", true, tags).Find(&forwards).Error; err != nil {
+		return nil, err
+	}
+	for _, f := range forwards {
+		if managed[f.ServerID] {
+			affected[f.ServerID] = true
 		}
 	}
 	out := make([]uint, 0, len(affected))

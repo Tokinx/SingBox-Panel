@@ -21,7 +21,7 @@ type PortForward struct {
 	TargetPort      int       `json:"target_port" gorm:"default:0"`
 	Outbound        string    `json:"outbound" gorm:"size:128;not null;default:'direct'"`
 	Remark          string    `json:"remark" gorm:"size:255"`
-	Enabled         bool      `json:"enabled" gorm:"default:true"`
+	Enabled         bool      `json:"enabled" gorm:"index"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 
@@ -32,30 +32,32 @@ type PortForward struct {
 	ResolvedPort     int    `json:"resolved_port,omitempty" gorm:"-"`
 }
 
-// TrafficForwardRecord stores periodic byte deltas attributed to a port forward.
+// TrafficForwardRecord stores per-minute/bucket byte deltas attributed to a port forward.
 type TrafficForwardRecord struct {
 	ID             uint      `json:"id" gorm:"primaryKey"`
-	ServerID       uint      `json:"server_id" gorm:"index;not null"`
-	ForwardID      uint      `json:"forward_id" gorm:"index;not null"`
-	Tag            string    `json:"tag" gorm:"size:128"`
-	Port           int       `json:"port"`
-	UploadDelta    int64     `json:"upload_delta"`
-	DownloadDelta  int64     `json:"download_delta"`
+	ServerID       uint      `json:"server_id" gorm:"not null;uniqueIndex:idx_tfr_server_forward_bucket,priority:1"`
+	ForwardID      uint      `json:"forward_id" gorm:"not null;uniqueIndex:idx_tfr_server_forward_bucket,priority:2"`
+	Bucket         time.Time `json:"bucket" gorm:"not null;uniqueIndex:idx_tfr_server_forward_bucket,priority:3;index"`
+	Upload         uint64    `json:"upload"`
+	Download       uint64    `json:"download"`
+	UploadRate     uint64    `json:"upload_rate"`
+	DownloadRate   uint64    `json:"download_rate"`
 	TCPConnections int       `json:"tcp_connections"`
 	UDPConnections int       `json:"udp_connections"`
-	RecordedAt     time.Time `json:"recorded_at" gorm:"index"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // TrafficForwardHourly holds pre-aggregated UTC hourly traffic deltas per port forward.
 type TrafficForwardHourly struct {
 	ID             uint      `json:"id" gorm:"primaryKey"`
-	ServerID       uint      `json:"server_id" gorm:"not null;uniqueIndex:idx_tfh_server_forward_bucket,priority:1;index:idx_tfh_server_bucket,priority:1"`
+	ServerID       uint      `json:"server_id" gorm:"not null;uniqueIndex:idx_tfh_server_forward_bucket,priority:1"`
 	ForwardID      uint      `json:"forward_id" gorm:"not null;uniqueIndex:idx_tfh_server_forward_bucket,priority:2"`
-	Tag            string    `json:"tag" gorm:"size:128"`
-	Port           int       `json:"port"`
-	Bucket         time.Time `json:"bucket" gorm:"not null;uniqueIndex:idx_tfh_server_forward_bucket,priority:3;index:idx_tfh_server_bucket,priority:2"`
-	Upload         int64     `json:"upload"`
-	Download       int64     `json:"download"`
+	Bucket         time.Time `json:"bucket" gorm:"not null;uniqueIndex:idx_tfh_server_forward_bucket,priority:3;index"`
+	Upload         uint64    `json:"upload"`
+	Download       uint64    `json:"download"`
+	UploadRate     uint64    `json:"upload_rate"`
+	DownloadRate   uint64    `json:"download_rate"`
 	TCPConnections int       `json:"tcp_connections"`
 	UDPConnections int       `json:"udp_connections"`
 	CreatedAt      time.Time `json:"created_at"`

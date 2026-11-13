@@ -385,6 +385,7 @@ var applicationMigrations = []schemaMigration{
 	},
 	{version: 32, name: "global routing nodes", up: migrateGlobalOutbounds},
 	{version: 33, name: "global rule sets", up: migrateGlobalRuleSets},
+	{version: 34, name: "port forwards", up: migratePortForwards},
 }
 
 // migrationReplaySafe records whether an interrupted attempt of each migration
@@ -437,6 +438,16 @@ var migrationReplaySafe = map[uint]bool{
 	31: true,  // AutoMigrate of external subscription sync status
 	32: true,  // DML transaction; each adopted outbound is removed atomically
 	33: true,  // DML transaction; only adopts legacy server-scoped rows
+	34: true,  // AutoMigrate of port forwarding and forward traffic tables
+}
+
+func migratePortForwards(db *gorm.DB) error {
+	return db.AutoMigrate(
+		&model.PortForward{},
+		&model.TrafficForwardRecord{},
+		&model.TrafficForwardHourly{},
+		&model.ForwardTrafficIdentity{},
+	)
 }
 
 // runSchemaMigrations applies every pending migration in order. If any

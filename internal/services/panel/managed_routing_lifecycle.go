@@ -12,6 +12,7 @@ import (
 )
 
 var errManagedInboundRoutingProtected = errors.New("该服务器的入站仍被路由引用，请先移除引用再导入或编辑原始配置")
+var errManagedInboundForwardProtected = errors.New("该服务器的入站仍被其他服务器的端口转发引用，请先移除引用再导入或编辑原始配置")
 
 func inboundRoutingTags(ids []uint) []string {
 	tags := make([]string, len(ids))
@@ -40,7 +41,17 @@ func rejectManagedInboundRawImport(db *gorm.DB, serverID uint) error {
 	if errors.Is(err, errRoutingNodeInUse) {
 		return errManagedInboundRoutingProtected
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	fwdRefs, err := serverInboundForwardReferences(db, serverID)
+	if err != nil {
+		return err
+	}
+	if fwdRefs > 0 {
+		return errManagedInboundForwardProtected
+	}
+	return nil
 }
 
 func managedInboundConfigChanged(before, after model.Inbound) bool {
@@ -83,6 +94,11 @@ func collectServerManagedRoutingTags(db *gorm.DB, serverID uint) ([]string, erro
 		}
 		add(tags)
 	}
+	var forwardOutbounds []string
+	if err := db.Model(&model.PortForward{}).Where("server_id = ?", serverID).Pluck("outbound", &forwardOutbounds).Error; err != nil {
+		return nil, err
+	}
+	add(forwardOutbounds)
 	tags := make([]string, 0, len(seen))
 	for tag := range seen {
 		tags = append(tags, tag)

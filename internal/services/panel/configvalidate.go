@@ -88,6 +88,9 @@ func (a *App) validateInboundIdentity(db *gorm.DB, serverID, excludeID uint, tag
 	if port == localTrafficPort() || port == addressPort(protocol.LocalStatsAPIAddress) {
 		return fmt.Errorf("监听端口 %d 已保留给节点流量统计服务", port)
 	}
+	if err := checkInboundConflictWithForwards(db, serverID, tag, "", port); err != nil {
+		return err
+	}
 	var n int64
 	q := db.Model(&model.Inbound{}).Where("server_id = ? AND tag = ?", serverID, tag)
 	if excludeID != 0 {
@@ -126,7 +129,11 @@ func (a *App) validateInboundConfiguration(db *gorm.DB, serverID, excludeID uint
 		if guardPort == localTrafficPort() || guardPort == addressPort(protocol.LocalStatsAPIAddress) {
 			return fmt.Errorf("REALITY 内部端口 %d 已保留给节点流量统计服务", guardPort)
 		}
-		if err := validateTag(settings.RealityGuardTag(tag)); err != nil {
+		guardTag := settings.RealityGuardTag(tag)
+		if err := validateTag(guardTag); err != nil {
+			return err
+		}
+		if err := checkInboundConflictWithForwards(db, serverID, tag, guardTag, port, guardPort); err != nil {
 			return err
 		}
 	}

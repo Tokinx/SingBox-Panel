@@ -164,6 +164,11 @@ func (a *App) updateOutbound(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
+		if err := tx.Model(&model.PortForward{}).Where("server_id = ? AND outbound = ?", sid, oldTag).Update("outbound", ob.Tag).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 	}
 	if err := tx.Save(&ob).Error; err != nil {
 		tx.Rollback()
@@ -211,8 +216,13 @@ func (a *App) deleteOutbound(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	if ruleCount > 0 || finalCount > 0 || ruleSetCount > 0 {
-		c.JSON(http.StatusConflict, gin.H{"error": "该出站仍被分流规则、final 或规则集下载引用，请先修改引用"})
+	var forwardCount int64
+	if err := a.db.Model(&model.PortForward{}).Where("server_id = ? AND outbound = ?", sid, ob.Tag).Count(&forwardCount).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if ruleCount > 0 || finalCount > 0 || ruleSetCount > 0 || forwardCount > 0 {
+		c.JSON(http.StatusConflict, gin.H{"error": "该出站仍被分流规则、端口转发、final 或规则集下载引用，请先修改引用"})
 		return
 	}
 	if err := a.db.Delete(&ob).Error; err != nil {

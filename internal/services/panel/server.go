@@ -188,6 +188,11 @@ func (a *App) routes() *gin.Engine {
 		admin.PUT("/servers/:id/inbounds/:inboundID", a.updateInbound)
 		admin.DELETE("/servers/:id/inbounds/:inboundID", a.deleteInbound)
 
+		admin.GET("/servers/:id/forwards", a.listForwards)
+		admin.POST("/servers/:id/forwards", a.createForward)
+		admin.PUT("/servers/:id/forwards/:forwardID", a.updateForward)
+		admin.DELETE("/servers/:id/forwards/:forwardID", a.deleteForward)
+
 		admin.GET("/routing-nodes", a.listRoutingNodes)
 
 		admin.GET("/servers/:id/rules", a.listRules)
