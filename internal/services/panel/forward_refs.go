@@ -349,7 +349,46 @@ func (a *App) validateForwardTagAndPort(db *gorm.DB, serverID, forwardID uint, t
 	return nil
 }
 
-func deleteServerForwardState(tx *gorm.DB, serverID uint) error {
+func hydrateServerForwards(db *gorm.DB, servers []model.Server) error {
+	var all []model.PortForward
+	for i := range servers {
+		all = append(all, servers[i].Forwards...)
+	}
+	if len(all) == 0 {
+		return nil
+	}
+	if err := hydratePortForwards(db, all); err != nil {
+		return err
+	}
+	offset := 0
+	for i := range servers {
+		n := len(servers[i].Forwards)
+		if n > 0 {
+			copy(servers[i].Forwards, all[offset:offset+n])
+			offset += n
+		}
+	}
+	return nil
+}
+
+func deleteServerForwardState(tx *gorm.DB, serverID uint) ([]uint, error) {
+	var existing []model.PortForward
+	if err := tx.Select("id", "target_type", "target_server_id").
+		Where("server_id = ?", serverID).
+		Find(&existing).Error; err != nil {
+		return nil, err
+	}
+	forwardIDs := make([]uint, 0, len(existing))
+	var targetServerIDs []uint
+	for _, f := range existing {
+		forwardIDs = append(forwardIDs, f.ID)
+		if f.TargetType == model.ForwardTargetInbound && f.TargetServerID > 0 {
+			targetServerIDs = append(targetServerIDs, f.TargetServerID)
+		}
+	}
+	if err := removeForwardUserAssignments(tx, forwardIDs); err != nil {
+		return nil, err
+	}
 	for _, m := range []any{
 		&model.PortForward{},
 		&model.TrafficForwardRecord{},
@@ -357,10 +396,10 @@ func deleteServerForwardState(tx *gorm.DB, serverID uint) error {
 		&model.ForwardTrafficIdentity{},
 	} {
 		if err := tx.Where("server_id = ?", serverID).Delete(m).Error; err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return normalizedIDs(targetServerIDs), nil
 }
 
 // collectInboundForwardOutboundConflicts rejects server address updates that would

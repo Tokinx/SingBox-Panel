@@ -185,18 +185,27 @@ func (a *App) updateForward(c *gin.Context) {
 		return
 	}
 
+	var req forwardReq
+	if !bindJSON(c, &req) {
+		return
+	}
+
+	a.userAccessMu.Lock()
 	var fwd model.PortForward
 	if err := a.db.Where("id = ? AND server_id = ?", fwdID, id).First(&fwd).Error; err != nil {
+		a.userAccessMu.Unlock()
 		c.JSON(http.StatusNotFound, gin.H{"error": "port forward not found"})
 		return
 	}
 
 	previousOutbound := fwd.Outbound
-	var req forwardReq
-	if !bindJSON(c, &req) {
-		return
-	}
+	previousTargetType := fwd.TargetType
+	previousTargetServerID := fwd.TargetServerID
+	previousTargetInboundID := fwd.TargetInboundID
+	previousEnabled := fwd.Enabled
+
 	if err := a.applyForwardReq(a.db, id, &fwd, req, false); err != nil {
+		a.userAccessMu.Unlock()
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -205,8 +214,14 @@ func (a *App) updateForward(c *gin.Context) {
 		if err := rememberForwardTrafficTag(tx, id, fwd.ID, fwd.Tag); err != nil {
 			return err
 		}
+		if previousTargetType == model.ForwardTargetInbound && fwd.TargetType != model.ForwardTargetInbound {
+			if err := removeForwardUserAssignments(tx, []uint{fwd.ID}); err != nil {
+				return err
+			}
+		}
 		return tx.Save(&fwd).Error
 	})
+	a.userAccessMu.Unlock()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -216,6 +231,16 @@ func (a *App) updateForward(c *gin.Context) {
 	fwd = single[0]
 	if previousOutbound != fwd.Outbound {
 		a.refreshManagedRoutingTags(previousOutbound)
+	}
+	if previousTargetType != fwd.TargetType || previousTargetInboundID != fwd.TargetInboundID || previousEnabled != fwd.Enabled {
+		var affectedTargets []uint
+		if previousTargetType == model.ForwardTargetInbound && previousTargetServerID > 0 {
+			affectedTargets = append(affectedTargets, previousTargetServerID)
+		}
+		if fwd.TargetType == model.ForwardTargetInbound && fwd.TargetServerID > 0 {
+			affectedTargets = append(affectedTargets, fwd.TargetServerID)
+		}
+		a.refreshUserProxyAccess(affectedTargets)
 	}
 	a.applyConfigAndRespond(c, id, gin.H{"forward": fwd})
 }
@@ -235,15 +260,27 @@ func (a *App) deleteForward(c *gin.Context) {
 		return
 	}
 
+	a.userAccessMu.Lock()
 	var fwd model.PortForward
 	if err := a.db.Where("id = ? AND server_id = ?", fwdID, id).First(&fwd).Error; err != nil {
+		a.userAccessMu.Unlock()
 		c.JSON(http.StatusNotFound, gin.H{"error": "port forward not found"})
 		return
 	}
-	if err := a.db.Delete(&fwd).Error; err != nil {
+	err := a.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Delete(&fwd).Error; err != nil {
+			return err
+		}
+		return removeForwardUserAssignments(tx, []uint{fwd.ID})
+	})
+	a.userAccessMu.Unlock()
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	a.refreshManagedRoutingTags(fwd.Outbound)
+	if fwd.TargetType == model.ForwardTargetInbound && fwd.TargetServerID > 0 {
+		a.refreshUserProxyAccess([]uint{fwd.TargetServerID})
+	}
 	a.applyConfigAndRespond(c, id, gin.H{"ok": true})
 }

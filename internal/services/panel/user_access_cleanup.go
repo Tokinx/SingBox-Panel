@@ -49,3 +49,46 @@ func removeServerUserAssignments(tx *gorm.DB, serverID uint, deletedInboundIDs [
 	}
 	return nil
 }
+
+// removeForwardUserAssignments removes deleted or no-longer-inbound PortForward
+// references from every user's ForwardIDs list and mixed node order.
+func removeForwardUserAssignments(tx *gorm.DB, forwardIDs []uint) error {
+	forwardIDs = normalizedIDs(forwardIDs)
+	if len(forwardIDs) == 0 {
+		return nil
+	}
+	if err := deleteUserNodeOrderRefs(tx, userNodeTypeForward, forwardIDs); err != nil {
+		return err
+	}
+	removed := make(map[uint]bool, len(forwardIDs))
+	for _, id := range forwardIDs {
+		removed[id] = true
+	}
+	var users []model.User
+	if err := tx.Find(&users).Error; err != nil {
+		return err
+	}
+	for i := range users {
+		user := &users[i]
+		if len(user.ForwardIDs) == 0 {
+			continue
+		}
+		kept := make([]uint, 0, len(user.ForwardIDs))
+		changed := false
+		for _, id := range user.ForwardIDs {
+			if removed[id] {
+				changed = true
+				continue
+			}
+			kept = append(kept, id)
+		}
+		if !changed {
+			continue
+		}
+		user.ForwardIDs = normalizedIDs(kept)
+		if err := tx.Model(user).Select("ForwardIDs", "UpdatedAt").Updates(user).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}

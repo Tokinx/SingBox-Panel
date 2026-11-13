@@ -90,7 +90,7 @@ const MANAGEMENT_TABLE_ROW_HEIGHT = 53
 const MANAGEMENT_TABLE_HEAD_HEIGHT = 42
 const SUBSCRIPTION_TABLE_SCROLL_HEIGHT = MANAGEMENT_TABLE_HEAD_HEIGHT + MAX_VISIBLE_SUBSCRIPTIONS * MANAGEMENT_TABLE_ROW_HEIGHT
 
-type AccessKind = 'managed' | 'custom'
+type AccessKind = 'managed' | 'forward' | 'custom'
 
 interface AccessNodeItem {
   id: number
@@ -98,6 +98,7 @@ interface AccessNodeItem {
   name: string
   serverId?: number
   serverName?: string
+  defaultDisplayName?: string
   detail: string
   protocol: string
   enabled: boolean
@@ -172,7 +173,11 @@ const AccessItem = memo(function AccessItem({ item, checked, disabled, onToggle 
     <Checkbox className={`um-access-chip${checked ? ' checked' : ''}${disabled ? ' disabled' : ''}`} title={item.detail}
       aria-label={`分配 ${item.name}`} checked={checked} disabled={disabled} onChange={(event) => onToggle(item, event.target.checked)}>
       <span className="um-access-chip-name">{item.name}</span>
-      <span className="um-access-chip-proto">{nodeTypeLabel[item.protocol] || item.protocol || '-'}</span>
+      <span className="um-access-chip-proto">
+        {item.kind === 'forward'
+          ? `转发 · ${nodeTypeLabel[item.protocol] || item.protocol || '-'}`
+          : (nodeTypeLabel[item.protocol] || item.protocol || '-')}
+      </span>
       {!item.enabled ? <span className="um-access-chip-off">停用</span> : null}
     </Checkbox>
   )
@@ -189,9 +194,11 @@ export function UserAccessEditor({ userId, onStateChange }: {
   const [loadedServerIDs, setLoadedServerIDs] = useState<number[]>([])
   const [loadedServerWide, setLoadedServerWide] = useState(false)
   const [loadedInboundIDs, setLoadedInboundIDs] = useState<number[]>([])
+  const [loadedForwardIDs, setLoadedForwardIDs] = useState<number[]>([])
   const [loadedCustomNodeIDs, setLoadedCustomNodeIDs] = useState<number[]>([])
   const [loadedNodeOrder, setLoadedNodeOrder] = useState<UserNodeOrderItem[]>([])
   const [inboundIDs, setInboundIDs] = useState<number[]>([])
+  const [forwardIDs, setForwardIDs] = useState<number[]>([])
   const [customNodeIDs, setCustomNodeIDs] = useState<number[]>([])
   const [nodeOrder, setNodeOrder] = useState<UserNodeOrderItem[]>([])
   const [accessLoading, setAccessLoading] = useState(true)
@@ -259,9 +266,11 @@ export function UserAccessEditor({ userId, onStateChange }: {
         setLoadedServerIDs(access.server_ids ?? [])
         setLoadedServerWide(!!access.server_wide)
         setLoadedInboundIDs(access.inbound_ids)
+        setLoadedForwardIDs(access.forward_ids ?? [])
         setLoadedCustomNodeIDs(access.custom_node_ids)
         setLoadedNodeOrder(initialOrder)
         setInboundIDs(access.inbound_ids)
+        setForwardIDs(access.forward_ids ?? [])
         setCustomNodeIDs(access.custom_node_ids)
         setNodeOrder(initialOrder)
         setAccessLoaded(true)
@@ -276,12 +285,17 @@ export function UserAccessEditor({ userId, onStateChange }: {
     return () => controller.abort()
   }, [userId, retryKey])
 
-  const managedGroups = useMemo<AccessGroup[]>(() =>
-    servers.map((server) => ({
-      key: `server:${server.id}`,
-      label: server.name,
-      meta: [server.region, server.address || server.public_ip].filter(Boolean).join(' · '),
-      items: (server.inbounds ?? []).map((inbound: Inbound) => ({
+  const managedGroups = useMemo<AccessGroup[]>(() => {
+    const serverMap = new Map<number, Server>()
+    const inboundMap = new Map<number, Inbound>()
+    for (const srv of servers) {
+      serverMap.set(srv.id, srv)
+      for (const ib of srv.inbounds ?? []) {
+        inboundMap.set(ib.id, ib)
+      }
+    }
+    return servers.map((server) => {
+      const inboundItems: AccessNodeItem[] = (server.inbounds ?? []).map((inbound: Inbound) => ({
         id: inbound.id,
         kind: 'managed' as const,
         name: inbound.tag || nodeTypeLabel[inbound.type] || inbound.type,
@@ -290,8 +304,59 @@ export function UserAccessEditor({ userId, onStateChange }: {
         detail: `${server.address || server.public_ip || '-'}:${inbound.listen_port}`,
         protocol: inbound.type,
         enabled: inbound.enabled,
-      })),
-    })).filter((group) => group.items.length > 0), [servers])
+      }))
+      const inboundForwards = (server.forwards ?? []).filter(
+        (fwd) => fwd.target_type === 'inbound' && fwd.target_inbound_id > 0,
+      )
+      const targetNameCounts = new Map<string, number>()
+      const resolvedForwards = inboundForwards.map((fwd) => {
+        const targetInbound = inboundMap.get(fwd.target_inbound_id)
+        const targetServer = serverMap.get(fwd.target_server_id || targetInbound?.server_id || 0)
+        const targetServerName = (
+          fwd.target_server_name ||
+          targetServer?.name ||
+          fwd.resolved_address ||
+          targetServer?.address ||
+          targetServer?.public_ip ||
+          ''
+        ).trim()
+        const targetInboundTag = fwd.target_inbound_tag || targetInbound?.tag || `节点 #${fwd.target_inbound_id}`
+        const targetProtocol = targetInbound?.type || ''
+        if (targetServerName) {
+          targetNameCounts.set(targetServerName, (targetNameCounts.get(targetServerName) ?? 0) + 1)
+        }
+        return { fwd, targetInbound, targetServerName, targetInboundTag, targetProtocol }
+      })
+      const forwardItems: AccessNodeItem[] = resolvedForwards.map(({ fwd, targetInbound, targetServerName, targetInboundTag, targetProtocol }) => {
+        const relayName = server.name.trim()
+        const baseDisplay = targetServerName
+          ? (relayName ? `${relayName} -> ${targetServerName}` : targetServerName)
+          : (relayName || fwd.tag)
+        const defaultDisplayName = (targetNameCounts.get(targetServerName) ?? 0) > 1
+          ? `${baseDisplay} (${targetInboundTag} :${fwd.listen_port})`
+          : baseDisplay
+        const relayAddr = server.address || server.public_ip || '-'
+        const targetPort = fwd.resolved_port || targetInbound?.listen_port || '-'
+        return {
+          id: fwd.id,
+          kind: 'forward' as const,
+          name: targetServerName ? `${fwd.tag} -> ${targetServerName}` : fwd.tag,
+          serverId: server.id,
+          serverName: server.name,
+          defaultDisplayName,
+          detail: `${relayAddr}:${fwd.listen_port} -> ${targetServerName || fwd.resolved_address || '-'}:${targetPort}`,
+          protocol: targetProtocol,
+          enabled: fwd.enabled && (targetInbound ? targetInbound.enabled : true),
+        }
+      })
+      return {
+        key: `server:${server.id}`,
+        label: server.name,
+        meta: [server.region, server.address || server.public_ip].filter(Boolean).join(' · '),
+        items: [...inboundItems, ...forwardItems],
+      }
+    }).filter((group) => group.items.length > 0)
+  }, [servers])
 
   // Custom nodes are grouped by their admin-defined group (CustomNode.group).
   // Nodes without a group land in a trailing "未分组" group so nothing is
@@ -340,9 +405,14 @@ export function UserAccessEditor({ userId, onStateChange }: {
   )
 
   const selectedInboundSet = useMemo(() => new Set(inboundIDs), [inboundIDs])
+  const selectedForwardSet = useMemo(() => new Set(forwardIDs), [forwardIDs])
   const selectedCustomSet = useMemo(() => new Set(customNodeIDs), [customNodeIDs])
   const isSelected = (item: AccessNodeItem) => (
-    item.kind === 'managed' ? selectedInboundSet.has(item.id) : selectedCustomSet.has(item.id)
+    item.kind === 'managed'
+      ? selectedInboundSet.has(item.id)
+      : item.kind === 'forward'
+        ? selectedForwardSet.has(item.id)
+        : selectedCustomSet.has(item.id)
   )
 
   const isDirty = useMemo(() => {
@@ -356,8 +426,8 @@ export function UserAccessEditor({ userId, onStateChange }: {
         userNodeOrderKey(item) === userNodeOrderKey(nodeOrder[index])
         && (item.custom_name ?? '').trim() === (nodeOrder[index].custom_name ?? '').trim(),
       )
-    return !equal(loadedInboundIDs, inboundIDs) || !equal(loadedCustomNodeIDs, customNodeIDs) || !sameOrder
-  }, [customNodeIDs, inboundIDs, loadedCustomNodeIDs, loadedInboundIDs, loadedNodeOrder, nodeOrder])
+    return !equal(loadedInboundIDs, inboundIDs) || !equal(loadedForwardIDs, forwardIDs) || !equal(loadedCustomNodeIDs, customNodeIDs) || !sameOrder
+  }, [customNodeIDs, forwardIDs, inboundIDs, loadedCustomNodeIDs, loadedForwardIDs, loadedInboundIDs, loadedNodeOrder, nodeOrder])
 
   useEffect(() => {
     onStateChange({ dirty: isDirty, saving })
@@ -370,6 +440,7 @@ export function UserAccessEditor({ userId, onStateChange }: {
   }, [])
 
   const setIDs = useCallback((kind: AccessKind, ids: number[], checked: boolean) => {
+    if (ids.length === 0) return
     const update = (current: number[]) => {
       const next = new Set(current)
       for (const id of ids) {
@@ -379,6 +450,7 @@ export function UserAccessEditor({ userId, onStateChange }: {
       return [...next]
     }
     if (kind === 'managed') setInboundIDs(update)
+    else if (kind === 'forward') setForwardIDs(update)
     else setCustomNodeIDs(update)
     if (!checked) setRenamingNode((current) => current && ids.some((id) => current.key === `${kind}:${id}`) ? null : current)
     setNodeOrder((current) => {
@@ -447,6 +519,7 @@ export function UserAccessEditor({ userId, onStateChange }: {
       if (item.custom_name) customNameCacheRef.current.set(userNodeOrderKey(item), item.custom_name)
     }
     setInboundIDs(loadedInboundIDs)
+    setForwardIDs(loadedForwardIDs)
     setCustomNodeIDs(loadedCustomNodeIDs)
     setNodeOrder(loadedNodeOrder)
   }
@@ -459,7 +532,8 @@ export function UserAccessEditor({ userId, onStateChange }: {
     next.splice(to, 0, moved)
     nodeOrderRef.current = next
     setNodeOrder(next)
-    setSortAnnouncement(`${moved.node_type === 'managed' ? '面板节点' : '外部节点'} #${moved.node_id} 已移动到第 ${to + 1} 位`)
+    const label = moved.node_type === 'managed' ? '面板节点' : moved.node_type === 'forward' ? '转发节点' : '外部节点'
+    setSortAnnouncement(`${label} #${moved.node_id} 已移动到第 ${to + 1} 位`)
   }, [])
 
   const clearPointerDrag = useCallback(() => {
@@ -568,6 +642,7 @@ export function UserAccessEditor({ userId, onStateChange }: {
       const access = await updateUserAccess(userId, {
         server_ids: preserveServerWide ? loadedServerIDs : [],
         inbound_ids: preserveServerWide ? [] : inboundIDs,
+        forward_ids: forwardIDs,
         custom_node_ids: customNodeIDs,
         node_order: nodeOrder,
       })
@@ -575,9 +650,11 @@ export function UserAccessEditor({ userId, onStateChange }: {
       setLoadedServerIDs(access.server_ids ?? [])
       setLoadedServerWide(!!access.server_wide)
       setLoadedInboundIDs(access.inbound_ids)
+      setLoadedForwardIDs(access.forward_ids ?? [])
       setLoadedCustomNodeIDs(access.custom_node_ids)
       setLoadedNodeOrder(access.node_order)
       setInboundIDs(access.inbound_ids)
+      setForwardIDs(access.forward_ids ?? [])
       setCustomNodeIDs(access.custom_node_ids)
       setNodeOrder(access.node_order)
       setRenamingNode(null)
@@ -600,7 +677,7 @@ export function UserAccessEditor({ userId, onStateChange }: {
     const kinds = group.items.reduce<Record<AccessKind, number[]>>((result, item) => {
       result[item.kind].push(item.id)
       return result
-    }, { managed: [], custom: [] })
+    }, { managed: [], forward: [], custom: [] })
     return (
       <section className="um-access-modal-group" key={group.key}>
         <div className="um-access-modal-group-head">
@@ -621,6 +698,7 @@ export function UserAccessEditor({ userId, onStateChange }: {
             disabled={saving}
             onChange={(event) => {
               setIDs('managed', kinds.managed, event.target.checked)
+              setIDs('forward', kinds.forward, event.target.checked)
               setIDs('custom', kinds.custom, event.target.checked)
             }}
           />
@@ -692,13 +770,18 @@ export function UserAccessEditor({ userId, onStateChange }: {
                   item.protocol,
                   (item.serverId != null ? selectedManagedPerServer.get(item.serverId) : undefined) ?? 1,
                 )
-                : item.name)
+                : item.kind === 'forward'
+                  ? (item.defaultDisplayName || item.name)
+                  : item.name)
               : `节点 #${orderItem.node_id}`
             const subtitle = item
               ? (item.kind === 'managed' && item.serverName
                 ? `${item.serverName} · ${item.name} · ${item.detail}`
-                : item.detail)
-              : (orderItem.node_type === 'managed' ? '面板节点' : '节点')
+                : item.kind === 'forward' && item.serverName
+                  ? `${item.serverName} · ${item.name} · ${item.detail}`
+                  : item.detail)
+              : (orderItem.node_type === 'managed' ? '面板节点' : orderItem.node_type === 'forward' ? '转发节点' : '节点')
+            const kindLabel = orderItem.node_type === 'managed' ? '面板' : orderItem.node_type === 'forward' ? '转发' : '外部'
             const dropClass = dropTargetKey === key
               ? (dropTargetAfter ? ' sort-drop-after' : ' sort-drop-before')
               : ''
@@ -738,7 +821,7 @@ export function UserAccessEditor({ userId, onStateChange }: {
                 <span className="um-access-order-number">{index + 1}</span>
                 <div className="um-access-order-content">
                   <strong title={(orderItem.custom_name ?? '').trim() || defaultName}>{(orderItem.custom_name ?? '').trim() || defaultName}{item && !item.enabled && <span className="ui-tag um-node-disabled">停用</span>}</strong>
-                  <small title={subtitle}><span className="um-access-order-mobile-meta">{index + 1} · {orderItem.node_type === 'managed' ? '面板' : '外部'} · </span>{subtitle}</small>
+                  <small title={subtitle}><span className="um-access-order-mobile-meta">{index + 1} · {kindLabel} · </span>{subtitle}</small>
                 </div>
                 <div className="um-access-order-name-editor" id={`user-node-name-${userId}-${key}`}>
                   <Input
@@ -764,7 +847,7 @@ export function UserAccessEditor({ userId, onStateChange }: {
                   />
                   <Button size="small" className="um-access-order-name-done" aria-label={`完成重命名 ${defaultName}`} disabled={saving} onClick={() => finishNodeRename(key)}>完成</Button>
                 </div>
-                <span className="um-access-order-kind">{orderItem.node_type === 'managed' ? '面板' : '外部'}</span>
+                <span className="um-access-order-kind">{kindLabel}</span>
                 <span className={`um-access-order-protocol${item?.protocol ? ' ui-tag' : ''}`}>{item?.protocol ? nodeTypeLabel[item.protocol] || item.protocol : null}</span>
                 <div className="um-access-order-actions">
                   <Button size="small" type="text" className="um-access-order-rename" icon={<Pencil />} aria-label={`重命名 ${defaultName}`} title="重命名" aria-controls={`user-node-name-${userId}-${key}`} disabled={saving}

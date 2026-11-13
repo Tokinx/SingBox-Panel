@@ -167,7 +167,7 @@ describe('editing a selected user subscription', () => {
     expect(orderedNames()).toEqual(['Singapore', 'Tokyo'])
     fireEvent.click(screen.getByRole('button', { name: '保存更改' }))
     await waitFor(() => expect(updateUserAccess).toHaveBeenCalledWith(2, {
-      server_ids: [], inbound_ids: [10], custom_node_ids: [30],
+      server_ids: [], inbound_ids: [10], forward_ids: [], custom_node_ids: [30],
       node_order: [{ node_type: 'custom', node_id: 30 }, { node_type: 'managed', node_id: 10, custom_name: 'My Tokyo' }],
     }))
     await waitFor(() => expect((screen.getByRole('button', { name: '保存更改' }) as HTMLButtonElement).disabled).toBe(true))
@@ -278,7 +278,7 @@ describe('editing a selected user subscription', () => {
     expect(orderedNames()).toEqual(['Tokyo', 'Singapore'])
     fireEvent.click(screen.getByRole('button', { name: '移除 Singapore' }))
     fireEvent.click(screen.getByRole('button', { name: '保存更改' }))
-    await waitFor(() => expect(updateUserAccess).toHaveBeenCalledWith(2, { server_ids: [], inbound_ids: [10], custom_node_ids: [], node_order: [{ node_type: 'managed', node_id: 10 }] }))
+    await waitFor(() => expect(updateUserAccess).toHaveBeenCalledWith(2, { server_ids: [], inbound_ids: [10], forward_ids: [], custom_node_ids: [], node_order: [{ node_type: 'managed', node_id: 10 }] }))
   })
 
   it('preserves whole-server grants when only the personal display name changes', async () => {
@@ -411,5 +411,61 @@ describe('editing a selected user subscription', () => {
     expect(updateUser).toHaveBeenCalledWith(2, { email: 'alice-renamed', password: undefined })
     expect(useAuth.getState().user).toEqual(admin)
     expect(updateUserAccess).not.toHaveBeenCalled()
+  })
+
+  it('assigns inbound-targeting forwarded nodes under the relay server and displays relay servers in the user table', async () => {
+    const laxServer = {
+      id: 6, name: 'LAX', address: 'lax.example',
+      inbounds: [{ id: 20, tag: 'lax-reality', type: 'vless', enabled: true, listen_port: 23456 }],
+    } as Server
+    const relayServer: Server = {
+      ...server,
+      forwards: [
+        {
+          id: 101, server_id: 5, tag: 'fwd-lax-reality', listen_port: 23456, network: 'tcp',
+          target_type: 'inbound', target_server_id: 6, target_inbound_id: 20, target_address: '', target_port: 0,
+          outbound: 'direct', remark: '', enabled: true, created_at: '', updated_at: '',
+          target_server_name: 'LAX', target_inbound_tag: 'lax-reality', resolved_address: 'lax.example', resolved_port: 23456,
+        },
+        {
+          id: 102, server_id: 5, tag: 'fwd-custom-http', listen_port: 8080, network: 'tcp',
+          target_type: 'custom', target_server_id: 0, target_inbound_id: 0, target_address: '203.0.113.10', target_port: 80,
+          outbound: 'direct', remark: '', enabled: true, created_at: '', updated_at: '',
+        },
+      ],
+    }
+    const aliceForwarded = { ...alice, server_ids: [], inbound_ids: [], forward_ids: [101], node_count: 1 } as User
+    vi.mocked(listUsers).mockResolvedValue([admin, aliceForwarded])
+    vi.mocked(listServers).mockResolvedValue([relayServer, laxServer])
+    vi.mocked(getUserAccess).mockResolvedValue({
+      user_id: 2, server_ids: [], server_wide: false, inbound_ids: [], forward_ids: [], custom_node_ids: [], node_order: [],
+    })
+
+    // User list table attributes forwarded nodes to the relay server (Tokyo).
+    const router = mount('/admin/users')
+    const aliceLink = await screen.findByRole('link', { name: '管理 alice' })
+    const row = aliceLink.closest('tr')!
+    expect(within(row).getByText('Tokyo')).toBeTruthy()
+
+    // Navigate to user detail access editor and assign the inbound-targeting forward.
+    await act(() => router.navigate('/admin/users/2'))
+    selectTab(/面板节点/)
+    fireEvent.click(screen.getByRole('button', { name: '展开 Tokyo' }))
+    expect(screen.queryByRole('checkbox', { name: /fwd-custom-http/ })).toBeNull()
+    const fwdCheckbox = screen.getByRole('checkbox', { name: '分配 fwd-lax-reality -> LAX' })
+    fireEvent.click(fwdCheckbox)
+
+    selectTab(/已分配/)
+    expect(orderedNames()).toEqual(['Tokyo -> LAX'])
+    fireEvent.change(screen.getByRole('textbox', { name: '自定义 Tokyo -> LAX 的节点名称' }), { target: { value: 'Tokyo -> LA Reality' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存更改' }))
+
+    await waitFor(() => expect(updateUserAccess).toHaveBeenCalledWith(2, {
+      server_ids: [],
+      inbound_ids: [],
+      forward_ids: [101],
+      custom_node_ids: [],
+      node_order: [{ node_type: 'forward', node_id: 101, custom_name: 'Tokyo -> LA Reality' }],
+    }))
   })
 })

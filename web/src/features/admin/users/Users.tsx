@@ -21,7 +21,18 @@ export default function Users() {
   const [, setNodesError] = useState<string | null>(null)
   const userLoadRef = useRef<{ generation: number; controller: AbortController | null }>({ generation: 0, controller: null })
   const nodeLoadRef = useRef<{ generation: number; controller: AbortController | null }>({ generation: 0, controller: null })
-  const serverNames = (u: User) => (u.server_ids ?? []).map((id) => servers.find((s) => s.id === id)?.name ?? `#${id}`)
+  const serverNames = (u: User) => {
+    const serverIds = new Set<number>(u.server_ids ?? [])
+    const assignedForwards = new Set<number>(u.forward_ids ?? [])
+    if (assignedForwards.size > 0) {
+      for (const s of servers) {
+        if ((s.forwards ?? []).some((f) => assignedForwards.has(f.id))) {
+          serverIds.add(s.id)
+        }
+      }
+    }
+    return [...serverIds].map((id) => servers.find((s) => s.id === id)?.name ?? `#${id}`)
+  }
 
   const load = () => {
     userLoadRef.current.controller?.abort()

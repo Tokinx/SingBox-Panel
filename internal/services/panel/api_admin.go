@@ -214,8 +214,14 @@ func (a *App) latestAgentVersion() string {
 
 func (a *App) listServers(c *gin.Context) {
 	var servers []model.Server
-	// Inbounds are preloaded so the admin UI can offer per-protocol access.
-	if err := a.db.Preload("Inbounds").Order("id").Find(&servers).Error; err != nil {
+	// Inbounds and Forwards are preloaded so the admin UI can offer per-protocol and forwarded node access.
+	if err := a.db.Preload("Inbounds").Preload("Forwards", func(db *gorm.DB) *gorm.DB {
+		return db.Order("id")
+	}).Order("id").Find(&servers).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if err := hydrateServerForwards(a.db, servers); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -291,10 +297,13 @@ func (a *App) getServer(c *gin.Context) {
 		return
 	}
 	var srv model.Server
-	if err := a.db.Preload("Inbounds").First(&srv, id).Error; err != nil {
+	if err := a.db.Preload("Inbounds").Preload("Forwards", func(db *gorm.DB) *gorm.DB {
+		return db.Order("id")
+	}).First(&srv, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "server not found"})
 		return
 	}
+	_ = hydratePortForwards(a.db, srv.Forwards)
 	srv.Online = a.hub.IsOnline(srv.ID)
 	if srv.SingboxInstalled && srv.SingboxVersion != "" {
 		releases := getLatestSingboxReleases()
@@ -453,7 +462,8 @@ func (a *App) deleteServer(c *gin.Context) {
 			return
 		}
 	}
-	if err := deleteServerForwardState(tx, id); err != nil {
+	forwardTargetServerIDs, err := deleteServerForwardState(tx, id)
+	if err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -478,6 +488,7 @@ func (a *App) deleteServer(c *gin.Context) {
 		return
 	}
 	go a.refreshManagedRoutingTags(previousRoutingTags...)
+	a.refreshUserProxyAccess(forwardTargetServerIDs)
 	if a.hub != nil {
 		a.hub.traffic.dropServer(id)
 		for _, row := range []any{

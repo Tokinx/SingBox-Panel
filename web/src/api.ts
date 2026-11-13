@@ -392,17 +392,21 @@ export interface UserAccess {
   server_ids: number[]
   server_wide: boolean
   inbound_ids: number[]
+  forward_ids?: number[]
   custom_node_ids: number[]
   node_order: UserNodeOrderItem[]
 }
 export interface UserNodeOrderItem {
-  node_type: 'managed' | 'custom'
+  node_type: 'managed' | 'forward' | 'custom'
   node_id: number
   custom_name?: string
 }
 export const getUserAccess = (id: number, signal?: AbortSignal) =>
   http.get<{ access: UserAccess }>(`/api/admin/users/${id}/access`, { signal }).then((r) => r.data.access)
-export const updateUserAccess = (id: number, body: Pick<UserAccess, 'server_ids' | 'inbound_ids' | 'custom_node_ids' | 'node_order'>) =>
+export const updateUserAccess = (
+  id: number,
+  body: Pick<UserAccess, 'server_ids' | 'inbound_ids' | 'custom_node_ids' | 'node_order'> & { forward_ids?: number[] },
+) =>
   http.put<{ access: UserAccess }>(`/api/admin/users/${id}/access`, body).then((r) => r.data.access)
 
 // ---- admin: custom (external) subscription nodes ----

@@ -1,14 +1,13 @@
 package panel
 
 import (
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"github.com/hann0w0/singbox-panel/internal/domain/model"
 	"github.com/hann0w0/singbox-panel/internal/domain/singbox"
@@ -28,7 +27,9 @@ func (a *App) serverNodeFormats(c *gin.Context) {
 		return
 	}
 	var srv model.Server
-	if err := a.db.Preload("Inbounds").First(&srv, id).Error; err != nil {
+	if err := a.db.Preload("Inbounds").Preload("Forwards", func(db *gorm.DB) *gorm.DB {
+		return db.Order("id")
+	}).First(&srv, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "server not found"})
 		return
 	}
@@ -53,28 +54,53 @@ func (a *App) serverNodeFormats(c *gin.Context) {
 		userID = uint(parsed)
 	}
 
-	settings := make(map[uint]singbox.InboundSettings)
 	var multiInbounds []uint
 	for _, ib := range srv.Inbounds {
 		if !ib.Enabled {
 			continue
 		}
-		var st singbox.InboundSettings
-		if len(ib.Settings) > 0 {
-			_ = json.Unmarshal(ib.Settings, &st)
-		}
-		if err := st.ValidateMultiUser(string(ib.Type)); err != nil {
-			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": fmt.Sprintf("inbound %q settings: %v", ib.Tag, err)})
+		st, _, _, err := buildInboundNodeSettings(&model.User{}, ib)
+		if err != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
 			return
 		}
-		settings[ib.ID] = st
 		if st.UseMultiUser(string(ib.Type)) {
 			multiInbounds = append(multiInbounds, ib.ID)
 		}
 	}
+
+	var multiForwardIDs []uint
+	var targetInboundIDs []uint
+	for _, fwd := range srv.Forwards {
+		if fwd.Enabled && fwd.TargetType == model.ForwardTargetInbound && fwd.TargetInboundID > 0 {
+			targetInboundIDs = append(targetInboundIDs, fwd.TargetInboundID)
+		}
+	}
+	if len(targetInboundIDs) > 0 {
+		var targetInbounds []model.Inbound
+		if err := a.db.Where("id IN ? AND enabled = ?", normalizedIDs(targetInboundIDs), true).Find(&targetInbounds).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "加载转发目标入站失败"})
+			return
+		}
+		for _, tib := range targetInbounds {
+			st, _, _, err := buildInboundNodeSettings(&model.User{}, tib)
+			if err != nil {
+				c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+				return
+			}
+			if st.UseMultiUser(string(tib.Type)) {
+				for _, fwd := range srv.Forwards {
+					if fwd.Enabled && fwd.TargetType == model.ForwardTargetInbound && fwd.TargetInboundID == tib.ID {
+						multiForwardIDs = append(multiForwardIDs, fwd.ID)
+					}
+				}
+			}
+		}
+	}
+
 	choices := make([]nodeExportUser, 0)
 	var selected *model.User
-	if len(multiInbounds) > 0 {
+	if len(multiInbounds) > 0 || len(multiForwardIDs) > 0 {
 		var users []model.User
 		if err := a.db.Where("enabled = ?", true).Order("id").Find(&users).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "加载导出用户失败"})
@@ -86,15 +112,27 @@ func (a *App) serverNodeFormats(c *gin.Context) {
 			if u.Expired(now) {
 				continue
 			}
+			granted := false
 			for _, inboundID := range multiInbounds {
-				if !u.HasInbound(srv.ID, inboundID) {
-					continue
+				if u.HasInbound(srv.ID, inboundID) {
+					granted = true
+					break
 				}
-				choices = append(choices, nodeExportUser{ID: u.ID, Email: u.Email})
-				if u.ID == userID {
-					selected = u
+			}
+			if !granted {
+				for _, fwdID := range multiForwardIDs {
+					if u.HasForward(fwdID) {
+						granted = true
+						break
+					}
 				}
-				break
+			}
+			if !granted {
+				continue
+			}
+			choices = append(choices, nodeExportUser{ID: u.ID, Email: u.Email})
+			if u.ID == userID {
+				selected = u
 			}
 		}
 	}
@@ -105,21 +143,20 @@ func (a *App) serverNodeFormats(c *gin.Context) {
 
 	var nodes []node
 	for _, ib := range srv.Inbounds {
-		st, enabled := settings[ib.ID]
-		if !enabled {
+		if !ib.Enabled {
 			continue
 		}
-		var identity singbox.ProxyUser
+		st, identity, ok, err := buildInboundNodeSettings(selected, ib)
+		if err != nil {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+			return
+		}
 		if st.UseMultiUser(string(ib.Type)) {
-			if selected == nil || !selected.HasInbound(srv.ID, ib.ID) {
+			if selected == nil || !selected.HasInbound(srv.ID, ib.ID) || !ok {
 				continue
 			}
-			st.SingleUser = false
-			identity = proxyIdentity(selected, ib.ID)
-		} else {
-			st.MultiUser = false
-			st.SingleUser = true
-			identity = st.SingleUserIdentity()
+		} else if !ok {
+			continue
 		}
 		nodes = append(nodes, node{
 			tag:      ib.Tag,
@@ -132,6 +169,13 @@ func (a *App) serverNodeFormats(c *gin.Context) {
 	}
 	nameServerNodes(srv.Name, nodes)
 
+	fwdNodes, err := buildForwardedNodes(a.db, &srv, host, srv.Forwards, selected, false)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": err.Error()})
+		return
+	}
+	nodes = append(nodes, fwdNodes...)
+
 	var uriLines []string
 	for _, n := range nodes {
 		if link, err := singbox.BuildShareLink(n.clientNode()); err == nil {
@@ -141,7 +185,7 @@ func (a *App) serverNodeFormats(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"users":            choices,
-		"multi_user_count": len(multiInbounds),
+		"multi_user_count": len(multiInbounds) + len(multiForwardIDs),
 		"user_id":          userID,
 		"items":            buildNodeFormatItems(nodes),
 		"uri":              strings.Join(uriLines, "\n"),

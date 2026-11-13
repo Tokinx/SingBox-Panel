@@ -79,6 +79,10 @@ type User struct {
 	// inbound on the selected servers (the previous, server-level behaviour).
 	InboundIDs []uint `gorm:"serializer:json" json:"inbound_ids"`
 
+	// ForwardIDs grants forwarded node access via inbound-targeting PortForward
+	// rules (e.g. a relay server forwarding traffic to a landing inbound).
+	ForwardIDs []uint `gorm:"serializer:json" json:"forward_ids"`
+
 	ExpireAt *time.Time `json:"expire_at"` // nil = never
 
 	Enabled bool `gorm:"index" json:"enabled"`
@@ -112,10 +116,10 @@ type User struct {
 }
 
 // UserNodeOrder stores one user's mixed subscription order and optional
-// per-user display name overrides. NodeType is "managed" for a panel inbound
-// and "custom" for an external node. The assignment itself remains in
-// User/CustomNode; this table controls the order and custom name emitted for
-// that user.
+// per-user display name overrides. NodeType is "managed" for a panel inbound,
+// "forward" for an inbound-targeting port forward, and "custom" for an external
+// node. The assignment itself remains in User/CustomNode; this table controls
+// the order and custom name emitted for that user.
 type UserNodeOrder struct {
 	ID         uint      `gorm:"primaryKey" json:"id"`
 	UserID     uint      `gorm:"not null;index;uniqueIndex:idx_user_node_order,priority:1" json:"user_id"`
@@ -209,7 +213,8 @@ type Server struct {
 	// from an IP address to the panel domain visible and verifiable in the UI.
 	AgentURL string `gorm:"size:512" json:"agent_url"`
 
-	Inbounds []Inbound `gorm:"constraint:OnDelete:CASCADE" json:"inbounds,omitempty"`
+	Inbounds []Inbound     `gorm:"constraint:OnDelete:CASCADE" json:"inbounds,omitempty"`
+	Forwards []PortForward `gorm:"constraint:OnDelete:CASCADE" json:"forwards,omitempty"`
 
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -504,6 +509,17 @@ func (u *User) HasInbound(serverID, inboundID uint) bool {
 	}
 	for _, id := range u.InboundIDs {
 		if id == inboundID {
+			return true
+		}
+	}
+	return false
+}
+
+// HasForward reports whether the user holds direct access to one forwarded
+// inbound node (identified by PortForward.ID).
+func (u *User) HasForward(forwardID uint) bool {
+	for _, id := range u.ForwardIDs {
+		if id == forwardID {
 			return true
 		}
 	}

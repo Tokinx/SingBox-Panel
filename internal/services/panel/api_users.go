@@ -19,6 +19,7 @@ import (
 var (
 	errInvalidServerAccess       = errors.New("服务器列表包含不存在的受管服务器")
 	errInvalidInboundAccess      = errors.New("节点列表包含不存在的受管节点")
+	errInvalidForwardAccess      = errors.New("节点列表包含不存在的转发节点")
 	errInvalidCustomNodeAccess   = errors.New("节点列表包含不存在的自定义节点")
 	errInvalidUserNodeOrder      = errors.New("节点排序必须包含每个已分配节点且不能重复")
 	errInvalidUserNodeCustomName = errors.New("自定义节点名称不能超过 128 个字符，且不能包含换行或制表符")
@@ -26,6 +27,7 @@ var (
 
 const (
 	userNodeTypeManaged = "managed"
+	userNodeTypeForward = "forward"
 	userNodeTypeCustom  = "custom"
 )
 
@@ -34,6 +36,7 @@ type userReq struct {
 	Password   string `json:"password"`
 	ServerIDs  []uint `json:"server_ids"`
 	InboundIDs []uint `json:"inbound_ids"` // empty = every inbound on those servers
+	ForwardIDs []uint `json:"forward_ids"` // inbound-targeting port forwards
 	ExpireAt   *int64 `json:"expire_at"`   // unix seconds; 0/null = never
 	Enabled    *bool  `json:"enabled"`
 }
@@ -41,6 +44,7 @@ type userReq struct {
 type userAccessReq struct {
 	ServerIDs     *[]uint              `json:"server_ids"`
 	InboundIDs    *[]uint              `json:"inbound_ids"`
+	ForwardIDs    *[]uint              `json:"forward_ids"`
 	CustomNodeIDs *[]uint              `json:"custom_node_ids"`
 	NodeOrder     *[]userNodeOrderItem `json:"node_order"`
 }
@@ -56,6 +60,7 @@ type userAccessResp struct {
 	ServerIDs     []uint              `json:"server_ids"`
 	ServerWide    bool                `json:"server_wide"`
 	InboundIDs    []uint              `json:"inbound_ids"`
+	ForwardIDs    []uint              `json:"forward_ids"`
 	CustomNodeIDs []uint              `json:"custom_node_ids"`
 	NodeOrder     []userNodeOrderItem `json:"node_order"`
 }
@@ -107,7 +112,7 @@ func setID(ids []uint, id uint, present bool) []uint {
 
 func effectiveUserAccess(db *gorm.DB, user *model.User) (userAccessResp, error) {
 	resp := userAccessResp{
-		UserID: user.ID, ServerIDs: []uint{}, InboundIDs: []uint{},
+		UserID: user.ID, ServerIDs: []uint{}, InboundIDs: []uint{}, ForwardIDs: []uint{},
 		CustomNodeIDs: []uint{}, NodeOrder: []userNodeOrderItem{},
 	}
 	if len(user.ServerIDs) > 0 {
@@ -128,6 +133,14 @@ func effectiveUserAccess(db *gorm.DB, user *model.User) (userAccessResp, error) 
 		}
 		resp.InboundIDs = normalizedIDs(resp.InboundIDs)
 	}
+	if len(user.ForwardIDs) > 0 {
+		if err := db.Model(&model.PortForward{}).
+			Where("id IN ? AND target_type = ? AND target_inbound_id > 0", user.ForwardIDs, model.ForwardTargetInbound).
+			Pluck("id", &resp.ForwardIDs).Error; err != nil {
+			return resp, err
+		}
+		resp.ForwardIDs = normalizedIDs(resp.ForwardIDs)
+	}
 	var nodes []model.CustomNode
 	if err := db.Where("hidden_by_subscription_rule = ?", false).Order("sort_order, id").Find(&nodes).Error; err != nil {
 		return resp, err
@@ -138,17 +151,20 @@ func effectiveUserAccess(db *gorm.DB, user *model.User) (userAccessResp, error) 
 		}
 	}
 	var err error
-	resp.NodeOrder, err = orderedUserNodeOrder(db, user.ID, resp.InboundIDs, resp.CustomNodeIDs)
+	resp.NodeOrder, err = orderedUserNodeOrderWithForwards(db, user.ID, resp.InboundIDs, resp.ForwardIDs, resp.CustomNodeIDs)
 	if err != nil {
 		return resp, err
 	}
 	return resp, nil
 }
 
-func userNodeSet(inboundIDs, customNodeIDs []uint) map[string]bool {
-	set := make(map[string]bool, len(inboundIDs)+len(customNodeIDs))
+func userNodeSet(inboundIDs, forwardIDs, customNodeIDs []uint) map[string]bool {
+	set := make(map[string]bool, len(inboundIDs)+len(forwardIDs)+len(customNodeIDs))
 	for _, id := range inboundIDs {
 		set[userNodeTypeManaged+":"+strconv.FormatUint(uint64(id), 10)] = true
+	}
+	for _, id := range forwardIDs {
+		set[userNodeTypeForward+":"+strconv.FormatUint(uint64(id), 10)] = true
 	}
 	for _, id := range customNodeIDs {
 		set[userNodeTypeCustom+":"+strconv.FormatUint(uint64(id), 10)] = true
@@ -160,11 +176,15 @@ func userNodeKey(item userNodeOrderItem) string {
 	return item.NodeType + ":" + strconv.FormatUint(uint64(item.NodeID), 10)
 }
 
-// canonicalUserNodeOrder follows the same stable administrator/server order
-// used by subscriptions. It is the migration-safe fallback for users without
-// a saved personal order and the append order for newly assigned nodes.
 func canonicalUserNodeOrder(db *gorm.DB, inboundIDs, customNodeIDs []uint) ([]userNodeOrderItem, error) {
-	out := make([]userNodeOrderItem, 0, len(inboundIDs)+len(customNodeIDs))
+	return canonicalUserNodeOrderWithForwards(db, inboundIDs, nil, customNodeIDs)
+}
+
+// canonicalUserNodeOrderWithForwards follows the same stable administrator/server
+// order used by subscriptions (each server's direct inbounds followed by its
+// forwarded nodes, then custom nodes).
+func canonicalUserNodeOrderWithForwards(db *gorm.DB, inboundIDs, forwardIDs, customNodeIDs []uint) ([]userNodeOrderItem, error) {
+	out := make([]userNodeOrderItem, 0, len(inboundIDs)+len(forwardIDs)+len(customNodeIDs))
 	selectedInbounds := make(map[uint]model.Inbound, len(inboundIDs))
 	if len(inboundIDs) > 0 {
 		var inbounds []model.Inbound
@@ -175,12 +195,29 @@ func canonicalUserNodeOrder(db *gorm.DB, inboundIDs, customNodeIDs []uint) ([]us
 			selectedInbounds[inbounds[i].ID] = inbounds[i]
 		}
 	}
-	serverIDs := make([]uint, 0, len(selectedInbounds))
-	seenServers := make(map[uint]bool, len(selectedInbounds))
+	selectedForwards := make(map[uint]model.PortForward, len(forwardIDs))
+	if len(forwardIDs) > 0 {
+		var forwards []model.PortForward
+		if err := db.Where("id IN ? AND target_type = ? AND target_inbound_id > 0", forwardIDs, model.ForwardTargetInbound).
+			Find(&forwards).Error; err != nil {
+			return nil, err
+		}
+		for i := range forwards {
+			selectedForwards[forwards[i].ID] = forwards[i]
+		}
+	}
+	serverIDs := make([]uint, 0, len(selectedInbounds)+len(selectedForwards))
+	seenServers := make(map[uint]bool, len(selectedInbounds)+len(selectedForwards))
 	for _, ib := range selectedInbounds {
 		if !seenServers[ib.ServerID] {
 			seenServers[ib.ServerID] = true
 			serverIDs = append(serverIDs, ib.ServerID)
+		}
+	}
+	for _, fwd := range selectedForwards {
+		if !seenServers[fwd.ServerID] {
+			seenServers[fwd.ServerID] = true
+			serverIDs = append(serverIDs, fwd.ServerID)
 		}
 	}
 	if len(serverIDs) > 0 {
@@ -190,33 +227,54 @@ func canonicalUserNodeOrder(db *gorm.DB, inboundIDs, customNodeIDs []uint) ([]us
 		}
 		applyServerOrder(db, servers)
 		for _, server := range servers {
-			var serverIDsForOrder []uint
+			var serverInboundIDs []uint
 			for id, ib := range selectedInbounds {
 				if ib.ServerID == server.ID {
-					serverIDsForOrder = append(serverIDsForOrder, id)
+					serverInboundIDs = append(serverInboundIDs, id)
 				}
 			}
-			sort.Slice(serverIDsForOrder, func(i, j int) bool { return serverIDsForOrder[i] < serverIDsForOrder[j] })
-			for _, id := range serverIDsForOrder {
+			sort.Slice(serverInboundIDs, func(i, j int) bool { return serverInboundIDs[i] < serverInboundIDs[j] })
+			for _, id := range serverInboundIDs {
 				out = append(out, userNodeOrderItem{NodeType: userNodeTypeManaged, NodeID: id})
+			}
+
+			var serverForwardIDs []uint
+			for id, fwd := range selectedForwards {
+				if fwd.ServerID == server.ID {
+					serverForwardIDs = append(serverForwardIDs, id)
+				}
+			}
+			sort.Slice(serverForwardIDs, func(i, j int) bool { return serverForwardIDs[i] < serverForwardIDs[j] })
+			for _, id := range serverForwardIDs {
+				out = append(out, userNodeOrderItem{NodeType: userNodeTypeForward, NodeID: id})
 			}
 		}
 	}
 	// A stale server reference should not normally exist, but retain valid
-	// inbounds whose server row is missing rather than silently losing order.
-	seen := make(map[uint]bool, len(out))
+	// nodes whose server row is missing rather than silently losing order.
+	seen := make(map[string]bool, len(out))
 	for _, item := range out {
-		seen[item.NodeID] = true
+		seen[userNodeKey(item)] = true
 	}
-	var remaining []uint
+	var remainingInbounds []uint
 	for id := range selectedInbounds {
-		if !seen[id] {
-			remaining = append(remaining, id)
+		if !seen[userNodeTypeManaged+":"+strconv.FormatUint(uint64(id), 10)] {
+			remainingInbounds = append(remainingInbounds, id)
 		}
 	}
-	sort.Slice(remaining, func(i, j int) bool { return remaining[i] < remaining[j] })
-	for _, id := range remaining {
+	sort.Slice(remainingInbounds, func(i, j int) bool { return remainingInbounds[i] < remainingInbounds[j] })
+	for _, id := range remainingInbounds {
 		out = append(out, userNodeOrderItem{NodeType: userNodeTypeManaged, NodeID: id})
+	}
+	var remainingForwards []uint
+	for id := range selectedForwards {
+		if !seen[userNodeTypeForward+":"+strconv.FormatUint(uint64(id), 10)] {
+			remainingForwards = append(remainingForwards, id)
+		}
+	}
+	sort.Slice(remainingForwards, func(i, j int) bool { return remainingForwards[i] < remainingForwards[j] })
+	for _, id := range remainingForwards {
+		out = append(out, userNodeOrderItem{NodeType: userNodeTypeForward, NodeID: id})
 	}
 
 	if len(customNodeIDs) > 0 {
@@ -232,14 +290,18 @@ func canonicalUserNodeOrder(db *gorm.DB, inboundIDs, customNodeIDs []uint) ([]us
 	return out, nil
 }
 
-// orderedUserNodeOrder applies a saved personal order, filters removed or
-// unassigned nodes, and appends new assignments in canonical order.
 func orderedUserNodeOrder(db *gorm.DB, userID uint, inboundIDs, customNodeIDs []uint) ([]userNodeOrderItem, error) {
-	canonical, err := canonicalUserNodeOrder(db, inboundIDs, customNodeIDs)
+	return orderedUserNodeOrderWithForwards(db, userID, inboundIDs, nil, customNodeIDs)
+}
+
+// orderedUserNodeOrderWithForwards applies a saved personal order, filters removed
+// or unassigned nodes, and appends new assignments in canonical order.
+func orderedUserNodeOrderWithForwards(db *gorm.DB, userID uint, inboundIDs, forwardIDs, customNodeIDs []uint) ([]userNodeOrderItem, error) {
+	canonical, err := canonicalUserNodeOrderWithForwards(db, inboundIDs, forwardIDs, customNodeIDs)
 	if err != nil {
 		return nil, err
 	}
-	valid := userNodeSet(inboundIDs, customNodeIDs)
+	valid := userNodeSet(inboundIDs, forwardIDs, customNodeIDs)
 	var saved []model.UserNodeOrder
 	if err := db.Where("user_id = ?", userID).Order("sort_order, id").Find(&saved).Error; err != nil {
 		return nil, err
@@ -268,14 +330,18 @@ func orderedUserNodeOrder(db *gorm.DB, userID uint, inboundIDs, customNodeIDs []
 }
 
 func validateUserNodeOrder(order []userNodeOrderItem, inboundIDs, customNodeIDs []uint) error {
-	expected := userNodeSet(inboundIDs, customNodeIDs)
+	return validateUserNodeOrderWithForwards(order, inboundIDs, nil, customNodeIDs)
+}
+
+func validateUserNodeOrderWithForwards(order []userNodeOrderItem, inboundIDs, forwardIDs, customNodeIDs []uint) error {
+	expected := userNodeSet(inboundIDs, forwardIDs, customNodeIDs)
 	if len(order) != len(expected) {
 		return errInvalidUserNodeOrder
 	}
 	seen := make(map[string]bool, len(order))
 	for i := range order {
 		item := &order[i]
-		if item.NodeID == 0 || (item.NodeType != userNodeTypeManaged && item.NodeType != userNodeTypeCustom) {
+		if item.NodeID == 0 || (item.NodeType != userNodeTypeManaged && item.NodeType != userNodeTypeForward && item.NodeType != userNodeTypeCustom) {
 			return errInvalidUserNodeOrder
 		}
 		key := userNodeKey(*item)
@@ -378,7 +444,11 @@ func (a *App) updateUserAccess(c *gin.Context) {
 	}
 	inboundIDs := normalizedIDs(*req.InboundIDs)
 	customNodeIDs := normalizedIDs(*req.CustomNodeIDs)
-	if rejectTooManyIDs(c, serverIDs, inboundIDs, customNodeIDs) {
+	var forwardIDs []uint
+	if req.ForwardIDs != nil {
+		forwardIDs = normalizedIDs(*req.ForwardIDs)
+	}
+	if rejectTooManyIDs(c, serverIDs, inboundIDs, forwardIDs, customNodeIDs) {
 		return
 	}
 	if req.NodeOrder != nil && len(*req.NodeOrder) > maxBatchIDs {
@@ -392,11 +462,14 @@ func (a *App) updateUserAccess(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
-	oldServerIDs := append([]uint(nil), user.ServerIDs...)
+	oldProvisionedServerIDs, err := userProvisionedServerIDs(a.db, &user)
+	if err != nil {
+		oldProvisionedServerIDs = append([]uint(nil), user.ServerIDs...)
+	}
 
 	unlockAudience := a.subscriptionManager().lockAudience()
 	defer unlockAudience()
-	err := a.db.Transaction(func(tx *gorm.DB) error {
+	err = a.db.Transaction(func(tx *gorm.DB) error {
 		var inbounds []model.Inbound
 		if len(inboundIDs) > 0 {
 			if err := tx.Where("id IN ?", inboundIDs).Find(&inbounds).Error; err != nil {
@@ -433,6 +506,31 @@ func (a *App) updateUserAccess(c *gin.Context) {
 			user.InboundIDs = inboundIDs
 		}
 
+		effectiveForwardIDs := normalizedIDs(user.ForwardIDs)
+		if req.ForwardIDs != nil {
+			if len(forwardIDs) > 0 {
+				var validForwardCount int64
+				if err := tx.Model(&model.PortForward{}).
+					Where("id IN ? AND target_type = ? AND target_inbound_id > 0", forwardIDs, model.ForwardTargetInbound).
+					Count(&validForwardCount).Error; err != nil {
+					return err
+				}
+				if validForwardCount != int64(len(forwardIDs)) {
+					return errInvalidForwardAccess
+				}
+			}
+			user.ForwardIDs = forwardIDs
+			effectiveForwardIDs = forwardIDs
+		} else if len(effectiveForwardIDs) > 0 {
+			var filtered []uint
+			if err := tx.Model(&model.PortForward{}).
+				Where("id IN ? AND target_type = ? AND target_inbound_id > 0", effectiveForwardIDs, model.ForwardTargetInbound).
+				Pluck("id", &filtered).Error; err != nil {
+				return err
+			}
+			effectiveForwardIDs = normalizedIDs(filtered)
+		}
+
 		var nodes []model.CustomNode
 		if err := tx.Where("hidden_by_subscription_rule = ?", false).Order("id").Find(&nodes).Error; err != nil {
 			return err
@@ -446,7 +544,11 @@ func (a *App) updateUserAccess(c *gin.Context) {
 				return errInvalidCustomNodeAccess
 			}
 		}
-		if err := tx.Model(&user).Select("ServerIDs", "InboundIDs", "UpdatedAt").Updates(&user).Error; err != nil {
+		updateCols := []string{"ServerIDs", "InboundIDs", "UpdatedAt"}
+		if req.ForwardIDs != nil {
+			updateCols = append(updateCols, "ForwardIDs")
+		}
+		if err := tx.Model(&user).Select(updateCols).Updates(&user).Error; err != nil {
 			return err
 		}
 		selectedCustomIDs := make(map[uint]bool, len(customNodeIDs))
@@ -471,14 +573,14 @@ func (a *App) updateUserAccess(c *gin.Context) {
 		var order []userNodeOrderItem
 		if req.NodeOrder != nil {
 			order = append([]userNodeOrderItem(nil), (*req.NodeOrder)...)
-			if err := validateUserNodeOrder(order, managedOrderInboundIDs, customNodeIDs); err != nil {
+			if err := validateUserNodeOrderWithForwards(order, managedOrderInboundIDs, effectiveForwardIDs, customNodeIDs); err != nil {
 				return err
 			}
 		} else {
 			// Older clients only send assignment arrays. Preserve any saved
 			// personal order and append newly assigned nodes deterministically.
 			var err error
-			order, err = orderedUserNodeOrder(tx, user.ID, managedOrderInboundIDs, customNodeIDs)
+			order, err = orderedUserNodeOrderWithForwards(tx, user.ID, managedOrderInboundIDs, effectiveForwardIDs, customNodeIDs)
 			if err != nil {
 				return err
 			}
@@ -487,13 +589,17 @@ func (a *App) updateUserAccess(c *gin.Context) {
 	})
 	if err != nil {
 		status := http.StatusInternalServerError
-		if errors.Is(err, errInvalidServerAccess) || errors.Is(err, errInvalidInboundAccess) || errors.Is(err, errInvalidCustomNodeAccess) || errors.Is(err, errInvalidUserNodeOrder) || errors.Is(err, errInvalidUserNodeCustomName) {
+		if errors.Is(err, errInvalidServerAccess) || errors.Is(err, errInvalidInboundAccess) || errors.Is(err, errInvalidForwardAccess) || errors.Is(err, errInvalidCustomNodeAccess) || errors.Is(err, errInvalidUserNodeOrder) || errors.Is(err, errInvalidUserNodeCustomName) {
 			status = http.StatusBadRequest
 		}
 		c.JSON(status, gin.H{"error": err.Error()})
 		return
 	}
-	a.refreshUserProxyAccess(oldServerIDs, user.ServerIDs)
+	newProvisionedServerIDs, err := userProvisionedServerIDs(a.db, &user)
+	if err != nil {
+		newProvisionedServerIDs = user.ServerIDs
+	}
+	a.refreshUserProxyAccess(oldProvisionedServerIDs, newProvisionedServerIDs)
 	access, err := effectiveUserAccess(a.db, &user)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -540,6 +646,17 @@ func (a *App) validateUserNodeIDs(u *model.User) error {
 		}
 		u.ServerIDs = normalizedIDs(merged)
 	}
+	if len(u.ForwardIDs) > 0 {
+		var validCount int64
+		if err := a.db.Model(&model.PortForward{}).
+			Where("id IN ? AND target_type = ? AND target_inbound_id > 0", u.ForwardIDs, model.ForwardTargetInbound).
+			Count(&validCount).Error; err != nil {
+			return err
+		}
+		if validCount != int64(len(u.ForwardIDs)) {
+			return errInvalidForwardAccess
+		}
+	}
 	return nil
 }
 
@@ -551,6 +668,11 @@ func (a *App) listUsers(c *gin.Context) {
 	}
 	var inbounds []model.Inbound
 	if err := a.db.Select("id", "server_id").Find(&inbounds).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	var forwards []model.PortForward
+	if err := a.db.Select("id").Where("target_type = ? AND target_inbound_id > 0", model.ForwardTargetInbound).Find(&forwards).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -579,6 +701,10 @@ func (a *App) listUsers(c *gin.Context) {
 		inboundServers[inbounds[i].ID] = inbounds[i].ServerID
 		serverInboundCounts[inbounds[i].ServerID]++
 	}
+	validForwards := make(map[uint]bool, len(forwards))
+	for i := range forwards {
+		validForwards[forwards[i].ID] = true
+	}
 	items := make([]userListItem, 0, len(users))
 	for i := range users {
 		count := 0
@@ -596,6 +722,15 @@ func (a *App) listUsers(c *gin.Context) {
 				if !seen[serverID] {
 					seen[serverID] = true
 					count += serverInboundCounts[serverID]
+				}
+			}
+		}
+		if len(users[i].ForwardIDs) > 0 {
+			seenForwards := make(map[uint]bool, len(users[i].ForwardIDs))
+			for _, forwardID := range users[i].ForwardIDs {
+				if validForwards[forwardID] && !seenForwards[forwardID] {
+					seenForwards[forwardID] = true
+					count++
 				}
 			}
 		}
@@ -619,7 +754,7 @@ func (a *App) createUser(c *gin.Context) {
 	if !bindJSON(c, &req) {
 		return
 	}
-	if rejectTooManyIDs(c, req.ServerIDs, req.InboundIDs) {
+	if rejectTooManyIDs(c, req.ServerIDs, req.InboundIDs, req.ForwardIDs) {
 		return
 	}
 	a.userAccessMu.Lock()
@@ -654,6 +789,7 @@ func (a *App) createUser(c *gin.Context) {
 		Role:            model.RoleUser,
 		ServerIDs:       normalizedIDs(req.ServerIDs),
 		InboundIDs:      normalizedIDs(req.InboundIDs),
+		ForwardIDs:      normalizedIDs(req.ForwardIDs),
 		ExpireAt:        unixToTime(req.ExpireAt),
 		SubToken:        randHex(16),
 		ProxyToken:      randHex(32),
@@ -683,7 +819,11 @@ func (a *App) createUser(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	a.refreshUserProxyAccess(u.ServerIDs)
+	provisioned, err := userProvisionedServerIDs(a.db, u)
+	if err != nil {
+		provisioned = u.ServerIDs
+	}
+	a.refreshUserProxyAccess(provisioned)
 	c.JSON(http.StatusOK, gin.H{"user": u})
 }
 
@@ -696,7 +836,7 @@ func (a *App) updateUser(c *gin.Context) {
 	if !bindJSON(c, &req) {
 		return
 	}
-	if rejectTooManyIDs(c, req.ServerIDs, req.InboundIDs) {
+	if rejectTooManyIDs(c, req.ServerIDs, req.InboundIDs, req.ForwardIDs) {
 		return
 	}
 	a.userAccessMu.Lock()
@@ -706,9 +846,12 @@ func (a *App) updateUser(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
-	oldServerIDs := append([]uint(nil), u.ServerIDs...)
+	oldProvisionedServerIDs, err := userProvisionedServerIDs(a.db, &u)
+	if err != nil {
+		oldProvisionedServerIDs = append([]uint(nil), u.ServerIDs...)
+	}
 	revokeSessions := false
-	columns := make([]string, 0, 8)
+	columns := make([]string, 0, 9)
 
 	if req.Email != "" {
 		email, normalizedEmail, err := validateUsername(req.Email)
@@ -750,6 +893,7 @@ func (a *App) updateUser(c *gin.Context) {
 		columns = append(columns, "Password")
 	}
 	accessChanged := false
+	forwardChanged := false
 	if req.ServerIDs != nil {
 		u.ServerIDs = normalizedIDs(req.ServerIDs)
 		accessChanged = true
@@ -758,6 +902,10 @@ func (a *App) updateUser(c *gin.Context) {
 	if req.InboundIDs != nil {
 		u.InboundIDs = normalizedIDs(req.InboundIDs)
 		accessChanged = true
+	}
+	if req.ForwardIDs != nil {
+		u.ForwardIDs = normalizedIDs(req.ForwardIDs)
+		forwardChanged = true
 	}
 
 	// Validate the assigned node lists the same way updateUserAccess does, so an
@@ -786,6 +934,9 @@ func (a *App) updateUser(c *gin.Context) {
 		// validateUserNodeIDs may merge the owning server of a selected inbound.
 		columns = append(columns, "ServerIDs", "InboundIDs")
 	}
+	if forwardChanged {
+		columns = append(columns, "ForwardIDs")
+	}
 	if len(columns) > 0 {
 		err := a.db.Transaction(func(tx *gorm.DB) error {
 			if err := tx.Model(&model.User{}).Where("id = ?", u.ID).Select(columns).Updates(&u).Error; err != nil {
@@ -811,7 +962,11 @@ func (a *App) updateUser(c *gin.Context) {
 		return
 	}
 
-	a.refreshUserProxyAccess(oldServerIDs, u.ServerIDs)
+	newProvisionedServerIDs, err := userProvisionedServerIDs(a.db, &u)
+	if err != nil {
+		newProvisionedServerIDs = u.ServerIDs
+	}
+	a.refreshUserProxyAccess(oldProvisionedServerIDs, newProvisionedServerIDs)
 	c.JSON(http.StatusOK, gin.H{"user": u})
 }
 
@@ -842,10 +997,14 @@ func (a *App) deleteUser(c *gin.Context) {
 	}
 	unlockAudience := a.subscriptionManager().lockAudience()
 	defer unlockAudience()
+	oldProvisionedServerIDs, err := userProvisionedServerIDs(a.db, &u)
+	if err != nil {
+		oldProvisionedServerIDs = u.ServerIDs
+	}
 	if a.hub != nil && a.hub.traffic != nil {
 		a.hub.traffic.dropUser(id)
 	}
-	err := a.db.Transaction(func(tx *gorm.DB) error {
+	err = a.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Delete(&model.User{}, id).Error; err != nil {
 			return err
 		}
@@ -888,7 +1047,7 @@ func (a *App) deleteUser(c *gin.Context) {
 	if a.hub != nil && a.hub.traffic != nil {
 		a.hub.traffic.dropUser(id)
 	}
-	a.refreshUserProxyAccess(u.ServerIDs)
+	a.refreshUserProxyAccess(oldProvisionedServerIDs)
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 

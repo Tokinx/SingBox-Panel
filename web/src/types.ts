@@ -8,6 +8,7 @@ export interface User {
   role: Role
   server_ids: number[]
   inbound_ids: number[]
+  forward_ids?: number[]
   node_count?: number
   expire_at: string | null
   enabled: boolean
@@ -63,6 +64,7 @@ export interface Server {
   config_mode: 'managed' | 'raw' | ''
   agent_url: string
   inbounds?: Inbound[]
+  forwards?: PortForward[]
   created_at: string
   updated_at: string
 }

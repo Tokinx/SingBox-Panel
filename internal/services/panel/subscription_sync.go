@@ -18,45 +18,106 @@ type subscriptionSyncStatus struct {
 	FailedServers  int              `json:"failed_servers"`
 }
 
-// Only managed nodes with a granted multi-user inbound derive credentials from
-// this account. Raw, shared-credential and external nodes must stay untouched.
+// Only managed nodes with a granted multi-user inbound (directly or via an
+// enabled inbound-targeting PortForward) derive credentials from this account.
+// Raw, shared-credential and external nodes must stay untouched.
 func subscriptionSyncServerIDs(db *gorm.DB, user *model.User) ([]uint, error) {
-	if len(user.ServerIDs) == 0 {
+	if len(user.ServerIDs) == 0 && len(user.ForwardIDs) == 0 {
 		return nil, nil
-	}
-	var servers []model.Server
-	if err := db.Select("id", "config_mode", "raw_config").Where("id IN ?", user.ServerIDs).Find(&servers).Error; err != nil {
-		return nil, err
-	}
-	var managedIDs []uint
-	for _, server := range servers {
-		if server.EffectiveConfigMode() == model.ConfigModeManaged {
-			managedIDs = append(managedIDs, server.ID)
-		}
-	}
-	if len(managedIDs) == 0 {
-		return nil, nil
-	}
-	var inbounds []model.Inbound
-	if err := db.Select("id", "server_id", "type", "settings").Where("server_id IN ?", managedIDs).Find(&inbounds).Error; err != nil {
-		return nil, err
 	}
 	var ids []uint
-	for _, inbound := range inbounds {
-		if !user.HasInbound(inbound.ServerID, inbound.ID) {
-			continue
+	if len(user.ServerIDs) > 0 {
+		var servers []model.Server
+		if err := db.Select("id", "config_mode", "raw_config").Where("id IN ?", user.ServerIDs).Find(&servers).Error; err != nil {
+			return nil, err
 		}
-		var settings singbox.InboundSettings
-		if len(inbound.Settings) > 0 {
-			if err := json.Unmarshal(inbound.Settings, &settings); err != nil {
-				return nil, fmt.Errorf("read inbound %d credential settings: %w", inbound.ID, err)
+		var managedIDs []uint
+		for _, server := range servers {
+			if server.EffectiveConfigMode() == model.ConfigModeManaged {
+				managedIDs = append(managedIDs, server.ID)
 			}
 		}
-		if settings.UseMultiUser(string(inbound.Type)) {
-			ids = append(ids, inbound.ServerID)
+		if len(managedIDs) > 0 {
+			var inbounds []model.Inbound
+			if err := db.Select("id", "server_id", "type", "settings").Where("server_id IN ?", managedIDs).Find(&inbounds).Error; err != nil {
+				return nil, err
+			}
+			for _, inbound := range inbounds {
+				if !user.HasInbound(inbound.ServerID, inbound.ID) {
+					continue
+				}
+				multiUser, err := inboundUsesMultiUser(inbound)
+				if err != nil {
+					return nil, err
+				}
+				if multiUser {
+					ids = append(ids, inbound.ServerID)
+				}
+			}
+		}
+	}
+	if len(user.ForwardIDs) > 0 {
+		var forwards []model.PortForward
+		if err := db.Select("target_inbound_id").
+			Where("id IN ? AND target_type = ? AND target_inbound_id > 0 AND enabled = ?", user.ForwardIDs, model.ForwardTargetInbound, true).
+			Find(&forwards).Error; err != nil {
+			return nil, err
+		}
+		targetInboundIDs := make([]uint, 0, len(forwards))
+		for _, f := range forwards {
+			if f.TargetInboundID > 0 {
+				targetInboundIDs = append(targetInboundIDs, f.TargetInboundID)
+			}
+		}
+		targetInboundIDs = normalizedIDs(targetInboundIDs)
+		if len(targetInboundIDs) > 0 {
+			var inbounds []model.Inbound
+			if err := db.Select("id", "server_id", "type", "settings").Where("id IN ?", targetInboundIDs).Find(&inbounds).Error; err != nil {
+				return nil, err
+			}
+			targetServerIDs := make([]uint, 0, len(inbounds))
+			for _, inbound := range inbounds {
+				targetServerIDs = append(targetServerIDs, inbound.ServerID)
+			}
+			targetServerIDs = normalizedIDs(targetServerIDs)
+			if len(targetServerIDs) > 0 {
+				var servers []model.Server
+				if err := db.Select("id", "config_mode", "raw_config").Where("id IN ?", targetServerIDs).Find(&servers).Error; err != nil {
+					return nil, err
+				}
+				managed := make(map[uint]bool, len(servers))
+				for _, server := range servers {
+					if server.EffectiveConfigMode() == model.ConfigModeManaged {
+						managed[server.ID] = true
+					}
+				}
+				for _, inbound := range inbounds {
+					if !managed[inbound.ServerID] {
+						continue
+					}
+					multiUser, err := inboundUsesMultiUser(inbound)
+					if err != nil {
+						return nil, err
+					}
+					if multiUser {
+						ids = append(ids, inbound.ServerID)
+					}
+				}
+			}
 		}
 	}
 	return normalizedIDs(ids), nil
+}
+
+func inboundUsesMultiUser(inbound model.Inbound) (bool, error) {
+	if len(inbound.Settings) == 0 {
+		return false, nil
+	}
+	var settings singbox.InboundSettings
+	if err := json.Unmarshal(inbound.Settings, &settings); err != nil {
+		return false, fmt.Errorf("read inbound %d credential settings: %w", inbound.ID, err)
+	}
+	return settings.UseMultiUser(string(inbound.Type)), nil
 }
 
 func readSubscriptionSyncStatus(db *gorm.DB, serverIDs []uint) (subscriptionSyncStatus, error) {

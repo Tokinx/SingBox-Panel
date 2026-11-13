@@ -204,6 +204,7 @@ func (a *App) applyImportUnlocked(srv *model.Server, p *singbox.ParsedConfig, ra
 	mode := importedConfigMode(p, raw)
 	var changedInboundIDs []uint
 	var routingTags []string
+	var forwardTargetServerIDs []uint
 	err := a.db.Transaction(func(tx *gorm.DB) error {
 		previousTags, err := collectServerManagedRoutingTags(tx, srv.ID)
 		if err != nil {
@@ -237,9 +238,11 @@ func (a *App) applyImportUnlocked(srv *model.Server, p *singbox.ParsedConfig, ra
 		if err := syncImportedRuleSets(tx, srv.ID, p.RuleSets); err != nil {
 			return err
 		}
-		if err := syncImportedForwards(tx, srv.ID, mode, p.Forwards); err != nil {
+		removedTargets, err := syncImportedForwards(tx, srv.ID, mode, p.Forwards)
+		if err != nil {
 			return err
 		}
+		forwardTargetServerIDs = removedTargets
 		if err := tx.Model(&model.Server{}).Where("id = ?", srv.ID).Updates(map[string]any{
 			"final_outbound":     p.Final,
 			"config_mode":        mode,
@@ -278,6 +281,9 @@ func (a *App) applyImportUnlocked(srv *model.Server, p *singbox.ParsedConfig, ra
 		go a.refreshManagedRoutingTags(routingTags...)
 		if len(changedInboundIDs) > 0 {
 			go a.pushManagedRoutingNodeChanges(changedInboundIDs)
+		}
+		if len(forwardTargetServerIDs) > 0 {
+			go a.refreshUserProxyAccess(forwardTargetServerIDs)
 		}
 	}
 	return err
@@ -614,19 +620,22 @@ func syncImportedRuleSets(tx *gorm.DB, serverID uint, parsed []singbox.RuleSetIn
 	return deleteRowsExcept(tx, serverID, keepIDs, &model.RuleSet{})
 }
 
-func syncImportedForwards(tx *gorm.DB, serverID uint, mode string, parsed []singbox.ForwardInput) error {
+func syncImportedForwards(tx *gorm.DB, serverID uint, mode string, parsed []singbox.ForwardInput) ([]uint, error) {
 	var existing []model.PortForward
 	if err := tx.Where("server_id = ?", serverID).Find(&existing).Error; err != nil {
-		return err
+		return nil, err
 	}
 	byTag := make(map[string]*model.PortForward, len(existing))
 	for i := range existing {
 		if err := rememberForwardTrafficTag(tx, serverID, existing[i].ID, existing[i].Tag); err != nil {
-			return err
+			return nil, err
 		}
 		byTag[existing[i].Tag] = &existing[i]
 	}
 	keepIDs := make([]uint, 0, len(parsed))
+	keepSet := make(map[uint]bool, len(parsed))
+	var removedForwardIDs []uint
+	var affectedTargetServerIDs []uint
 	statsPortA := localTrafficPort()
 	statsPortB := addressPort(protocol.LocalStatsAPIAddress)
 	for _, fwd := range parsed {
@@ -642,7 +651,7 @@ func syncImportedForwards(tx *gorm.DB, serverID uint, mode string, parsed []sing
 			if mode == model.ConfigModeRaw {
 				continue
 			}
-			return err
+			return nil, err
 		}
 		outbound := strings.TrimSpace(fwd.Outbound)
 		if outbound == "" {
@@ -662,6 +671,11 @@ func syncImportedForwards(tx *gorm.DB, serverID uint, mode string, parsed []sing
 				targetInboundID = ib.ID
 				targetAddr = ""
 				targetPort = 0
+			} else {
+				removedForwardIDs = append(removedForwardIDs, row.ID)
+				if row.TargetServerID > 0 {
+					affectedTargetServerIDs = append(affectedTargetServerIDs, row.TargetServerID)
+				}
 			}
 		}
 
@@ -681,11 +695,11 @@ func syncImportedForwards(tx *gorm.DB, serverID uint, mode string, parsed []sing
 				Remark:          "同步自服务器配置",
 			}
 			if err := tx.Create(row).Error; err != nil {
-				return err
+				return nil, err
 			}
 			byTag[fwd.Tag] = row
 			if err := rememberForwardTrafficTag(tx, serverID, row.ID, row.Tag); err != nil {
-				return err
+				return nil, err
 			}
 		} else {
 			remark := row.Remark
@@ -704,10 +718,26 @@ func syncImportedForwards(tx *gorm.DB, serverID uint, mode string, parsed []sing
 				"enabled":           true,
 				"remark":            remark,
 			}).Error; err != nil {
-				return err
+				return nil, err
 			}
 		}
 		keepIDs = append(keepIDs, row.ID)
+		keepSet[row.ID] = true
 	}
-	return deleteRowsExcept(tx, serverID, keepIDs, &model.PortForward{})
+	for _, old := range existing {
+		if keepSet[old.ID] {
+			continue
+		}
+		removedForwardIDs = append(removedForwardIDs, old.ID)
+		if old.TargetType == model.ForwardTargetInbound && old.TargetServerID > 0 {
+			affectedTargetServerIDs = append(affectedTargetServerIDs, old.TargetServerID)
+		}
+	}
+	if err := removeForwardUserAssignments(tx, removedForwardIDs); err != nil {
+		return nil, err
+	}
+	if err := deleteRowsExcept(tx, serverID, keepIDs, &model.PortForward{}); err != nil {
+		return nil, err
+	}
+	return normalizedIDs(affectedTargetServerIDs), nil
 }

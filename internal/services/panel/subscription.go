@@ -136,9 +136,30 @@ func (a *App) gatherNodes(user *model.User) []node {
 // empty subscription, which clients could cache as a node deletion.
 func (a *App) gatherNodesWithError(user *model.User) ([]node, error) {
 	var out []node
-	if len(user.ServerIDs) > 0 {
+	var relayForwardsByServer map[uint][]model.PortForward
+	var relayServerIDs []uint
+	if len(user.ForwardIDs) > 0 {
+		var forwards []model.PortForward
+		if err := a.db.Where("id IN ? AND target_type = ? AND target_inbound_id > 0 AND enabled = ?",
+			user.ForwardIDs, model.ForwardTargetInbound, true).Order("id").Find(&forwards).Error; err != nil {
+			return nil, err
+		}
+		if len(forwards) > 0 {
+			relayForwardsByServer = make(map[uint][]model.PortForward)
+			for _, f := range forwards {
+				if !user.HasForward(f.ID) {
+					continue
+				}
+				relayForwardsByServer[f.ServerID] = append(relayForwardsByServer[f.ServerID], f)
+				relayServerIDs = append(relayServerIDs, f.ServerID)
+			}
+		}
+	}
+
+	allServerIDs := mergeServerIDs(user.ServerIDs, relayServerIDs)
+	if len(allServerIDs) > 0 {
 		var servers []model.Server
-		if err := a.db.Where("id IN ?", user.ServerIDs).Order("id").Find(&servers).Error; err != nil {
+		if err := a.db.Where("id IN ?", allServerIDs).Order("id").Find(&servers).Error; err != nil {
 			return nil, err
 		}
 		applyServerOrder(a.db, servers)
@@ -153,46 +174,46 @@ func (a *App) gatherNodesWithError(user *model.User) ([]node, error) {
 			if err != nil || host == "" {
 				continue
 			}
-			var inbounds []model.Inbound
-			if err := a.db.Where("server_id = ? AND enabled = ?", srv.ID, true).Order("id").Find(&inbounds).Error; err != nil {
-				return nil, err
+			if user.HasServer(srv.ID) {
+				var inbounds []model.Inbound
+				if err := a.db.Where("server_id = ? AND enabled = ?", srv.ID, true).Order("id").Find(&inbounds).Error; err != nil {
+					return nil, err
+				}
+				first := len(out)
+				for _, ib := range inbounds {
+					// Respect per-inbound access: a protocol the user isn't granted must
+					// not appear in their subscription.
+					if !user.HasInbound(srv.ID, ib.ID) {
+						continue
+					}
+					st, identity, ok, err := buildInboundNodeSettings(user, ib)
+					if err != nil {
+						return nil, err
+					}
+					if !ok {
+						continue
+					}
+					out = append(out, node{
+						orderType: userNodeTypeManaged,
+						orderID:   ib.ID,
+						tag:       ib.Tag,
+						server:    host,
+						port:      ib.ListenPort,
+						typ:       string(ib.Type),
+						region:    srv.Region,
+						settings:  st,
+						user:      identity,
+					})
+				}
+				nameServerNodes(srv.Name, out[first:])
 			}
-			first := len(out)
-			for _, ib := range inbounds {
-				// Respect per-inbound access: a protocol the user isn't granted must
-				// not appear in their subscription.
-				if !user.HasInbound(srv.ID, ib.ID) {
-					continue
+			if serverForwards := relayForwardsByServer[srv.ID]; len(serverForwards) > 0 {
+				fwdNodes, err := buildForwardedNodes(a.db, srv, host, serverForwards, user, true)
+				if err != nil {
+					return nil, err
 				}
-				var st singbox.InboundSettings
-				if len(ib.Settings) > 0 {
-					_ = json.Unmarshal(ib.Settings, &st)
-				}
-				if err := st.ValidateMultiUser(string(ib.Type)); err != nil {
-					return nil, fmt.Errorf("inbound %q settings: %w", ib.Tag, err)
-				}
-				var identity singbox.ProxyUser
-				if st.UseMultiUser(string(ib.Type)) {
-					st.SingleUser = false
-					identity = proxyIdentity(user, ib.ID)
-				} else {
-					st.MultiUser = false
-					st.SingleUser = true
-					identity = st.SingleUserIdentity()
-				}
-				out = append(out, node{
-					orderType: userNodeTypeManaged,
-					orderID:   ib.ID,
-					tag:       ib.Tag,
-					server:    host,
-					port:      ib.ListenPort,
-					typ:       string(ib.Type),
-					region:    srv.Region,
-					settings:  st,
-					user:      identity,
-				})
+				out = append(out, fwdNodes...)
 			}
-			nameServerNodes(srv.Name, out[first:])
 		}
 	}
 
@@ -622,6 +643,164 @@ func formatNodeDisplayName(serverName, tag, typ string) string {
 		return fmt.Sprintf("%s - %s", serverName, formatProtocolDisplayName(typ))
 	}
 	return fmt.Sprintf("%s - %s", serverName, tag)
+}
+
+func buildInboundNodeSettings(user *model.User, ib model.Inbound) (singbox.InboundSettings, singbox.ProxyUser, bool, error) {
+	var st singbox.InboundSettings
+	if len(ib.Settings) > 0 {
+		_ = json.Unmarshal(ib.Settings, &st)
+	}
+	if err := st.ValidateMultiUser(string(ib.Type)); err != nil {
+		return st, singbox.ProxyUser{}, false, fmt.Errorf("inbound %q settings: %w", ib.Tag, err)
+	}
+	var identity singbox.ProxyUser
+	if st.UseMultiUser(string(ib.Type)) {
+		if user == nil {
+			return st, singbox.ProxyUser{}, false, nil
+		}
+		st.SingleUser = false
+		identity = proxyIdentity(user, ib.ID)
+	} else {
+		st.MultiUser = false
+		st.SingleUser = true
+		identity = st.SingleUserIdentity()
+	}
+	return st, identity, true, nil
+}
+
+func applyForwardTLSServerName(st *singbox.InboundSettings, targetHost string) {
+	if !nodeTLSOn(*st) || st.TLS.Reality.Enabled || st.TLS.SelfSigned || st.TLS.ServerName != "" || st.TLS.ACMEDomain != "" {
+		return
+	}
+	targetHost = strings.TrimSpace(targetHost)
+	if targetHost != "" {
+		st.TLS.ServerName = targetHost
+	}
+}
+
+func buildForwardedNodes(db *gorm.DB, relaySrv *model.Server, relayHost string, forwards []model.PortForward, user *model.User, onlyAssigned bool) ([]node, error) {
+	inboundIDs := make([]uint, 0, len(forwards))
+	for _, f := range forwards {
+		if f.Enabled && f.TargetType == model.ForwardTargetInbound && f.TargetInboundID > 0 {
+			if onlyAssigned && (user == nil || !user.HasForward(f.ID)) {
+				continue
+			}
+			inboundIDs = append(inboundIDs, f.TargetInboundID)
+		}
+	}
+	inboundIDs = normalizedIDs(inboundIDs)
+	if len(inboundIDs) == 0 {
+		return nil, nil
+	}
+	var targetInbounds []model.Inbound
+	if err := db.Where("id IN ? AND enabled = ?", inboundIDs, true).Find(&targetInbounds).Error; err != nil {
+		return nil, err
+	}
+	inboundByID := make(map[uint]model.Inbound, len(targetInbounds))
+	targetServerIDs := make([]uint, 0, len(targetInbounds))
+	for _, ib := range targetInbounds {
+		inboundByID[ib.ID] = ib
+		targetServerIDs = append(targetServerIDs, ib.ServerID)
+	}
+	targetServerIDs = normalizedIDs(targetServerIDs)
+	serverByID := make(map[uint]model.Server, len(targetServerIDs))
+	if len(targetServerIDs) > 0 {
+		var targetServers []model.Server
+		if err := db.Select("id", "name", "address", "public_ip", "region").Where("id IN ?", targetServerIDs).Find(&targetServers).Error; err != nil {
+			return nil, err
+		}
+		for _, s := range targetServers {
+			serverByID[s.ID] = s
+		}
+	}
+
+	type forwardedMeta struct {
+		node             node
+		targetServerName string
+		targetInboundTag string
+		listenPort       int
+	}
+	var built []forwardedMeta
+	targetNameCounts := make(map[string]int)
+	relayName := strings.TrimSpace(relaySrv.Name)
+	for _, f := range forwards {
+		if !f.Enabled || f.TargetType != model.ForwardTargetInbound || f.TargetInboundID == 0 {
+			continue
+		}
+		if onlyAssigned && (user == nil || !user.HasForward(f.ID)) {
+			continue
+		}
+		targetIb, ok := inboundByID[f.TargetInboundID]
+		if !ok || !targetIb.Enabled {
+			continue
+		}
+		targetSrv, ok := serverByID[targetIb.ServerID]
+		if !ok {
+			continue
+		}
+		st, identity, hasCred, err := buildInboundNodeSettings(user, targetIb)
+		if err != nil {
+			return nil, err
+		}
+		if !hasCred {
+			continue
+		}
+		if st.UseMultiUser(string(targetIb.Type)) && (user == nil || !user.HasForward(f.ID)) {
+			continue
+		}
+		targetHost := targetSrv.Address
+		if targetHost == "" {
+			targetHost = targetSrv.PublicIP
+		}
+		if normalized, normErr := normalizeNodeAddress(targetHost); normErr == nil && normalized != "" {
+			targetHost = normalized
+		}
+		applyForwardTLSServerName(&st, targetHost)
+
+		targetName := strings.TrimSpace(targetSrv.Name)
+		if targetName == "" {
+			targetName = strings.TrimSpace(targetHost)
+		}
+		targetNameCounts[targetName]++
+		built = append(built, forwardedMeta{
+			node: node{
+				orderType: userNodeTypeForward,
+				orderID:   f.ID,
+				tag:       f.Tag,
+				server:    relayHost,
+				port:      f.ListenPort,
+				typ:       string(targetIb.Type),
+				region:    relaySrv.Region,
+				settings:  st,
+				user:      identity,
+			},
+			targetServerName: targetName,
+			targetInboundTag: targetIb.Tag,
+			listenPort:       f.ListenPort,
+		})
+	}
+
+	out := make([]node, 0, len(built))
+	for _, item := range built {
+		n := item.node
+		base := relayName
+		if item.targetServerName != "" {
+			if base != "" {
+				base = fmt.Sprintf("%s -> %s", base, item.targetServerName)
+			} else {
+				base = item.targetServerName
+			}
+		} else if base == "" {
+			base = n.tag
+		}
+		if targetNameCounts[item.targetServerName] > 1 {
+			n.name = fmt.Sprintf("%s (%s :%d)", base, item.targetInboundTag, item.listenPort)
+		} else {
+			n.name = base
+		}
+		out = append(out, n)
+	}
+	return out, nil
 }
 
 func formatProtocolDisplayName(typ string) string {

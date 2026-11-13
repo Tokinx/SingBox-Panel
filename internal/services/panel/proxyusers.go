@@ -42,6 +42,16 @@ func proxyUsersForInbound(db *gorm.DB, inbound *model.Inbound, settings singbox.
 	if !settings.UseMultiUser(string(inbound.Type)) {
 		return nil, nil
 	}
+	var forwards []model.PortForward
+	if err := db.Select("id").
+		Where("target_type = ? AND target_inbound_id = ? AND enabled = ?", model.ForwardTargetInbound, inbound.ID, true).
+		Find(&forwards).Error; err != nil {
+		return nil, err
+	}
+	forwardSet := make(map[uint]bool, len(forwards))
+	for _, f := range forwards {
+		forwardSet[f.ID] = true
+	}
 	var users []model.User
 	if err := db.Where("enabled = ?", true).Order("id").Find(&users).Error; err != nil {
 		return nil, err
@@ -51,7 +61,19 @@ func proxyUsersForInbound(db *gorm.DB, inbound *model.Inbound, settings singbox.
 	trafficIdentities := make([]model.UserTrafficIdentity, 0, len(users))
 	for i := range users {
 		user := &users[i]
-		if user.Expired(now) || !user.HasInbound(inbound.ServerID, inbound.ID) {
+		if user.Expired(now) {
+			continue
+		}
+		allowed := user.HasInbound(inbound.ServerID, inbound.ID)
+		if !allowed && len(forwardSet) > 0 {
+			for _, fid := range user.ForwardIDs {
+				if forwardSet[fid] {
+					allowed = true
+					break
+				}
+			}
+		}
+		if !allowed {
 			continue
 		}
 		identity := proxyIdentity(user, inbound.ID)
@@ -98,6 +120,46 @@ func mergeServerIDs(groups ...[]uint) []uint {
 		}
 	}
 	return ids
+}
+
+// userProvisionedServerIDs returns every server holding proxy credentials for
+// the given users: direct ServerIDs plus the target servers of any enabled
+// inbound-targeting PortForwards in ForwardIDs.
+func userProvisionedServerIDs(db *gorm.DB, users ...*model.User) ([]uint, error) {
+	var serverIDs []uint
+	var forwardIDs []uint
+	for _, user := range users {
+		if user == nil {
+			continue
+		}
+		serverIDs = append(serverIDs, user.ServerIDs...)
+		forwardIDs = append(forwardIDs, user.ForwardIDs...)
+	}
+	forwardIDs = normalizedIDs(forwardIDs)
+	if len(forwardIDs) == 0 {
+		return mergeServerIDs(serverIDs), nil
+	}
+	var forwards []model.PortForward
+	if err := db.Select("target_inbound_id").
+		Where("id IN ? AND target_type = ? AND target_inbound_id > 0 AND enabled = ?", forwardIDs, model.ForwardTargetInbound, true).
+		Find(&forwards).Error; err != nil {
+		return nil, err
+	}
+	targetInboundIDs := make([]uint, 0, len(forwards))
+	for _, f := range forwards {
+		if f.TargetInboundID > 0 {
+			targetInboundIDs = append(targetInboundIDs, f.TargetInboundID)
+		}
+	}
+	targetInboundIDs = normalizedIDs(targetInboundIDs)
+	if len(targetInboundIDs) > 0 {
+		var inboundServerIDs []uint
+		if err := db.Model(&model.Inbound{}).Where("id IN ?", targetInboundIDs).Pluck("server_id", &inboundServerIDs).Error; err != nil {
+			return nil, err
+		}
+		serverIDs = append(serverIDs, inboundServerIDs...)
+	}
+	return mergeServerIDs(serverIDs), nil
 }
 
 // refreshUserProxyAccess schedules convergence for every affected managed
