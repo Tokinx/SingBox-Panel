@@ -3,7 +3,7 @@ import { Form, Input, InputNumber, Modal, Segmented, Select, Switch } from '../.
 import { createForward, listServers, updateForward, type ForwardBody } from '../../../api'
 import { applyWithToast } from '../../../configApply'
 import type { ForwardNetwork, ForwardTargetType, Inbound, PortForward, RoutingNode, Server } from '../../../types'
-import { FormGroup, scrollToFirstError } from './InboundForm'
+import { scrollToFirstError } from './InboundForm'
 import { MODAL_MD } from '../../../ui/modal'
 import '../../../styles/forms.css'
 
@@ -24,7 +24,7 @@ export function formatForwardNetwork(network?: string): string {
 
 const TARGET_TYPE_OPTIONS: { value: ForwardTargetType; label: string }[] = [
   { value: 'custom', label: '自定义地址' },
-  { value: 'inbound', label: '节点入站' },
+  { value: 'inbound', label: '节点' },
 ]
 
 function normalizeHost(raw: string): string {
@@ -117,7 +117,6 @@ export function ForwardForm({
   const targetType: ForwardTargetType = Form.useWatch('target_type', form) ?? 'custom'
   const networkWatch: 'all' | 'tcp' | 'udp' = Form.useWatch('network', form) ?? 'all'
   const network: ForwardNetwork = networkWatch === 'all' ? '' : networkWatch
-  const targetServerId: number | undefined = Form.useWatch('target_server_id', form)
   const targetInboundId: number | undefined = Form.useWatch('target_inbound_id', form)
   const listenPort: number | undefined = Form.useWatch('listen_port', form)
   const useRelay = !!Form.useWatch('use_relay', form)
@@ -128,20 +127,26 @@ export function ForwardForm({
     [allServers, serverId],
   )
 
-  const selectedTargetServer = useMemo(
-    () => targetServers.find((srv) => srv.id === targetServerId) || null,
-    [targetServers, targetServerId],
+  const candidateNodes = useMemo(
+    () =>
+      targetServers.flatMap((srv) =>
+        (srv.inbounds || []).map((ib) => ({
+          server: srv,
+          inbound: ib,
+          value: ib.id,
+          disabled: ib.enabled === false,
+          label: `${srv.name} · ${ib.tag} (${ib.type} :${ib.listen_port})${ib.enabled === false ? ' [已停用]' : ''}`,
+        })),
+      ),
+    [targetServers],
   )
 
-  const targetInbounds = useMemo(
-    () => selectedTargetServer?.inbounds || [],
-    [selectedTargetServer],
+  const selectedTargetNode = useMemo(
+    () => candidateNodes.find((item) => item.value === targetInboundId) || null,
+    [candidateNodes, targetInboundId],
   )
-
-  const selectedTargetInbound = useMemo(
-    () => targetInbounds.find((ib) => ib.id === targetInboundId) || null,
-    [targetInbounds, targetInboundId],
-  )
+  const selectedTargetServer = selectedTargetNode?.server || null
+  const selectedTargetInbound = selectedTargetNode?.inbound || null
 
   const { portOwners, tagOwners } = useMemo(
     () => collectLocalConflicts(inbounds, forwards, forward?.id),
@@ -180,7 +185,6 @@ export function ForwardForm({
         listen_port: forward.listen_port,
         network: forward.network || 'all',
         target_type: forward.target_type || 'custom',
-        target_server_id: forward.target_server_id || undefined,
         target_inbound_id: forward.target_inbound_id || undefined,
         target_address: forward.target_address || '',
         target_port: forward.target_port || undefined,
@@ -195,7 +199,6 @@ export function ForwardForm({
         listen_port: undefined,
         network: 'all',
         target_type: 'custom',
-        target_server_id: undefined,
         target_inbound_id: undefined,
         target_address: '',
         target_port: undefined,
@@ -206,16 +209,6 @@ export function ForwardForm({
       })
     }
   }, [open, forward])
-
-  const onTargetServerChange = (nextServerId?: number) => {
-    form.setFieldValue('target_server_id', nextServerId)
-    const nextServer = targetServers.find((s) => s.id === nextServerId)
-    const enabledInbounds = (nextServer?.inbounds || []).filter((ib) => ib.enabled !== false)
-    const compatible = network === 'tcp'
-      ? enabledInbounds.find((ib) => !QUIC_INBOUND_TYPES.has(ib.type))
-      : enabledInbounds[0]
-    form.setFieldValue('target_inbound_id', compatible?.id ?? undefined)
-  }
 
   const quicConflict =
     targetType === 'inbound' &&
@@ -278,7 +271,6 @@ export function ForwardForm({
 
   return (
     <Modal
-      className="fm-modal"
       title={forward ? `编辑端口转发 · ${forward.tag}` : '新增端口转发'}
       open={open}
       onOk={submit}
@@ -290,220 +282,203 @@ export function ForwardForm({
     >
       <fieldset disabled={submitting} aria-busy={submitting} className="min-w-0 border-0 p-0 m-0">
         <Form form={form} layout="vertical" className="fm-form">
-          <FormGroup title="监听入口">
-            <Form.Item
-              name="listen_port"
-              label="监听端口"
-              rules={[
-                { required: true, message: '请输入监听端口' },
-                {
-                  validator: (_, value) => {
-                    if (value === undefined || value === null || value === '') return Promise.resolve()
-                    const port = Number(value)
-                    if (!Number.isInteger(port) || port < 1 || port > 65535) {
-                      return Promise.reject(new Error('端口范围为 1-65535'))
-                    }
-                    if (RESERVED_STATS_PORTS.has(port)) {
-                      return Promise.reject(new Error(`端口 ${port} 为流量统计保留端口`))
-                    }
-                    const owner = portOwners.get(port)
-                    if (owner) {
-                      return Promise.reject(new Error(`端口 ${port} 已被${owner}占用`))
-                    }
-                    return Promise.resolve()
-                  },
-                },
-              ]}
-            >
-              <InputNumber min={1} max={65535} placeholder="例如 10443" className="w-full" />
-            </Form.Item>
-            <Form.Item
-              name="tag"
-              label="入站标签"
-              extra={forward ? '修改标签会重建独立统计标识；历史标签不可被其他入站或转发复用' : '留空将自动使用 fwd-<端口>'}
-              rules={[
-                {
-                  validator: (_, value) => {
-                    const text = String(value || '').trim()
-                    if (!text) return Promise.resolve()
-                    if (/\s/.test(text)) {
-                      return Promise.reject(new Error('标签不能包含空白字符'))
-                    }
-                    const owner = tagOwners.get(text)
-                    if (owner) {
-                      return Promise.reject(new Error(`标签与${owner}冲突`))
-                    }
-                    return Promise.resolve()
-                  },
-                },
-              ]}
-            >
-              <Input placeholder={listenPort ? `fwd-${listenPort}` : 'fwd-<端口>'} />
-            </Form.Item>
-            <Form.Item name="network" label="转发协议" className="fm-full">
-              <Segmented options={NETWORK_OPTIONS} aria-label="转发协议" />
-            </Form.Item>
-          </FormGroup>
-
-          <FormGroup title="转发目标">
-            <Form.Item name="target_type" label="目标来源" className="fm-full">
-              <Segmented options={TARGET_TYPE_OPTIONS} aria-label="目标来源" />
-            </Form.Item>
-
-            {targetType === 'custom' ? (
-              <>
-                <Form.Item
-                  name="target_address"
-                  label="目标地址"
-                  rules={[
-                    { required: true, message: '请输入目标地址' },
-                    {
-                      validator: (_, value) => {
-                        const text = String(value || '').trim()
-                        if (!text) return Promise.resolve()
-                        if (isDisallowedForwardHost(text)) {
-                          return Promise.reject(new Error('不能指向本机回环、未指定、链路本地或元数据地址'))
-                        }
-                        if (/[:\s]/.test(text) && !text.includes(':', text.indexOf(':') + 1)) {
-                          return Promise.reject(new Error('请仅填写主机名或 IP，不要附带端口'))
-                        }
-                        return Promise.resolve()
-                      },
-                    },
-                  ]}
-                >
-                  <Input placeholder="公网 IP 或域名，例如 203.0.113.10" />
-                </Form.Item>
-                <Form.Item
-                  name="target_port"
-                  label="目标端口"
-                  rules={[
-                    { required: true, message: '请输入目标端口' },
-                    {
-                      validator: (_, value) => {
-                        if (value === undefined || value === null || value === '') return Promise.resolve()
-                        const port = Number(value)
-                        if (!Number.isInteger(port) || port < 1 || port > 65535) {
-                          return Promise.reject(new Error('端口范围为 1-65535'))
-                        }
-                        return Promise.resolve()
-                      },
-                    },
-                  ]}
-                >
-                  <InputNumber min={1} max={65535} placeholder="1-65535" className="w-full" />
-                </Form.Item>
-              </>
-            ) : (
-              <>
-                <Form.Item
-                  name="target_server_id"
-                  label="目标服务器"
-                  rules={[
-                    { required: true, message: '请选择目标服务器' },
-                    {
-                      validator: () => {
-                        if (selectedTargetServer && isDisallowedForwardHost(selectedTargetServer.address || '')) {
-                          return Promise.reject(new Error(`服务器「${selectedTargetServer.name}」未配置可用公网地址`))
-                        }
-                        return Promise.resolve()
-                      },
-                    },
-                  ]}
-                >
-                  <Select
-                    showSearch
-                    allowClear
-                    loading={loadingServers}
-                    placeholder={targetServers.length ? '选择其他服务器' : '暂无其他可用服务器'}
-                    onChange={onTargetServerChange}
-                    options={targetServers.map((srv) => ({
-                      value: srv.id,
-                      label: `${srv.name} (${srv.address || '未设地址'})`,
-                    }))}
-                  />
-                </Form.Item>
-                <Form.Item
-                  name="target_inbound_id"
-                  label="目标入站"
-                  dependencies={['network', 'target_server_id', 'enabled']}
-                  rules={[
-                    { required: true, message: '请选择目标入站' },
-                    ({ getFieldValue }) => ({
-                      validator: () => {
-                        const requireEnabled = getFieldValue('enabled') !== false || !forward || forward.target_inbound_id !== selectedTargetInbound?.id
-                        if (requireEnabled && selectedTargetInbound && selectedTargetInbound.enabled === false) {
-                          return Promise.reject(new Error('所选目标入站已停用'))
-                        }
-                        if (quicConflict) {
-                          return Promise.reject(new Error(`目标入站为 ${selectedTargetInbound?.type}（QUIC/UDP），不能仅转发 TCP`))
-                        }
-                        return Promise.resolve()
-                      },
-                    }),
-                  ]}
-                >
-                  <Select
-                    showSearch
-                    allowClear
-                    disabled={!targetServerId}
-                    placeholder={targetServerId ? '选择目标入站' : '请先选择服务器'}
-                    options={targetInbounds.map((ib) => ({
-                      value: ib.id,
-                      disabled: ib.enabled === false,
-                      label: `${ib.tag} · ${ib.type} :${ib.listen_port}${ib.enabled === false ? ' (已停用)' : ''}`,
-                    }))}
-                  />
-                </Form.Item>
-                {selectedTargetServer && selectedTargetInbound && (
-                  <p className="fm-full muted" style={{ margin: '-4px 0 12px', fontSize: 12.5 }}>
-                    将自动同步解析至 <span className="mono">{selectedTargetServer.address}:{selectedTargetInbound.listen_port}</span>；目标服务器地址或入站端口变更后会自动重新下发。
-                  </p>
-                )}
-              </>
-            )}
-          </FormGroup>
-
-          <FormGroup title="状态与选项">
-            <Form.Item name="remark" label="备注" className="fm-full">
-              <Input placeholder="可选备注，例如 HK IPLC -> JP VLESS" />
-            </Form.Item>
-            <div className="fm-switches">
-              <Form.Item name="enabled" label="启用此端口转发" valuePropName="checked" className="fm-switch">
-                <Switch />
-              </Form.Item>
-              <Form.Item name="use_relay" label="通过出站节点中转" valuePropName="checked" className="fm-switch">
-                <Switch />
-              </Form.Item>
-            </div>
-            {useRelay && (
+          <section className="fm-group">
+            <div className="fm-grid">
               <Form.Item
-                name="outbound"
-                label="中转出站"
-                className="fm-full"
-                extra="默认直连目标地址；开启中转后，经由所选出站节点二次转发至目标（如专线/上级代理串联）。"
+                name="listen_port"
+                label="监听端口"
                 rules={[
+                  { required: true, message: '请输入监听端口' },
                   {
-                    validator: (_rule, val) => {
-                      if (!form.getFieldValue('use_relay')) return Promise.resolve()
-                      const trimmed = String(val || '').trim()
-                      return trimmed && trimmed !== 'direct'
-                        ? Promise.resolve()
-                        : Promise.reject(new Error('请选择中转出站'))
+                    validator: (_, value) => {
+                      if (value === undefined || value === null || value === '') return Promise.resolve()
+                      const port = Number(value)
+                      if (!Number.isInteger(port) || port < 1 || port > 65535) {
+                        return Promise.reject(new Error('端口范围为 1-65535'))
+                      }
+                      if (RESERVED_STATS_PORTS.has(port)) {
+                        return Promise.reject(new Error(`端口 ${port} 为流量统计保留端口`))
+                      }
+                      const owner = portOwners.get(port)
+                      if (owner) {
+                        return Promise.reject(new Error(`端口 ${port} 已被${owner}占用`))
+                      }
+                      return Promise.resolve()
                     },
                   },
                 ]}
               >
-                <Select
-                  showSearch
-                  options={relayOutboundOptions}
-                  placeholder={
-                    relayOutboundOptions.length ? '选择中转出站节点' : '当前服务器暂无可用出站节点'
-                  }
-                />
+                <InputNumber min={1} max={65535} placeholder="例如 10443" className="w-full" />
               </Form.Item>
-            )}
-          </FormGroup>
+              <Form.Item name="network" label="转发协议">
+                <Segmented block options={NETWORK_OPTIONS} aria-label="转发协议" />
+              </Form.Item>
+            </div>
+          </section>
+
+          <section className="fm-group">
+            <div className="fm-grid">
+              <Form.Item name="target_type" label="转发目标" className="fm-full">
+                <Segmented options={TARGET_TYPE_OPTIONS} aria-label="转发目标" />
+              </Form.Item>
+
+              {targetType === 'custom' ? (
+                <>
+                  <Form.Item
+                    name="target_address"
+                    label="目标地址"
+                    rules={[
+                      { required: true, message: '请输入目标地址' },
+                      {
+                        validator: (_, value) => {
+                          const text = String(value || '').trim()
+                          if (!text) return Promise.resolve()
+                          if (isDisallowedForwardHost(text)) {
+                            return Promise.reject(new Error('不能指向本机回环、未指定、链路本地或元数据地址'))
+                          }
+                          if (/[:\s]/.test(text) && !text.includes(':', text.indexOf(':') + 1)) {
+                            return Promise.reject(new Error('请仅填写主机名或 IP，不要附带端口'))
+                          }
+                          return Promise.resolve()
+                        },
+                      },
+                    ]}
+                  >
+                    <Input placeholder="公网 IP 或域名，例如 203.0.113.10" />
+                  </Form.Item>
+                  <Form.Item
+                    name="target_port"
+                    label="目标端口"
+                    rules={[
+                      { required: true, message: '请输入目标端口' },
+                      {
+                        validator: (_, value) => {
+                          if (value === undefined || value === null || value === '') return Promise.resolve()
+                          const port = Number(value)
+                          if (!Number.isInteger(port) || port < 1 || port > 65535) {
+                            return Promise.reject(new Error('端口范围为 1-65535'))
+                          }
+                          return Promise.resolve()
+                        },
+                      },
+                    ]}
+                  >
+                    <InputNumber min={1} max={65535} placeholder="1-65535" className="w-full" />
+                  </Form.Item>
+                </>
+              ) : (
+                <>
+                  <Form.Item
+                    name="target_inbound_id"
+                    label="目标节点"
+                    className="fm-full"
+                    dependencies={['network', 'enabled']}
+                    rules={[
+                      { required: true, message: '请选择目标节点' },
+                      ({ getFieldValue }) => ({
+                        validator: () => {
+                          if (selectedTargetServer && isDisallowedForwardHost(selectedTargetServer.address || '')) {
+                            return Promise.reject(new Error(`服务器「${selectedTargetServer.name}」未配置可用公网地址`))
+                          }
+                          const requireEnabled = getFieldValue('enabled') !== false || !forward || forward.target_inbound_id !== selectedTargetInbound?.id
+                          if (requireEnabled && selectedTargetInbound && selectedTargetInbound.enabled === false) {
+                            return Promise.reject(new Error('所选目标节点已停用'))
+                          }
+                          if (quicConflict) {
+                            return Promise.reject(new Error(`所选节点为 ${selectedTargetInbound?.type}（QUIC/UDP），不能仅转发 TCP`))
+                          }
+                          return Promise.resolve()
+                        },
+                      }),
+                    ]}
+                  >
+                    <Select
+                      showSearch
+                      allowClear
+                      loading={loadingServers}
+                      placeholder={candidateNodes.length ? '选择站内目标节点' : '暂无其他服务器的可用节点'}
+                      options={candidateNodes.map(({ value, label, disabled }) => ({
+                        value,
+                        label,
+                        disabled,
+                      }))}
+                    />
+                  </Form.Item>
+                  {selectedTargetServer && selectedTargetInbound && (
+                    <p className="fm-full muted" style={{ margin: '-4px 0 12px', fontSize: 12.5 }}>
+                      将自动同步解析至 <span className="mono">{selectedTargetServer.address}:{selectedTargetInbound.listen_port}</span>；目标地址或端口变更后会自动重新下发，也可在用户节点分配中选择此转发节点。
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          </section>
+
+          <section className="fm-group">
+            <div className="fm-grid">
+              <Form.Item
+                name="tag"
+                label="转发标签"
+                extra={forward ? '修改标签会重建独立统计标识；历史标签不可复用' : '留空自动使用 fwd-<端口>'}
+                rules={[
+                  {
+                    validator: (_, value) => {
+                      const text = String(value || '').trim()
+                      if (!text) return Promise.resolve()
+                      if (/\s/.test(text)) {
+                        return Promise.reject(new Error('标签不能包含空白字符'))
+                      }
+                      const owner = tagOwners.get(text)
+                      if (owner) {
+                        return Promise.reject(new Error(`标签与${owner}冲突`))
+                      }
+                      return Promise.resolve()
+                    },
+                  },
+                ]}
+              >
+                <Input placeholder={listenPort ? `fwd-${listenPort}` : 'fwd-<端口>'} />
+              </Form.Item>
+              <Form.Item name="remark" label="备注">
+                <Input placeholder="可选备注，例如 HK -> LAX Reality" />
+              </Form.Item>
+              <div className="fm-switches">
+                <Form.Item name="enabled" label="启用此端口转发" valuePropName="checked" className="fm-switch">
+                  <Switch />
+                </Form.Item>
+                <Form.Item name="use_relay" label="通过出站节点中转" valuePropName="checked" className="fm-switch">
+                  <Switch />
+                </Form.Item>
+              </div>
+              {useRelay && (
+                <Form.Item
+                  name="outbound"
+                  label="中转出站"
+                  className="fm-full"
+                  extra="默认直连目标地址；开启中转后，经由所选出站节点二次转发至目标（如专线/上级代理串联）。"
+                  rules={[
+                    {
+                      validator: (_rule, val) => {
+                        if (!form.getFieldValue('use_relay')) return Promise.resolve()
+                        const trimmed = String(val || '').trim()
+                        return trimmed && trimmed !== 'direct'
+                          ? Promise.resolve()
+                          : Promise.reject(new Error('请选择中转出站'))
+                      },
+                    },
+                  ]}
+                >
+                  <Select
+                    showSearch
+                    options={relayOutboundOptions}
+                    placeholder={
+                      relayOutboundOptions.length ? '选择中转出站节点' : '当前服务器暂无可用出站节点'
+                    }
+                  />
+                </Form.Item>
+              )}
+            </div>
+          </section>
         </Form>
       </fieldset>
     </Modal>

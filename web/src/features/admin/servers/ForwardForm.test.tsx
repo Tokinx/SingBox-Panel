@@ -258,7 +258,7 @@ describe('ForwardForm', () => {
     expect(createForward).not.toHaveBeenCalled()
 
     fireEvent.change(screen.getByLabelText(/^监听端口/), { target: { value: '10443' } })
-    fireEvent.change(screen.getByLabelText('入站标签'), { target: { value: 'reality-guard' } })
+    fireEvent.change(screen.getByLabelText('转发标签'), { target: { value: 'reality-guard' } })
     fireEvent.change(screen.getByLabelText(/^目标地址/), { target: { value: '203.0.113.50' } })
     submitCreate()
 
@@ -266,7 +266,7 @@ describe('ForwardForm', () => {
     await screen.findByText('标签与Reality 守卫「reality-guard」冲突')
 
     fireEvent.change(screen.getByLabelText(/^监听端口/), { target: { value: '20001' } })
-    fireEvent.change(screen.getByLabelText('入站标签'), { target: { value: 'fwd-20001' } })
+    fireEvent.change(screen.getByLabelText('转发标签'), { target: { value: 'fwd-20001' } })
     submitCreate()
 
     await screen.findByText('端口 20001 已被端口转发「fwd-20001」占用')
@@ -274,7 +274,7 @@ describe('ForwardForm', () => {
     expect(createForward).not.toHaveBeenCalled()
   })
 
-  it('supports lazy-loaded server targets, enforces QUIC-vs-TCP compatibility, and submits inbound target with proxy outbound', async () => {
+  it('supports lazy-loaded flat node targets, enforces QUIC-vs-TCP compatibility, and submits inbound target with proxy outbound', async () => {
     render(
       <ForwardForm
         serverId={1}
@@ -289,24 +289,27 @@ describe('ForwardForm', () => {
     )
 
     await waitFor(() => expect(listServers).toHaveBeenCalledOnce())
-    fireEvent.change(screen.getByLabelText(/^监听端口/), { target: { value: '18444' } })
-    fireEvent.click(screen.getByText('节点入站'))
+    expect(document.querySelectorAll('details')).toHaveLength(0)
 
-    fireEvent.click(screen.getByLabelText(/^目标服务器/))
+    fireEvent.change(screen.getByLabelText(/^监听端口/), { target: { value: '18444' } })
+    fireEvent.click(screen.getByText('节点'))
+
+    expect(screen.queryByLabelText(/^目标服务器/)).toBeNull()
+    fireEvent.click(screen.getByLabelText(/^目标节点/))
     expect(screen.queryByRole('option', { name: /Relay Node/ })).toBeNull()
-    fireEvent.click(await screen.findByRole('option', { name: 'JP Edge (jp.example.com)' }))
+    fireEvent.click(await screen.findByRole('option', { name: 'JP Edge · jp-hy2 (hysteria2 :8443)' }))
 
     await screen.findByText(/jp\.example\.com:8443/)
     // Switch protocol to TCP-only while JP hysteria2 inbound is selected -> client validation rejects.
     fireEvent.click(screen.getByText('仅 TCP'))
     submitCreate()
 
-    await screen.findByText('目标入站为 hysteria2（QUIC/UDP），不能仅转发 TCP')
+    await screen.findByText('所选节点为 hysteria2（QUIC/UDP），不能仅转发 TCP')
     expect(createForward).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByLabelText(/^目标入站/))
-    fireEvent.click(await screen.findByRole('option', { name: 'jp-vless · vless :9443' }))
-    await waitFor(() => expect(screen.getByLabelText(/^目标入站/).textContent).toContain('jp-vless'))
+    fireEvent.click(screen.getByLabelText(/^目标节点/))
+    fireEvent.click(await screen.findByRole('option', { name: 'JP Edge · jp-vless (vless :9443)' }))
+    await waitFor(() => expect(screen.getByLabelText(/^目标节点/).textContent).toContain('jp-vless'))
 
     expect(screen.queryByLabelText('中转出站')).toBeNull()
     fireEvent.click(screen.getByLabelText('通过出站节点中转'))

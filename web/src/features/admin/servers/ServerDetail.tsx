@@ -106,7 +106,7 @@ function formatForwardTarget(fwd: PortForward) {
       ? `${fwd.target_address}:${fwd.target_port}`
       : ''
   if (fwd.target_type === 'inbound') {
-    const label = `${fwd.target_server_name || `节点 #${fwd.target_server_id}`} · ${fwd.target_inbound_tag || `入站 #${fwd.target_inbound_id}`}`
+    const label = `${fwd.target_server_name || `服务器 #${fwd.target_server_id}`} · ${fwd.target_inbound_tag || `节点 #${fwd.target_inbound_id}`}`
     return endpoint ? (
       <span>
         <span>{label}</span>{' '}
