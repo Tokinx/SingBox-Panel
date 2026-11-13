@@ -1526,6 +1526,7 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
             rowKey="id"
             className="um-table"
             dataSource={subscriptions}
+            tableLayout="fixed"
             virtual={subscriptions.length > MAX_VISIBLE_SUBSCRIPTIONS}
             scroll={{
               x: 720,
@@ -1549,16 +1550,19 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
                 title: '节点',
                 dataIndex: 'node_count',
                 width: 80,
+                nowrap: true,
                 render: (value: number) => <span className="mono">{value}</span>,
               },
               {
                 title: '状态',
                 width: 110,
+                nowrap: true,
                 render: (_: unknown, subscription) => subscriptionStatus(subscription),
               },
               {
                 title: '最近同步',
                 width: 130,
+                nowrap: true,
                 render: (_: unknown, subscription) => (
                   <span className="mono muted" title={subscription.last_sync_at ? new Date(subscription.last_sync_at).toLocaleString('zh-CN') : undefined}>
                     {syncLabel(subscription)}
@@ -1567,8 +1571,9 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
               },
               {
                 title: <span className="sr-only">操作</span>,
-                width: 112,
+                width: 116,
                 align: 'right',
+                nowrap: true,
                 fixed: 'right' as const,
                 render: (_: unknown, subscription) => subscriptionActions(subscription),
               },

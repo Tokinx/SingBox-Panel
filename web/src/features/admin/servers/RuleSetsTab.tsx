@@ -117,13 +117,15 @@ export const RuleSetsTab: React.FC<RuleSetsTabProps> = ({ ruleSets, nodes, onRef
       title: '标签',
       dataIndex: 'tag',
       key: 'tag',
-      render: (tag: string) => <span className="sd-strong">{tag}</span>,
+      ellipsis: true,
+      render: (tag: string) => <span className="font-medium text-foreground" title={tag}>{tag}</span>,
     },
     {
       title: '类型',
       dataIndex: 'type',
       key: 'type',
       width: 100,
+      nowrap: true,
       render: (type: string) => <span className="ui-tag">{type === 'local' ? '本地' : '远程'}</span>,
     },
     {
@@ -131,6 +133,7 @@ export const RuleSetsTab: React.FC<RuleSetsTabProps> = ({ ruleSets, nodes, onRef
       dataIndex: 'format',
       key: 'format',
       width: 110,
+      nowrap: true,
       render: (format: string) => <span className="mono">{format === 'source' ? 'JSON' : 'SRS'}</span>,
     },
     {
@@ -138,13 +141,15 @@ export const RuleSetsTab: React.FC<RuleSetsTabProps> = ({ ruleSets, nodes, onRef
       dataIndex: 'update_interval',
       key: 'update_interval',
       width: 100,
+      nowrap: true,
       render: (val: string, record: RuleSet) => <span className="mono">{record.type === 'local' ? '—' : val || '1d'}</span>,
     },
     {
-      title: '',
+      title: <span className="sr-only">操作</span>,
       key: 'actions',
-      width: 88,
+      width: 92,
       align: 'right' as const,
+      nowrap: true,
       render: (_: any, record: RuleSet) => (
         <span className="ui-row-actions">
           <Button type="text" size="small" disabled={rawMode} icon={<Pencil />} aria-label={`编辑规则集 ${record.tag}`} onClick={() => openEditModal(record)} />
@@ -156,7 +161,7 @@ export const RuleSetsTab: React.FC<RuleSetsTabProps> = ({ ruleSets, nodes, onRef
 
   return (
     <div>
-      <Table dataSource={ruleSets} columns={columns} rowKey="id" locale={{ emptyText: '暂无规则集' }} />
+      <Table ariaLabel="规则集列表" tableLayout="fixed" scroll={{ x: 560 }} dataSource={ruleSets} columns={columns} rowKey="id" locale={{ emptyText: '暂无规则集' }} />
 
       <Modal
         title={editingRS ? '编辑规则集' : '新增规则集'}

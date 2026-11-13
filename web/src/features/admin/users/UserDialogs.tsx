@@ -98,15 +98,16 @@ function UserTraffic({ user }: { user: User }) {
               size="small"
               rowKey={(r) => `${r.server_id}-${r.inbound_id}`}
               dataSource={data.inbounds}
+              tableLayout="fixed"
               scroll={{ x: 640 }}
               locale={{ emptyText: '暂无记录' }}
               columns={[
                 { title: '主机', dataIndex: 'server_name', width: 150, ellipsis: true, render: (v: string, r) => v || (r.deleted ? <span className="faint">已删除</span> : '—') },
-                { title: '协议', dataIndex: 'type', width: 110, render: (v: string) => v ? <ProtocolTag type={v} /> : '—' },
-                { title: '端口', dataIndex: 'port', width: 80, render: (v: number, r) => v ? <span className="mono" title={r.tag}>{v}</span> : '—' },
-                { title: '下载', dataIndex: 'download', width: 100, align: 'right', sorter: (a, b) => a.download - b.download, render: (v: number) => <span className="mono">{formatBytes(v)}</span> },
-                { title: '上传', dataIndex: 'upload', width: 100, align: 'right', sorter: (a, b) => a.upload - b.upload, render: (v: number) => <span className="mono muted">{formatBytes(v)}</span> },
-                { title: '合计', key: 'total', width: 100, align: 'right', sorter: (a, b) => a.upload + a.download - b.upload - b.download, render: (_: unknown, r) => <span className="mono um-strong">{formatBytes(r.upload + r.download)}</span> },
+                { title: '协议', dataIndex: 'type', width: 110, nowrap: true, render: (v: string) => v ? <ProtocolTag type={v} /> : '—' },
+                { title: '端口', dataIndex: 'port', width: 80, nowrap: true, render: (v: number, r) => v ? <span className="mono" title={r.tag}>{v}</span> : '—' },
+                { title: '下载', dataIndex: 'download', width: 100, align: 'right', nowrap: true, sorter: (a, b) => a.download - b.download, render: (v: number) => <span className="mono">{formatBytes(v)}</span> },
+                { title: '上传', dataIndex: 'upload', width: 100, align: 'right', nowrap: true, sorter: (a, b) => a.upload - b.upload, render: (v: number) => <span className="mono muted">{formatBytes(v)}</span> },
+                { title: '合计', key: 'total', width: 100, align: 'right', nowrap: true, sorter: (a, b) => a.upload + a.download - b.upload - b.download, render: (_: unknown, r) => <span className="mono um-strong">{formatBytes(r.upload + r.download)}</span> },
               ]}
             />
           </>
