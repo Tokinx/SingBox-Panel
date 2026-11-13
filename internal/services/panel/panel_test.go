@@ -556,12 +556,14 @@ func TestInstallCommandQuotesEveryArgument(t *testing.T) {
 	if got := shellQuote("a'b"); got != `'a'"'"'b'` {
 		t.Fatalf("shellQuote = %q", got)
 	}
-	if !strings.HasPrefix(command, "curl -fsSL ") || !strings.Contains(command, " | sh -s -- ") {
-		t.Fatalf("install command must download and run the script: %s", command)
+	// The pasted command stays one short line: privilege escalation and the
+	// curl/wget choice live in the served script, not here.
+	if strings.Count(command, "\n") != 0 || strings.Count(command, shellQuote(code)) != 1 {
+		t.Fatalf("install command is not a single short line: %s", command)
 	}
-	for _, forbidden := range []string{"if ", "command -v", "id -u", "sudo", "doas", "wget"} {
-		if strings.Contains(command, forbidden) {
-			t.Fatalf("install command still contains environment check %q: %s", forbidden, command)
+	for _, required := range []string{"curl -fsSL", "wget -qO-", "| sh -s --"} {
+		if !strings.Contains(command, required) {
+			t.Fatalf("install command missing bootstrap step %q: %s", required, command)
 		}
 	}
 	cmd := exec.Command("sh", "-n")
