@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Form, Input, Modal, Select, Table, type FormInstance } from '../../../ui'
 import type { ImportSummary } from '../../../api'
+import { formatForwardNetwork } from './ForwardForm'
 import '../../../styles/forms.css'
 import { MODAL_LG, MODAL_SM } from '../../../ui/modal'
 
@@ -50,6 +51,24 @@ export function ImportPreviewModal({
                     ? <span className="muted">单用户</span>
                     : <span>多用户 <span className="mono">{row.users}</span></span>,
                 },
+              ]}
+            />
+          </PreviewGroup>
+          <PreviewGroup title="端口转发" count={summary.forwards?.length || 0}>
+            <Table
+              size="small"
+              rowKey="tag"
+              dataSource={summary.forwards || []}
+              columns={[
+                { title: '标签', dataIndex: 'tag' },
+                {
+                  title: '协议',
+                  dataIndex: 'network',
+                  render: (value: string) => <span className="ui-tag mono">{formatForwardNetwork(value)}</span>,
+                },
+                { title: '监听端口', dataIndex: 'listen_port', render: (value: number) => <span className="mono">{value}</span> },
+                { title: '转发目标', dataIndex: 'target', render: (value: string) => <span className="mono">{value}</span> },
+                { title: '出站', dataIndex: 'outbound', render: (value: string) => <span className="mono">{value || 'direct'}</span> },
               ]}
             />
           </PreviewGroup>

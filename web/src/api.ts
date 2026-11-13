@@ -1,9 +1,12 @@
 import axios from 'axios'
 import type {
+  ForwardNetwork,
+  ForwardTargetType,
   Inbound,
   InboundSettings,
   InboundType,
   Outbound,
+  PortForward,
   RoutingNode,
   OutboundSettings,
   OutboundType,
@@ -232,6 +235,28 @@ export const deleteRule = (serverId: number, id: number) =>
 export const reorderRules = (serverId: number, order: number[]) =>
   http.put<ConfigApplyResult>(`/api/admin/servers/${serverId}/rules/reorder`, { order }).then((r) => r.data)
 
+// ---- admin: port forwards (端口转发) ----
+export interface ForwardBody {
+  tag?: string
+  listen_port?: number
+  network?: ForwardNetwork
+  target_type?: ForwardTargetType
+  target_inbound_id?: number
+  target_address?: string
+  target_port?: number
+  outbound?: string
+  remark?: string
+  enabled?: boolean
+}
+export const listForwards = (serverId: number, signal?: AbortSignal) =>
+  http.get<{ forwards: PortForward[] }>(`/api/admin/servers/${serverId}/forwards`, { signal }).then((r) => r.data.forwards)
+export const createForward = (serverId: number, body: ForwardBody) =>
+  http.post<{ forward: PortForward } & ConfigApplyResult>(`/api/admin/servers/${serverId}/forwards`, body).then((r) => r.data)
+export const updateForward = (serverId: number, id: number, body: ForwardBody) =>
+  http.put<{ forward: PortForward } & ConfigApplyResult>(`/api/admin/servers/${serverId}/forwards/${id}`, body).then((r) => r.data)
+export const deleteForward = (serverId: number, id: number) =>
+  http.delete<ConfigApplyResult>(`/api/admin/servers/${serverId}/forwards/${id}`).then((r) => r.data)
+
 // ---- admin: rule sets (规则集) ----
 export interface RuleSetBody {
   tag: string
@@ -256,6 +281,7 @@ export const deleteRuleSet = (id: number) =>
 // ---- admin: import an existing config into the panel ----
 export interface ImportSummary {
   inbounds: { tag: string; type: string; listen_port: number; single_user: boolean; users: number }[] | null
+  forwards?: { tag: string; listen_port: number; network: string; target: string; outbound: string }[] | null
   outbounds: { tag: string; type: string; info: string }[] | null
   rules: { inbound: string[] | null; outbound: string; info: string }[] | null
   rulesets: { tag: string; type: string; info: string }[] | null

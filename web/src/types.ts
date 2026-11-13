@@ -89,6 +89,16 @@ export interface TrafficPortSeries {
   points: TrafficPoint[]
 }
 
+export interface TrafficForwardSeries {
+  forward_id: number
+  tag: string
+  port: number
+  network: string
+  upload: number
+  download: number
+  points: TrafficPoint[]
+}
+
 export interface TrafficSeries {
   available: boolean
   range: TrafficRange
@@ -108,6 +118,7 @@ export interface TrafficSeries {
   udp_connections: number
   points: TrafficPoint[]
   ports: TrafficPortSeries[]
+  forwards?: TrafficForwardSeries[]
 }
 
 export type UserTrafficRange = '24h' | '7d' | '30d'
@@ -324,6 +335,31 @@ export interface Inbound {
   remark: string
   created_at: string
   updated_at: string
+}
+
+export type ForwardNetwork = '' | 'tcp' | 'udp'
+export type ForwardTargetType = 'custom' | 'inbound'
+
+export interface PortForward {
+  id: number
+  server_id: number
+  tag: string
+  listen_port: number
+  network: ForwardNetwork
+  target_type: ForwardTargetType
+  target_server_id: number
+  target_inbound_id: number
+  target_address: string
+  target_port: number
+  outbound: string
+  remark: string
+  enabled: boolean
+  created_at: string
+  updated_at: string
+  target_server_name?: string
+  target_inbound_tag?: string
+  resolved_address?: string
+  resolved_port?: number
 }
 
 export interface Overview {

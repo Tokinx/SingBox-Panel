@@ -25,6 +25,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   applyRawConfig,
+  deleteForward,
   deleteInbound,
   deleteRule,
   errMsg,
@@ -32,6 +33,7 @@ import {
   importConfig,
   installSingbox,
   isCanceledRequest,
+  listForwards,
   listRuleSets,
   listRoutingNodes,
   listRules,
@@ -44,12 +46,14 @@ import {
   uninstallAgent,
   uninstallSingbox,
   updateAgent,
+  updateForward,
   updateRule,
   updateServer,
 } from '../../../api'
 import type { ImportSummary } from '../../../api'
 import { applyWithToast, isConfigApplyResult, showConfigApplyResult } from '../../../configApply'
-import type { Inbound, RoutingNode, RouteRule, RuleSet, Server, TrafficSeries } from '../../../types'
+import type { ForwardNetwork, Inbound, PortForward, RoutingNode, RouteRule, RuleSet, Server, TrafficSeries } from '../../../types'
+import { ForwardForm, formatForwardNetwork } from './ForwardForm'
 import InboundForm from './InboundForm'
 import { RuleForm } from './RoutingForms'
 import { ConfigEditorModal, ImportPreviewModal, InstallSingboxModal, ServerEditModal } from './ServerDialogs'
@@ -73,8 +77,45 @@ function ProtocolTag({ type }: { type: string }) {
   return <span className="ui-tag">{PROTOCOL_LABELS[type.trim().toLowerCase()] || type}</span>
 }
 
-const DETAIL_SECTIONS = ['inbounds', 'rules', 'logs'] as const
+const DETAIL_SECTIONS = ['inbounds', 'forwards', 'rules', 'logs'] as const
 type DetailSection = typeof DETAIL_SECTIONS[number]
+
+function indexTrafficSeries<T extends { tag: string; upload: number; download: number }>(
+  rows: T[] | undefined,
+  getID: (row: T) => number,
+) {
+  const byId = new Map<number, { upload: number; download: number }>()
+  const byTag = new Map<string, { upload: number; download: number }>()
+  for (const row of rows ?? []) {
+    const entry = { upload: row.upload, download: row.download }
+    byId.set(getID(row), entry)
+    if (row.tag) byTag.set(row.tag, entry)
+  }
+  return { byId, byTag }
+}
+
+function formatOutboundLabel(tag: string, nodes: RoutingNode[]) {
+  if (!tag || tag === 'direct') return 'Direct · 直出'
+  return nodes.find((node) => node.tag === tag)?.name || tag
+}
+
+function formatForwardTarget(fwd: PortForward) {
+  const endpoint = fwd.resolved_address && fwd.resolved_port
+    ? `${fwd.resolved_address}:${fwd.resolved_port}`
+    : fwd.target_address && fwd.target_port
+      ? `${fwd.target_address}:${fwd.target_port}`
+      : ''
+  if (fwd.target_type === 'inbound') {
+    const label = `${fwd.target_server_name || `节点 #${fwd.target_server_id}`} · ${fwd.target_inbound_tag || `入站 #${fwd.target_inbound_id}`}`
+    return endpoint ? (
+      <span>
+        <span>{label}</span>{' '}
+        <span className="mono muted">({endpoint})</span>
+      </span>
+    ) : <span>{label}</span>
+  }
+  return endpoint ? <span className="mono">{endpoint}</span> : <span className="faint">—</span>
+}
 
 function ServerDetailSkeleton() {
   return (
@@ -182,6 +223,10 @@ export default function ServerDetail() {
   const serverEditLockRef = useRef(false)
 
   const [routingNodes, setRoutingNodes] = useState<RoutingNode[]>([])
+  const [forwards, setForwards] = useState<PortForward[]>([])
+  const [forwardOpen, setForwardOpen] = useState(false)
+  const [forwardEditing, setForwardEditing] = useState<PortForward | null>(null)
+  const [togglingForwardIDs, setTogglingForwardIDs] = useState<Set<number>>(() => new Set())
   const [rules, setRules] = useState<RouteRule[]>([])
   const [ruleSets, setRuleSets] = useState<RuleSet[]>([])
   const [ruleOpen, setRuleOpen] = useState(false)
@@ -249,10 +294,11 @@ export default function ServerDetail() {
       setServer(d.server)
       setInstall(d.install_command)
       setPublicURL(d.public_url)
-      const [nodeRows, ruleRows, ruleSetRows] = await Promise.allSettled([
+      const [nodeRows, ruleRows, ruleSetRows, forwardRows] = await Promise.allSettled([
         listRoutingNodes(controller.signal, targetSID),
         listRules(targetSID, controller.signal),
         listRuleSets(controller.signal),
+        listForwards(targetSID, controller.signal),
       ])
       if (generation !== loadGenerationRef.current || currentSIDRef.current !== targetSID) return
       if (nodeRows.status === 'fulfilled') setRoutingNodes(nodeRows.value)
@@ -261,10 +307,12 @@ export default function ServerDetail() {
         setRules(ruleRows.value)
       }
       if (ruleSetRows.status === 'fulfilled') setRuleSets(ruleSetRows.value)
+      if (forwardRows.status === 'fulfilled') setForwards(forwardRows.value)
       const failures = [
         nodeRows.status === 'rejected' ? `节点：${errMsg(nodeRows.reason)}` : '',
         ruleRows.status === 'rejected' ? `规则：${errMsg(ruleRows.reason)}` : '',
         ruleSetRows.status === 'rejected' ? `规则集：${errMsg(ruleSetRows.reason)}` : '',
+        forwardRows.status === 'rejected' ? `转发：${errMsg(forwardRows.reason)}` : '',
       ].filter(Boolean)
       setSectionError(failures.length > 0 ? failures.join('；') : null)
     } catch (error) {
@@ -390,6 +438,10 @@ export default function ServerDetail() {
     setServer(null)
     setTrafficData(null)
     setRoutingNodes([])
+    setForwards([])
+    setForwardOpen(false)
+    setForwardEditing(null)
+    setTogglingForwardIDs(new Set())
     setRules([])
     ruleOrderRef.current = []
     setRuleSets([])
@@ -703,6 +755,49 @@ export default function ServerDetail() {
     }
   }
 
+  const onDeleteForward = (fwd: PortForward) => {
+    const targetSID = sid
+    return Modal.confirm({
+      title: '删除端口转发',
+      content: `确认删除转发「${fwd.tag}」？`,
+      okType: 'danger',
+      okText: '删除',
+      cancelText: '取消',
+      onOk: () => {
+        if (currentSIDRef.current !== targetSID) return
+        applyWithToast(`forward-del-${fwd.id}`, () => deleteForward(targetSID, fwd.id)).then(loadCurrentServer)
+      },
+    })
+  }
+
+  const onToggleForward = async (fwd: PortForward, enabled: boolean) => {
+    const targetSID = sid
+    if (currentSIDRef.current !== targetSID || togglingForwardIDs.has(fwd.id)) return
+    setTogglingForwardIDs((prev) => new Set(prev).add(fwd.id))
+    const patchForwards = (list: PortForward[], nextEnabled: boolean) =>
+      list.map((item) => (item.id === fwd.id ? { ...item, enabled: nextEnabled } : item))
+    setForwards((prev) => patchForwards(prev, enabled))
+    try {
+      const saved = await applyWithToast(`forward-toggle-${fwd.id}`, () =>
+        updateForward(targetSID, fwd.id, { enabled }),
+      )
+      if (currentSIDRef.current !== targetSID) return
+      if (!saved) {
+        setForwards((prev) => patchForwards(prev, fwd.enabled))
+      } else {
+        loadCurrentServer()
+      }
+    } finally {
+      if (currentSIDRef.current === targetSID) {
+        setTogglingForwardIDs((prev) => {
+          const next = new Set(prev)
+          next.delete(fwd.id)
+          return next
+        })
+      }
+    }
+  }
+
   const run = async (label: string, fn: () => Promise<unknown>, ok = '操作完成') => {
     const targetSID = sid
     if (currentSIDRef.current !== targetSID) return
@@ -845,17 +940,16 @@ export default function ServerDetail() {
 
 
 
-  const { portTrafficById, portTrafficByTag } = useMemo(() => {
-    const byId = new Map<number, { upload: number; download: number }>()
-    const byTag = new Map<string, { upload: number; download: number }>()
-    for (const port of trafficData?.ports ?? []) {
-      const entry = { upload: port.upload, download: port.download }
-      byId.set(port.inbound_id, entry)
-      if (port.tag) byTag.set(port.tag, entry)
-    }
-    return { portTrafficById: byId, portTrafficByTag: byTag }
-  }, [trafficData])
-  const getInboundTraffic = (ib: Inbound) => portTrafficById.get(ib.id) ?? portTrafficByTag.get(ib.tag)
+  const portTraffic = useMemo(
+    () => indexTrafficSeries(trafficData?.ports, (port) => port.inbound_id),
+    [trafficData],
+  )
+  const forwardTraffic = useMemo(
+    () => indexTrafficSeries(trafficData?.forwards, (fwd) => fwd.forward_id),
+    [trafficData],
+  )
+  const getInboundTraffic = (ib: Inbound) => portTraffic.byId.get(ib.id) ?? portTraffic.byTag.get(ib.tag)
+  const getForwardTraffic = (fwd: PortForward) => forwardTraffic.byId.get(fwd.id) ?? forwardTraffic.byTag.get(fwd.tag)
 
   if (!server) {
     if (pageLoading) return <ServerDetailSkeleton />
@@ -869,6 +963,7 @@ export default function ServerDetail() {
   const goSection = (key: string) => navigate(key === 'inbounds' ? `/admin/servers/${sid}` : `/admin/servers/${sid}/${key}`)
   const addButton: Record<DetailSection, ReactNode> = {
     inbounds: <Button type="primary" icon={<Plus />} disabled={rawMode} onClick={() => { setEditing(null); setFormOpen(true) }}>新增入站</Button>,
+    forwards: <Button type="primary" icon={<Plus />} disabled={rawMode} onClick={() => { setForwardEditing(null); setForwardOpen(true) }}>新增转发</Button>,
     rules: <Button type="primary" icon={<Plus />} disabled={rawMode} onClick={() => { setRuleEditing(null); setRuleOpen(true) }}>新增规则</Button>,
     logs: null,
   }
@@ -879,6 +974,33 @@ export default function ServerDetail() {
       <Button size="small" type="text" icon={<Trash2 />} aria-label={`删除 ${label}`} disabled={rawMode} onClick={onDelete} />
     </span>
   )
+  const trafficColumns = <T,>(getTraffic: (row: T) => { upload: number; download: number } | undefined) => [
+    {
+      title: '下载',
+      align: 'right' as const,
+      sorter: (a: T, b: T) => (getTraffic(a)?.download ?? 0) - (getTraffic(b)?.download ?? 0),
+      render: (_: unknown, row: T) => <span className="mono">{trafficAvailable ? formatBytes(getTraffic(row)?.download ?? 0) : '—'}</span>,
+    },
+    {
+      title: '上传',
+      align: 'right' as const,
+      sorter: (a: T, b: T) => (getTraffic(a)?.upload ?? 0) - (getTraffic(b)?.upload ?? 0),
+      render: (_: unknown, row: T) => <span className="mono muted">{trafficAvailable ? formatBytes(getTraffic(row)?.upload ?? 0) : '—'}</span>,
+    },
+    {
+      title: '合计',
+      align: 'right' as const,
+      sorter: (a: T, b: T) => {
+        const totalA = (getTraffic(a)?.upload ?? 0) + (getTraffic(a)?.download ?? 0)
+        const totalB = (getTraffic(b)?.upload ?? 0) + (getTraffic(b)?.download ?? 0)
+        return totalA - totalB
+      },
+      render: (_: unknown, row: T) => {
+        const traffic = getTraffic(row)
+        return <span className="mono sd-strong">{trafficAvailable ? formatBytes((traffic?.upload ?? 0) + (traffic?.download ?? 0)) : '—'}</span>
+      },
+    },
+  ]
 
   const inboundTable = (
     <Table
@@ -893,31 +1015,7 @@ export default function ServerDetail() {
         { title: '协议', dataIndex: 'type', render: (v: string) => <ProtocolTag type={v} /> },
         { title: '端口', dataIndex: 'listen_port', sorter: (a: Inbound, b: Inbound) => a.listen_port - b.listen_port, render: (v: number) => <span className="mono">{v}</span> },
         { title: '用户', render: (_, ib: Inbound) => <span className="muted">{ib.settings?.multi_user ? '多用户' : '单用户'}</span> },
-        {
-          title: '下载',
-          align: 'right',
-          sorter: (a: Inbound, b: Inbound) => (getInboundTraffic(a)?.download ?? 0) - (getInboundTraffic(b)?.download ?? 0),
-          render: (_, ib: Inbound) => <span className="mono">{trafficAvailable ? formatBytes(getInboundTraffic(ib)?.download ?? 0) : '—'}</span>,
-        },
-        {
-          title: '上传',
-          align: 'right',
-          sorter: (a: Inbound, b: Inbound) => (getInboundTraffic(a)?.upload ?? 0) - (getInboundTraffic(b)?.upload ?? 0),
-          render: (_, ib: Inbound) => <span className="mono muted">{trafficAvailable ? formatBytes(getInboundTraffic(ib)?.upload ?? 0) : '—'}</span>,
-        },
-        {
-          title: '合计',
-          align: 'right',
-          sorter: (a: Inbound, b: Inbound) => {
-            const totalA = (getInboundTraffic(a)?.upload ?? 0) + (getInboundTraffic(a)?.download ?? 0)
-            const totalB = (getInboundTraffic(b)?.upload ?? 0) + (getInboundTraffic(b)?.download ?? 0)
-            return totalA - totalB
-          },
-          render: (_, ib: Inbound) => {
-            const traffic = getInboundTraffic(ib)
-            return <span className="mono sd-strong">{trafficAvailable ? formatBytes((traffic?.upload ?? 0) + (traffic?.download ?? 0)) : '—'}</span>
-          },
-        },
+        ...trafficColumns(getInboundTraffic),
         {
           title: '',
           width: 112,
@@ -965,8 +1063,7 @@ export default function ServerDetail() {
     if (act === 'reject' || v === 'block' || v === 'reject') return r.match?.method === 'drop' ? '静默丢弃' : '快速拒绝'
     if (act === 'sniff' || v === 'sniff') return 'sniff'
     if (act === 'hijack-dns' || v === 'hijack-dns') return 'hijack-dns'
-    if (v === 'direct') return 'Direct · 直出'
-    return routingNodes.find((node) => node.tag === v)?.name || v
+    return formatOutboundLabel(v, routingNodes)
   }
 
   const rulesTable = (
@@ -1063,8 +1160,52 @@ export default function ServerDetail() {
     </>
   )
 
+  const forwardTable = (
+    <Table
+      className="tr-port-table"
+      rowKey="id"
+      scroll={{ x: 920 }}
+      dataSource={forwards}
+      locale={{ emptyText: '暂无转发' }}
+      rowClassName={(fwd: PortForward) => (fwd.enabled ? '' : 'is-disabled')}
+      columns={[
+        { title: '标签', dataIndex: 'tag', render: (v: string) => <span className="sd-strong">{v}</span> },
+        { title: '协议', dataIndex: 'network', render: (v: ForwardNetwork) => <span className="ui-tag mono">{formatForwardNetwork(v)}</span> },
+        { title: '监听端口', dataIndex: 'listen_port', sorter: (a: PortForward, b: PortForward) => a.listen_port - b.listen_port, render: (v: number) => <span className="mono">{v}</span> },
+        { title: '转发目标', render: (_, fwd: PortForward) => formatForwardTarget(fwd) },
+        { title: '出站路由', dataIndex: 'outbound', render: (v: string) => <span className="mono">{formatOutboundLabel(v, routingNodes)}</span> },
+        ...trafficColumns(getForwardTraffic),
+        {
+          title: '状态',
+          dataIndex: 'enabled',
+          width: 90,
+          render: (v: boolean, fwd: PortForward) => (
+            <Switch
+              size="small"
+              checked={v}
+              disabled={rawMode || togglingForwardIDs.has(fwd.id)}
+              aria-label={`${v ? '停用' : '启用'}转发 ${fwd.tag}`}
+              onChange={(checked) => void onToggleForward(fwd, checked)}
+            />
+          ),
+        },
+        {
+          title: '',
+          width: 88,
+          align: 'right',
+          render: (_, fwd: PortForward) => rowActions(
+            () => { setForwardEditing(fwd); setForwardOpen(true) },
+            () => onDeleteForward(fwd),
+            `转发 ${fwd.tag}`,
+          ),
+        },
+      ]}
+    />
+  )
+
   const views: Record<DetailSection, ReactNode> = {
     inbounds: inboundTable,
+    forwards: forwardTable,
     rules: rulesTable,
     logs: <Logs key={sid} serverId={sid} serverOnline={server.online} />,
   }
@@ -1113,6 +1254,7 @@ export default function ServerDetail() {
         actions={addButton[section]}
         items={[
           { key: 'inbounds', label: '入站', count: server.inbounds?.length || 0 },
+          { key: 'forwards', label: '转发', count: forwards.length },
           { key: 'rules', label: '路由', count: rules.length },
           { key: 'logs', label: '日志' },
         ]}
@@ -1124,8 +1266,21 @@ export default function ServerDetail() {
         serverId={sid}
         inbound={editing}
         inbounds={server.inbounds}
+        forwards={forwards}
         open={formOpen}
         onClose={() => setFormOpen(false)}
+        onSaved={loadCurrentServer}
+      />
+
+      <ForwardForm
+        key={`forward-${sid}`}
+        serverId={sid}
+        forward={forwardEditing}
+        inbounds={server.inbounds}
+        forwards={forwards}
+        routingNodes={routingNodes}
+        open={forwardOpen}
+        onClose={() => setForwardOpen(false)}
         onSaved={loadCurrentServer}
       />
 

@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { Button, Form, Input, InputNumber, Modal, Select, Space, Switch, type FormInstance } from '../../../ui'
 import { createInbound, updateInbound } from '../../../api'
 import { applyWithToast } from '../../../configApply'
-import type { Inbound, InboundSettings, InboundType, RealityGuardSettings, RealitySettings } from '../../../types'
+import type { Inbound, InboundSettings, InboundType, PortForward, RealityGuardSettings, RealitySettings } from '../../../types'
 import { randomBase64, randomHex, randomUUID, SHADOWSOCKS_METHODS, ss2022KeyLen } from '../../../util'
 import '../../../styles/forms.css'
 import '../../../styles/inbound-editor.css'
@@ -392,6 +392,7 @@ export default function InboundForm({
   serverId,
   inbound,
   inbounds,
+  forwards,
   prefill,
   preview = false,
   onPreview,
@@ -402,6 +403,7 @@ export default function InboundForm({
   serverId: number
   inbound: Inbound | null
   inbounds?: Inbound[]
+  forwards?: PortForward[]
   prefill?: Record<string, any>
   preview?: boolean
   onPreview?: (body: Record<string, unknown>) => void
@@ -427,11 +429,18 @@ export default function InboundForm({
   const handshakeServer = Form.useWatch('reality_handshake_server', form)?.trim()
   const serverName = Form.useWatch('tls_server_name', form)?.trim()
   const usedPorts = new Set(RESERVED_PORTS)
+  const forwardPorts = new Set<number>()
   for (const item of inbounds ?? []) {
     if (item.id === inbound?.id) continue
     usedPorts.add(item.listen_port)
     const guard = item.settings?.tls?.reality?.guard
     if (guard?.enabled && guard.internal_port) usedPorts.add(guard.internal_port)
+  }
+  for (const fwd of forwards ?? []) {
+    if (fwd.listen_port > 0) {
+      usedPorts.add(fwd.listen_port)
+      forwardPorts.add(fwd.listen_port)
+    }
   }
 
   useLayoutEffect(() => {
@@ -977,6 +986,7 @@ export default function InboundForm({
                                 if (!value) return Promise.resolve()
                                 if (!Number.isInteger(Number(value)) || Number(value) < 1 || Number(value) > 65535) return Promise.reject(new Error('内部端口必须在 1-65535 之间'))
                                 if (Number(value) === Number(getFieldValue('listen_port'))) return Promise.reject(new Error('内部端口不能与公网端口相同'))
+                                if (forwardPorts.has(Number(value))) return Promise.reject(new Error('内部端口已被端口转发占用'))
                                 if (usedPorts.has(Number(value))) return Promise.reject(new Error('内部端口已被其他入站或统计服务占用'))
                                 return Promise.resolve()
                               },
