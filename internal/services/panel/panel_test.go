@@ -556,9 +556,12 @@ func TestInstallCommandQuotesEveryArgument(t *testing.T) {
 	if got := shellQuote("a'b"); got != `'a'"'"'b'` {
 		t.Fatalf("shellQuote = %q", got)
 	}
-	for _, required := range []string{"wget -qO-", "sudo sh -s --", "doas sh -s --"} {
-		if !strings.Contains(command, required) {
-			t.Fatalf("install command missing Alpine/root fallback %q: %s", required, command)
+	if !strings.HasPrefix(command, "curl -fsSL ") || !strings.Contains(command, " | sh -s -- ") {
+		t.Fatalf("install command must download and run the script: %s", command)
+	}
+	for _, forbidden := range []string{"if ", "command -v", "id -u", "sudo", "doas", "wget"} {
+		if strings.Contains(command, forbidden) {
+			t.Fatalf("install command still contains environment check %q: %s", forbidden, command)
 		}
 	}
 	cmd := exec.Command("sh", "-n")

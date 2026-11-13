@@ -125,25 +125,24 @@ cleanup() {
   [ -z "$BACKUP_DIR" ] || rm -rf "$BACKUP_DIR"
   exit "$status"
 }
-trap cleanup EXIT
-trap 'exit 1' HUP INT TERM
-
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --url|--token|--code)
-      [ $# -ge 2 ] && [ -n "$2" ] || { echo "$1 requires a value"; exit 1; }
-      case "$1" in
-        --url) URL="$2" ;;
-        --token) TOKEN="$2" ;;
-        --code) CODE="$2" ;;
-      esac
-      shift 2
-      ;;
-    --insecure) echo "--insecure is disabled in production"; exit 1 ;;
-    *) echo "unknown option: $1"; exit 1 ;;
-  esac
-done
-[ "$(id -u)" = "0" ] || { echo "must run as root"; exit 1; }
+parse_args() {
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --url|--token|--code)
+        [ $# -ge 2 ] && [ -n "$2" ] || { echo "$1 requires a value"; exit 1; }
+        case "$1" in
+          --url) URL="$2" ;;
+          --token) TOKEN="$2" ;;
+          --code) CODE="$2" ;;
+        esac
+        shift 2
+        ;;
+      --insecure) echo "--insecure is disabled in production"; exit 1 ;;
+      *) echo "unknown option: $1"; exit 1 ;;
+    esac
+  done
+}
+parse_args "$@"
 case "$URL" in
   https://*) ;;
   *) echo "--url must be a non-empty HTTPS URL"; exit 1 ;;
@@ -151,6 +150,27 @@ esac
 case "$URL" in
   *[[:space:]]*) echo "--url must not contain whitespace"; exit 1 ;;
 esac
+
+# A piped script has no reusable file path. Download a complete copy before
+# elevating so sudo/doas can prompt on the terminal and receive every argument.
+if [ "$(id -u)" != "0" ]; then
+  if command -v sudo >/dev/null 2>&1; then
+    ROOT_COMMAND=sudo
+  elif command -v doas >/dev/null 2>&1; then
+    ROOT_COMMAND=doas
+  else
+    echo "run this command as root or install sudo/doas" >&2; exit 1
+  fi
+  INSTALL_SCRIPT="$(mktemp /tmp/singbox-panel-agent-install.XXXXXX)"
+  trap 'rm -f "$INSTALL_SCRIPT"' EXIT
+  trap 'exit 1' HUP INT TERM
+  curl_agent "$URL/api/agent/install.sh" -o "$INSTALL_SCRIPT"
+  "$ROOT_COMMAND" sh "$INSTALL_SCRIPT" "$@"
+  exit 0
+fi
+
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
 
 if ! command -v curl >/dev/null 2>&1; then
   if command -v apk >/dev/null 2>&1; then

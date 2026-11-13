@@ -240,8 +240,7 @@ func installCommand(baseURL, code string) string {
 	baseURL = strings.TrimRight(baseURL, "/")
 	scriptURL := shellQuote(baseURL + "/api/agent/install.sh")
 	args := fmt.Sprintf("--url %s --code %s", shellQuote(baseURL), shellQuote(code))
-	return fmt.Sprintf(`if command -v curl >/dev/null 2>&1; then curl -fsSL %s; elif command -v wget >/dev/null 2>&1; then wget -qO- %s; else echo "curl or wget is required" >&2; exit 1; fi | if [ "$(id -u)" -eq 0 ]; then sh -s -- %s; elif command -v sudo >/dev/null 2>&1; then sudo sh -s -- %s; elif command -v doas >/dev/null 2>&1; then doas sh -s -- %s; else echo "run this command as root or install sudo/doas" >&2; exit 1; fi`,
-		scriptURL, scriptURL, args, args, args)
+	return fmt.Sprintf("curl -fsSL %s | sh -s -- %s", scriptURL, args)
 }
 
 // shellQuote returns one POSIX-shell argument. The generated command is copied
