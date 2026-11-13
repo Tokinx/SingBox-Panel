@@ -206,7 +206,12 @@ describe('ForwardForm', () => {
       />,
     )
 
+    expect(screen.getByText('自定义')).toBeTruthy()
+    expect(screen.queryByText('自定义地址')).toBeNull()
     expect(screen.queryByLabelText('中转出站')).toBeNull()
+    const relaySwitch = screen.getByLabelText('通过出站节点中转')
+    const enabledSwitch = screen.getByLabelText('启用此端口转发')
+    expect(relaySwitch.compareDocumentPosition(enabledSwitch) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 
     fireEvent.change(screen.getByLabelText(/^监听端口/), { target: { value: '18443' } })
     fireEvent.change(screen.getByLabelText(/^目标地址/), { target: { value: ' 203.0.113.50 ' } })
@@ -314,6 +319,7 @@ describe('ForwardForm', () => {
     expect(screen.queryByLabelText('中转出站')).toBeNull()
     fireEvent.click(screen.getByLabelText('通过出站节点中转'))
     const outboundSelect = await screen.findByLabelText('中转出站')
+    expect(outboundSelect.compareDocumentPosition(screen.getByLabelText('启用此端口转发')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     submitCreate()
     await screen.findByText('请选择中转出站')
     expect(createForward).not.toHaveBeenCalled()
@@ -351,6 +357,9 @@ describe('ForwardForm', () => {
         onSaved={vi.fn()}
       />,
     )
+
+    expect(screen.queryByText(/修改标签会重建独立统计标识/)).toBeNull()
+    expect(screen.queryByText(/历史标签不可复用/)).toBeNull()
 
     fireEvent.click(screen.getByText('仅 UDP'))
     fireEvent.click(screen.getByLabelText('启用此端口转发'))
@@ -394,6 +403,53 @@ describe('ForwardForm', () => {
     expect(outboundSelect.textContent).toContain('HK · IPLC')
 
     fireEvent.click(screen.getByLabelText('通过出站节点中转'))
+    await waitFor(() => expect(screen.queryByLabelText('中转出站')).toBeNull())
+    fireEvent.click(screen.getByLabelText('通过出站节点中转'))
+    expect((await screen.findByLabelText('中转出站')).textContent).toContain('选择中转出站节点')
+    fireEvent.click(screen.getByLabelText('通过出站节点中转'))
+    await waitFor(() => expect(screen.queryByLabelText('中转出站')).toBeNull())
+    submitEdit()
+
+    await waitFor(() => expect(updateForward).toHaveBeenCalledOnce())
+    expect(vi.mocked(updateForward).mock.calls[0][2].outbound).toBe('direct')
+  })
+
+  it('clears a selected transit outbound back to direct state via allowClear', async () => {
+    const relayedForward: PortForward = { ...existingForward, id: 9, tag: 'fwd-relayed-clear', outbound: 'hk-transit' }
+    render(
+      <ForwardForm
+        serverId={1}
+        forward={relayedForward}
+        inbounds={localInbounds}
+        forwards={[relayedForward]}
+        routingNodes={routingNodes}
+        servers={targetServers}
+        open
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />,
+    )
+
+    const outboundSelect = await screen.findByLabelText('中转出站')
+    expect(outboundSelect.textContent).toContain('HK · IPLC')
+
+    const clearBtn = outboundSelect.parentElement!.querySelector('[aria-label="清空选择"]') as HTMLButtonElement
+    expect(clearBtn).toBeTruthy()
+    fireEvent.click(clearBtn)
+
+    await waitFor(() => expect(screen.queryByLabelText('中转出站')).toBeNull())
+    expect(screen.getByLabelText('通过出站节点中转').getAttribute('aria-checked')).toBe('false')
+    // Re-enabling the switch should start empty with no stale validation error.
+    fireEvent.click(screen.getByLabelText('通过出站节点中转'))
+    const reopened = await screen.findByLabelText('中转出站')
+    expect(reopened.textContent).toContain('选择中转出站节点')
+    expect(screen.queryByText('请选择中转出站')).toBeNull()
+
+    fireEvent.click(reopened)
+    fireEvent.click(await screen.findByRole('option', { name: 'HK · IPLC' }))
+    await waitFor(() => expect(screen.getByLabelText('中转出站').textContent).toContain('HK · IPLC'))
+    const clearAgain = screen.getByLabelText('中转出站').parentElement!.querySelector('[aria-label="清空选择"]') as HTMLButtonElement
+    fireEvent.click(clearAgain)
     await waitFor(() => expect(screen.queryByLabelText('中转出站')).toBeNull())
     submitEdit()
 

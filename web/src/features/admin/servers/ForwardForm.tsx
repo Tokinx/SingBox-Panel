@@ -23,7 +23,7 @@ export function formatForwardNetwork(network?: string): string {
 }
 
 const TARGET_TYPE_OPTIONS: { value: ForwardTargetType; label: string }[] = [
-  { value: 'custom', label: '自定义地址' },
+  { value: 'custom', label: '自定义' },
   { value: 'inbound', label: '节点' },
 ]
 
@@ -209,6 +209,10 @@ export function ForwardForm({
       })
     }
   }, [open, forward])
+
+  useEffect(() => {
+    form._raw.clearErrors('outbound')
+  }, [useRelay, form])
 
   const quicConflict =
     targetType === 'inbound' &&
@@ -406,7 +410,7 @@ export function ForwardForm({
                   </Form.Item>
                   {selectedTargetServer && selectedTargetInbound && (
                     <p className="fm-full muted" style={{ margin: '-4px 0 12px', fontSize: 12.5 }}>
-                      将自动同步解析至 <span className="mono">{selectedTargetServer.address}:{selectedTargetInbound.listen_port}</span>；目标地址或端口变更后会自动重新下发，也可在用户节点分配中选择此转发节点。
+                      同步至 <span className="mono">{selectedTargetServer.address}:{selectedTargetInbound.listen_port}</span>，目标变更自动更新，支持用户节点分配。
                     </p>
                   )}
                 </>
@@ -419,7 +423,7 @@ export function ForwardForm({
               <Form.Item
                 name="tag"
                 label="转发标签"
-                extra={forward ? '修改标签会重建独立统计标识；历史标签不可复用' : '留空自动使用 fwd-<端口>'}
+                extra={forward ? undefined : '留空自动使用 fwd-<端口>'}
                 rules={[
                   {
                     validator: (_, value) => {
@@ -443,40 +447,48 @@ export function ForwardForm({
                 <Input placeholder="可选备注，例如 HK -> LAX Reality" />
               </Form.Item>
               <div className="fm-switches">
+                <Form.Item name="use_relay" label="通过出站节点中转" valuePropName="checked" className="fm-switch">
+                  <Switch
+                    onChange={(checked) => {
+                      if (!checked) form.setFieldValue('outbound', undefined)
+                    }}
+                  />
+                </Form.Item>
+                {useRelay && (
+                  <Form.Item
+                    name="outbound"
+                    label="中转出站"
+                    className="fm-full mt-3"
+                    extra="默认直连目标地址；开启中转后，经由所选出站节点二次转发至目标（如专线/上级代理串联）。"
+                    rules={[
+                      {
+                        validator: (_rule, val) => {
+                          if (!form.getFieldValue('use_relay')) return Promise.resolve()
+                          const trimmed = String(val || '').trim()
+                          return trimmed && trimmed !== 'direct'
+                            ? Promise.resolve()
+                            : Promise.reject(new Error('请选择中转出站'))
+                        },
+                      },
+                    ]}
+                  >
+                    <Select
+                      showSearch
+                      allowClear
+                      options={relayOutboundOptions}
+                      onChange={(val) => {
+                        if (!val) form.setFieldValue('use_relay', false)
+                      }}
+                      placeholder={
+                        relayOutboundOptions.length ? '选择中转出站节点' : '当前服务器暂无可用出站节点'
+                      }
+                    />
+                  </Form.Item>
+                )}
                 <Form.Item name="enabled" label="启用此端口转发" valuePropName="checked" className="fm-switch">
                   <Switch />
                 </Form.Item>
-                <Form.Item name="use_relay" label="通过出站节点中转" valuePropName="checked" className="fm-switch">
-                  <Switch />
-                </Form.Item>
               </div>
-              {useRelay && (
-                <Form.Item
-                  name="outbound"
-                  label="中转出站"
-                  className="fm-full"
-                  extra="默认直连目标地址；开启中转后，经由所选出站节点二次转发至目标（如专线/上级代理串联）。"
-                  rules={[
-                    {
-                      validator: (_rule, val) => {
-                        if (!form.getFieldValue('use_relay')) return Promise.resolve()
-                        const trimmed = String(val || '').trim()
-                        return trimmed && trimmed !== 'direct'
-                          ? Promise.resolve()
-                          : Promise.reject(new Error('请选择中转出站'))
-                      },
-                    },
-                  ]}
-                >
-                  <Select
-                    showSearch
-                    options={relayOutboundOptions}
-                    placeholder={
-                      relayOutboundOptions.length ? '选择中转出站节点' : '当前服务器暂无可用出站节点'
-                    }
-                  />
-                </Form.Item>
-              )}
             </div>
           </section>
         </Form>
