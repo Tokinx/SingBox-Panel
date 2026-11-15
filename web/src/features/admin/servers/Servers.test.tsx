@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createServer, getOverview, getServersMeta, updateServer } from '../../../api'
 import type { Server } from '../../../types'
@@ -99,7 +99,7 @@ describe('server remarks', () => {
 
     const ipv4Tag = screen.getByRole('button', { name: 'IPv4' })
     const ipv6Tag = screen.getByRole('button', { name: 'IPv6' })
-    expect(container.querySelector('.sd-addr-sep')?.textContent).toBe('·')
+    expect(container.querySelector('.ui-addr-sep')?.textContent).toBe('·')
 
     fireEvent.focus(ipv4Tag)
     const v4Tip = await screen.findByRole('tooltip')
@@ -143,7 +143,7 @@ describe('server remarks', () => {
     expect(container.querySelector('.sd-remark')).toBeNull()
     expect(screen.getByRole('button', { name: 'IPv4' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'IPv6' })).toBeNull()
-    expect(container.querySelector('.sd-addr-sep')).toBeNull()
+    expect(container.querySelector('.ui-addr-sep')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'IPv4' }))
     const dedupedTip = await screen.findByRole('tooltip')
     expect(dedupedTip.textContent?.match(/69\.63\.207\.36/g)?.length).toBe(1)
@@ -182,16 +182,61 @@ describe('server remarks', () => {
         {...props}
       />,
     )
-    expect(container.querySelector('.sd-addr')).toBeNull()
+    expect(container.querySelector('.ui-addr')).toBeNull()
   })
 
-  it('shows detected IPv6 in the server list without duplicating address', async () => {
+  it('shows IPv4 and IPv6 tooltip tags in the server list without triggering row navigation', async () => {
     vi.mocked(getServersMeta).mockResolvedValue(metadata([
-      { ...server, public_ip: '69.63.207.36', public_ipv6: '2001:db8::1' } as Server,
+      {
+        ...server,
+        public_ip: '69.63.207.36',
+        ipv6_mode: 'custom',
+        address_v6: 'v6.example.com',
+        public_ipv6: '2001:db8::1',
+      } as Server,
+      {
+        ...server,
+        id: 3,
+        name: 'Tokyo',
+        address: '',
+        public_ip: '',
+        public_ipv6: '',
+      } as Server,
     ]))
 
-    render(<MemoryRouter><Servers /></MemoryRouter>)
-    await screen.findByText('fra.***.com · 2001:***:1')
+    const { container } = render(
+      <MemoryRouter initialEntries={['/admin/servers']}>
+        <Routes>
+          <Route path="/admin/servers" element={<Servers />} />
+          <Route path="/admin/servers/:id" element={<div>server-detail-page</div>} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const ipv4Tag = await screen.findByRole('button', { name: 'IPv4' })
+    const ipv6Tag = screen.getByRole('button', { name: 'IPv6' })
+    expect(container.querySelector('.srv-name .ui-addr-sep')?.textContent).toBe('·')
+    expect(screen.getByText('未设置地址')).toBeTruthy()
+    expect(screen.queryByText(/fra\.\*\*\*\.com/)).toBeNull()
+
+    fireEvent.click(ipv4Tag)
+    const ipv4Tip = await screen.findByRole('tooltip')
+    expect(ipv4Tip.textContent).toContain('域名fra.example.com')
+    expect(ipv4Tip.textContent).toContain('地址69.63.207.36')
+
+    const visibleTipValue = document.body.querySelector('.ui-addr-tip dd')
+    expect(visibleTipValue).toBeTruthy()
+    fireEvent.click(visibleTipValue!)
+    expect(screen.queryByText('server-detail-page')).toBeNull()
+
+    fireEvent.click(ipv6Tag)
+    const ipv6Tip = await screen.findByRole('tooltip')
+    expect(ipv6Tip.textContent).toContain('域名v6.example.com')
+    expect(ipv6Tip.textContent).toContain('地址2001:db8::1')
+    expect(screen.queryByText('server-detail-page')).toBeNull()
+
+    fireEvent.click(screen.getByText('未设置地址'))
+    expect(await screen.findByText('server-detail-page')).toBeTruthy()
   })
 
   it('configures server IPv6 mode in the edit modal', async () => {

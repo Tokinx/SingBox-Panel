@@ -94,6 +94,31 @@ a { color: inherit; }
 .ui-section-head h2 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -.2px; }
 .ui-section-actions { display: flex; align-items: center; gap: 8px; }
 .ui-tag { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border: 1px solid var(--console-border); border-radius: 4px; color: var(--console-muted); font-size: 12px; white-space: nowrap; }
+.ui-addr { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; max-width: 100%; min-width: 0; }
+.ui-addr-sep { color: var(--console-faint); user-select: none; }
+.ui-addr-tag {
+  background: var(--console-surface);
+  color: var(--console-muted);
+  border-color: var(--console-border);
+  font-family: var(--app-font);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color .12s, border-color .12s, color .12s;
+}
+.ui-addr-tag:hover,
+.ui-addr-tag[data-state='delayed-open'],
+.ui-addr-tag[data-state='instant-open'] {
+  background: var(--console-hover);
+  border-color: var(--console-border-hover);
+  color: var(--console-ink);
+}
+.ui-addr-tag:focus-visible { outline: 2px solid var(--console-focus); outline-offset: 2px; }
+.ui-addr-tip { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 10px; margin: 0; padding: 2px 0; max-width: min(360px, calc(100vw - 48px)); text-align: left; text-wrap: wrap; user-select: text; }
+.ui-addr-tip-row { display: contents; }
+.ui-addr-tip-row dt { margin: 0; opacity: .72; font-size: 11.5px; line-height: 1.45; white-space: nowrap; }
+.ui-addr-tip-row dd { margin: 0; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
 .ui-card { border: 1px solid var(--console-border); border-radius: var(--app-radius); background: var(--console-container); }
 .ui-kv { display: grid; grid-template-columns: 140px minmax(0, 1fr); margin: 0; }
 .ui-kv > div { display: contents; }

@@ -4,9 +4,11 @@ import { ChevronDown, Pencil, GripVertical, Ellipsis, Plus } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { createServer, deleteServer, errMsg, getOverview, getServersMeta, installSingbox, isCanceledRequest, updateAllAgents, updateServer, updateServerOrder } from '../../../api'
 import type { Server } from '../../../types'
-import { formatBytes, maskHost } from '../../../util'
+import { TooltipProvider } from '../../../components/ui/tooltip'
+import { formatBytes } from '../../../util'
 import { RequestState } from '../../../components/RequestState'
 import { PageHeader, Pills, Stats, Status } from '../../../ui/Page'
+import { ServerAddressTags } from './ServerAddressTags'
 import { ServerEditModal, normalizeServerFormValues, serverFormInitialValues } from './ServerDialogs'
 import '../../../styles/servers.css'
 import { MODAL_MD, MODAL_SM } from '../../../ui/modal'
@@ -379,6 +381,7 @@ export default function Servers() {
         </>}
       />
       <RequestState loading={loading} error={loadError} hasData={servers.length > 0} empty={!loading && !loadError && servers.length === 0} emptyDescription="暂无服务器" onRetry={() => load()}>
+      <TooltipProvider delayDuration={150}>
       <div className="srv-list" role="list">
         {shown.map((s) => {
           const memPct = s.mem_total ? Math.round((s.mem_used / s.mem_total) * 100) : null
@@ -440,12 +443,7 @@ export default function Servers() {
               </span>
               <div className="srv-name">
                 <a href={`/admin/servers/${s.id}`} onClick={(e) => { e.preventDefault(); open_(s) }}>{s.name}</a>
-                <span className="mono">
-                  {[s.address || s.public_ip || s.public_ipv6, s.public_ipv6]
-                    .filter((part, index, list): part is string => Boolean(part) && list.indexOf(part) === index)
-                    .map((part) => maskHost(part))
-                    .join(' · ') || '未设置地址'}
-                </span>
+                <ServerAddressTags server={s} empty={<span className="srv-addr-empty">未设置地址</span>} />
                 {s.remark?.trim() && <span className="srv-remark" title={s.remark}>{s.remark}</span>}
               </div>
               <div className="srv-status"><Status tone={s.online ? 'ok' : 'off'}>{s.online ? '在线' : '离线'}</Status></div>
@@ -476,6 +474,7 @@ export default function Servers() {
           )
         })}
       </div>
+      </TooltipProvider>
       </RequestState>
       <span id="server-sort-help" className="sr-only">使用方向键调整服务器顺序</span>
       <div className="sr-only" aria-live="polite" aria-atomic="true">{sortAnnouncement}</div>

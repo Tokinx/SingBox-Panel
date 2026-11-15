@@ -10,10 +10,10 @@
 .srv-drag { display: grid; place-items: center; width: 20px; height: 28px; color: var(--console-faint); opacity: .45; cursor: grab; border-radius: 4px; touch-action: none; }
 .srv-row:hover .srv-drag, .srv-drag:focus-visible { opacity: 1; }
 .srv-drag:focus-visible { outline: 2px solid var(--console-focus); }
-.srv-name { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.srv-name { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .srv-name a { color: var(--console-ink); font-weight: 500; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .srv-name a:hover { text-decoration: underline; text-underline-offset: 3px; }
-.srv-name .mono { color: var(--console-faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srv-addr-empty { color: var(--console-faint); font-size: 12px; }
 .srv-remark { color: var(--console-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .srv-version { display: flex; flex-direction: column; gap: 2px; font-size: 13px; min-width: 0; }
 .srv-version small { color: var(--console-faint); font-size: 12px; }
