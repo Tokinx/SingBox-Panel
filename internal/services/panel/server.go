@@ -15,7 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/hann0w0/singbox-panel/internal/config"
+	"github.com/tokinx/singbox-panel/internal/config"
 )
 
 // App is the panel HTTP server and its dependencies.

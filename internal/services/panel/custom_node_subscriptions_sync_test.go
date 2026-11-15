@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hann0w0/singbox-panel/internal/domain/model"
+	"github.com/tokinx/singbox-panel/internal/domain/model"
 )
 
 // A burst of due sources must not fan out into one goroutine (and one SQLite

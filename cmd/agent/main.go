@@ -13,7 +13,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/hann0w0/singbox-panel/internal/services/agent"
+	"github.com/tokinx/singbox-panel/internal/services/agent"
 )
 
 // version is set via -ldflags "-X main.version=x.y.z".

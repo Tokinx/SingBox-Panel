@@ -12,7 +12,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"gorm.io/gorm"
 
-	"github.com/hann0w0/singbox-panel/internal/domain/model"
+	"github.com/tokinx/singbox-panel/internal/domain/model"
 )
 
 // Claims is the JWT payload for panel sessions.

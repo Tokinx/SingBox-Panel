@@ -14,8 +14,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/hann0w0/singbox-panel/internal/domain/model"
-	"github.com/hann0w0/singbox-panel/internal/domain/protocol"
+	"github.com/tokinx/singbox-panel/internal/domain/model"
+	"github.com/tokinx/singbox-panel/internal/domain/protocol"
 )
 
 func TestLiveSessionRejectsExpiryAndRevocation(t *testing.T) {

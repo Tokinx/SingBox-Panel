@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/hann0w0/singbox-panel/internal/domain/protocol"
+	"github.com/tokinx/singbox-panel/internal/domain/protocol"
 )
 
 // ReadConfig reads the official config file and extracts an inbound summary.

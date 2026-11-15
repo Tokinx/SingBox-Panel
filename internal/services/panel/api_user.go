@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/hann0w0/singbox-panel/internal/domain/model"
+	"github.com/tokinx/singbox-panel/internal/domain/model"
 )
 
 var errPasswordChangedConcurrently = errors.New("password changed concurrently")

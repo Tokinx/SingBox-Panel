@@ -10,8 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/hann0w0/singbox-panel/internal/domain/model"
-	"github.com/hann0w0/singbox-panel/internal/domain/singbox"
+	"github.com/tokinx/singbox-panel/internal/domain/model"
+	"github.com/tokinx/singbox-panel/internal/domain/singbox"
 )
 
 func TestSOCKSSingleUserMigrationPreservesCredentialsAndRawConfigs(t *testing.T) {

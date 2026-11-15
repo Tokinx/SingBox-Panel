@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hann0w0/singbox-panel/internal/domain/singbox"
+	"github.com/tokinx/singbox-panel/internal/domain/singbox"
 )
 
 // mkTLSNode builds a node whose TLS carries uTLS fingerprint + ALPN, the way a

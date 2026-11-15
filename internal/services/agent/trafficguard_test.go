@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hann0w0/singbox-panel/internal/domain/protocol"
-	"github.com/hann0w0/singbox-panel/internal/domain/singbox"
+	"github.com/tokinx/singbox-panel/internal/domain/protocol"
+	"github.com/tokinx/singbox-panel/internal/domain/singbox"
 )
 
 func trafficGuardConfig(t *testing.T, multiUser bool, count int) []byte {

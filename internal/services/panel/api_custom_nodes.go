@@ -9,8 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
-	"github.com/hann0w0/singbox-panel/internal/domain/model"
-	"github.com/hann0w0/singbox-panel/internal/domain/singbox"
+	"github.com/tokinx/singbox-panel/internal/domain/model"
+	"github.com/tokinx/singbox-panel/internal/domain/singbox"
 )
 
 // customNodeReq is the admin payload for a hand-added external node. A node is

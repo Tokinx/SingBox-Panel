@@ -10,7 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/hann0w0/singbox-panel/internal/domain/model"
+	"github.com/tokinx/singbox-panel/internal/domain/model"
 )
 
 func TestCreateCustomNodeAcceptsTypedSnellParams(t *testing.T) {

@@ -11,7 +11,7 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
-	"github.com/hann0w0/singbox-panel/internal/domain/model"
+	"github.com/tokinx/singbox-panel/internal/domain/model"
 )
 
 // randHex returns a cryptographically-random hex string of 2*n characters.

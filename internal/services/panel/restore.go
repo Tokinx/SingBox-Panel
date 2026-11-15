@@ -26,8 +26,8 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	"github.com/hann0w0/singbox-panel/internal/config"
-	"github.com/hann0w0/singbox-panel/internal/domain/model"
+	"github.com/tokinx/singbox-panel/internal/config"
+	"github.com/tokinx/singbox-panel/internal/domain/model"
 )
 
 // Backup restore: import a .tar.gz produced by downloadBackup, replacing the

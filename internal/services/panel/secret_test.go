@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hann0w0/singbox-panel/internal/config"
+	"github.com/tokinx/singbox-panel/internal/config"
 )
 
 func TestResolveJWTSecretPersistsAndReuses(t *testing.T) {

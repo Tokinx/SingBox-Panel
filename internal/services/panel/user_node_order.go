@@ -3,7 +3,7 @@ package panel
 import (
 	"gorm.io/gorm"
 
-	"github.com/hann0w0/singbox-panel/internal/domain/model"
+	"github.com/tokinx/singbox-panel/internal/domain/model"
 )
 
 // deleteUserNodeOrderRefs removes polymorphic order references when their

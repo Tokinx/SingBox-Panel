@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hann0w0/singbox-panel/internal/domain/protocol"
+	"github.com/tokinx/singbox-panel/internal/domain/protocol"
 )
 
 func TestCountProcSocketsAcceptsSequenceColon(t *testing.T) {

@@ -13,8 +13,8 @@ import (
 	"syscall"
 	_ "time/tzdata" // traffic day boundaries must not depend on the host zoneinfo
 
-	"github.com/hann0w0/singbox-panel/internal/config"
-	"github.com/hann0w0/singbox-panel/internal/services/panel"
+	"github.com/tokinx/singbox-panel/internal/config"
+	"github.com/tokinx/singbox-panel/internal/services/panel"
 )
 
 // version is set via -ldflags "-X main.version=x.y.z".

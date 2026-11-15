@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hann0w0/singbox-panel/internal/domain/model"
-	"github.com/hann0w0/singbox-panel/internal/domain/singbox"
+	"github.com/tokinx/singbox-panel/internal/domain/model"
+	"github.com/tokinx/singbox-panel/internal/domain/singbox"
 )
 
 func TestForwardedUserNodesAccessSubscriptionAndCredentialSync(t *testing.T) {

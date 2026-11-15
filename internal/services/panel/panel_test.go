@@ -20,10 +20,10 @@ import (
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 
-	"github.com/hann0w0/singbox-panel/internal/config"
-	"github.com/hann0w0/singbox-panel/internal/domain/model"
-	"github.com/hann0w0/singbox-panel/internal/domain/protocol"
-	"github.com/hann0w0/singbox-panel/internal/domain/singbox"
+	"github.com/tokinx/singbox-panel/internal/config"
+	"github.com/tokinx/singbox-panel/internal/domain/model"
+	"github.com/tokinx/singbox-panel/internal/domain/protocol"
+	"github.com/tokinx/singbox-panel/internal/domain/singbox"
 )
 
 func testDB(t *testing.T) *gorm.DB {

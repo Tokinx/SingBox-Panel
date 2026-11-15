@@ -1,4 +1,4 @@
-module github.com/hann0w0/singbox-panel
+module github.com/tokinx/singbox-panel
 
 go 1.26.6
 

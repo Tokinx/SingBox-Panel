@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hann0w0/singbox-panel/internal/domain/singbox"
+	"github.com/tokinx/singbox-panel/internal/domain/singbox"
 )
 
 // TestSurgeTUICUsesV5 guards the Surge TUIC wire version: sing-box servers are

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hann0w0/singbox-panel/internal/domain/singbox"
+	"github.com/tokinx/singbox-panel/internal/domain/singbox"
 )
 
 // tlsNode builds a node with a full TLS profile (sni + utls chrome + alpn h2).

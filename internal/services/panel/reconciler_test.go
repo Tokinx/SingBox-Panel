@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hann0w0/singbox-panel/internal/domain/model"
+	"github.com/tokinx/singbox-panel/internal/domain/model"
 )
 
 func TestReconcilerExpiryIsDerivedAndReversible(t *testing.T) {

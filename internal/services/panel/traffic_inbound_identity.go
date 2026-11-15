@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	"github.com/hann0w0/singbox-panel/internal/domain/model"
+	"github.com/tokinx/singbox-panel/internal/domain/model"
 )
 
 var errInboundTrafficTagReserved = errors.New("入站历史标签已保留给原入站，不能由其他入站复用，请使用新标签")

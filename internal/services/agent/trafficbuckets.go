@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/hann0w0/singbox-panel/internal/domain/protocol"
+	"github.com/tokinx/singbox-panel/internal/domain/protocol"
 )
 
 type collectedTrafficBucket struct {

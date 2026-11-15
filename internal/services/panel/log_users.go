@@ -10,8 +10,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/hann0w0/singbox-panel/internal/domain/model"
-	"github.com/hann0w0/singbox-panel/internal/domain/protocol"
+	"github.com/tokinx/singbox-panel/internal/domain/model"
+	"github.com/tokinx/singbox-panel/internal/domain/protocol"
 )
 
 var logTrafficUserPattern = regexp.MustCompile(`\[` + regexp.QuoteMeta(proxyTrafficNamePrefix) + `[0-9]+:[0-9a-f]{32}\]`)

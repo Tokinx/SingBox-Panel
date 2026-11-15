@@ -8,7 +8,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/hann0w0/singbox-panel/internal/domain/model"
+	"github.com/tokinx/singbox-panel/internal/domain/model"
 )
 
 var errManagedInboundRoutingProtected = errors.New("该服务器的入站仍被路由引用，请先移除引用再导入或编辑原始配置")

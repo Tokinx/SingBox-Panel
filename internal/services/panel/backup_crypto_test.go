@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hann0w0/singbox-panel/internal/config"
+	"github.com/tokinx/singbox-panel/internal/config"
 )
 
 const testBackupPassphrase = "correct horse battery staple"

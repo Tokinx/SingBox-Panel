@@ -3,7 +3,7 @@ package agent
 import (
 	"time"
 
-	"github.com/hann0w0/singbox-panel/internal/domain/protocol"
+	"github.com/tokinx/singbox-panel/internal/domain/protocol"
 )
 
 // maxTrafficTombstones bounds remembered closed connections. sing-box keeps

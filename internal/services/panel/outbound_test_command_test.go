@@ -3,7 +3,7 @@ package panel
 import (
 	"testing"
 
-	"github.com/hann0w0/singbox-panel/internal/domain/singbox"
+	"github.com/tokinx/singbox-panel/internal/domain/singbox"
 )
 
 func TestOutboundTestCommandUsesQUICProbeForUDPProtocols(t *testing.T) {
