@@ -74,7 +74,7 @@ class DockerMetadataTest(unittest.TestCase):
         output = self.metadata("refs/heads/main", repository="ForkOwner/Custom-Panel")
         self.assertIn("image=ghcr.io/forkowner/custom-panel\n", output)
         self.assertIn("ghcr.io/forkowner/custom-panel:latest\n", output)
-        self.assertNotIn("hann0w0", output)
+        self.assertNotIn("tokinx", output)
 
 
 if __name__ == "__main__":

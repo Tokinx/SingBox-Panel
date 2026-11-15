@@ -9,7 +9,7 @@
 需要 Linux x86_64 或 arm64、systemd、已解析到面板服务器的域名，以及支持 WebSocket 的 HTTPS 反向代理。
 
 ```bash
-curl -fsSL https://github.com/hann0w0/SingBox-Panel/releases/latest/download/install.sh | sudo bash
+curl -fsSL https://github.com/Tokinx/SingBox-Panel/releases/latest/download/install.sh | sudo bash
 ```
 
 安装脚本支持非交互安装（`--base-url`、`--admin`、`--password`、`--non-interactive`），用 `--version vX.Y.Z` 可指定版本。安装完成后在面板中创建服务器，并在目标 VPS 上执行该节点详情页生成的 Agent 安装命令。
@@ -35,7 +35,7 @@ docker run -d \
   -e SINGBOX_PANEL_BASE_URL='https://panel.example.com' \
   -e SINGBOX_PANEL_ADMIN_EMAIL='admin' \
   -e SINGBOX_PANEL_ADMIN_PASSWORD='请替换为自己的初始密码' \
-  ghcr.io/hann0w0/singbox-panel:latest
+  ghcr.io/tokinx/singbox-panel:latest
 ```
 
 - `SINGBOX_PANEL_BASE_URL`：面板对外公开访问的 HTTPS 根地址（节点 Agent 连接及订阅分发均依赖此地址）。
@@ -50,7 +50,7 @@ docker run -d \
 ```yaml
 services:
   panel:
-    image: ghcr.io/hann0w0/singbox-panel:latest
+    image: ghcr.io/tokinx/singbox-panel:latest
     restart: unless-stopped
     ports:
       - "127.0.0.1:32334:8080"
@@ -81,10 +81,10 @@ docker compose up -d
 
 ```bash
 # 卸载面板服务，保留配置与数据库
-curl -fsSL https://github.com/hann0w0/SingBox-Panel/releases/latest/download/install.sh | sudo bash -s -- --uninstall --yes
+curl -fsSL https://github.com/Tokinx/SingBox-Panel/releases/latest/download/install.sh | sudo bash -s -- --uninstall --yes
 
 # 完整卸载，连同配置与数据库一并删除
-curl -fsSL https://github.com/hann0w0/SingBox-Panel/releases/latest/download/install.sh | sudo bash -s -- --uninstall --purge --yes
+curl -fsSL https://github.com/Tokinx/SingBox-Panel/releases/latest/download/install.sh | sudo bash -s -- --uninstall --purge --yes
 ```
 
 ### Docker 面板卸载

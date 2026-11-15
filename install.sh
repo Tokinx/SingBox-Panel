@@ -8,7 +8,7 @@ DEFAULT_ADMIN="admin"
 
 # Binary layout. The panel binary lives on PATH; everything it reads or
 # writes stays under INSTALL_DIR so the systemd unit can confine writes there.
-GITHUB_REPO="hann0w0/SingBox-Panel"
+GITHUB_REPO="Tokinx/SingBox-Panel"
 PANEL_BIN="/usr/local/bin/singbox-panel"
 SERVICE_NAME="singbox-panel"
 SERVICE_FILE="/etc/systemd/system/singbox-panel.service"

@@ -147,7 +147,7 @@ jobs:
             ### 原生面板安装（默认）
 
             ```bash
-            curl -fsSL https://github.com/hann0w0/SingBox-Panel/releases/download/${{ env.RELEASE_TAG }}/install.sh | sudo bash -s -- --version ${{ env.RELEASE_TAG }}
+            curl -fsSL https://github.com/Tokinx/SingBox-Panel/releases/download/${{ env.RELEASE_TAG }}/install.sh | sudo bash -s -- --version ${{ env.RELEASE_TAG }}
             ```
 
             ### Docker 部署（可选）
@@ -159,7 +159,7 @@ jobs:
             原生面板：
 
             ```bash
-            curl -fsSL https://github.com/hann0w0/SingBox-Panel/releases/download/${{ env.RELEASE_TAG }}/install.sh | sudo bash -s -- --uninstall --yes
+            curl -fsSL https://github.com/Tokinx/SingBox-Panel/releases/download/${{ env.RELEASE_TAG }}/install.sh | sudo bash -s -- --uninstall --yes
             ```
 
             原生卸载默认保留数据库与配置；如需清空，在命令末尾加上 `--purge`。

@@ -1,6 +1,6 @@
 services:
   panel:
-    image: ${PANEL_IMAGE:-ghcr.io/hann0w0/singbox-panel:latest}
+    image: ${PANEL_IMAGE:-ghcr.io/tokinx/singbox-panel:latest}
     restart: unless-stopped
     stop_grace_period: 30s
     ports:

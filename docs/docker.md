@@ -8,7 +8,7 @@ Docker 只运行管理面板。每个被管理的 VPS 继续使用面板生成�
 
 需要 Docker Engine、可访问的 HTTPS 域名及支持 WebSocket 的反向代理；Compose 方式另需 Docker Compose 插件。镜像支持 Linux amd64、arm64，无需 Git、Go 或 Node.js。
 
-默认使用 `ghcr.io/hann0w0/singbox-panel:latest`。`latest` 是镜像别名，检查通过的 `main` 构建和正式版本发布都会更新它，无需先创建 `v1.0.0` 这样的 Git 标签。镜像发布成功且包已公开后才能拉取；fork 用户将镜像地址改为自己的 GHCR 命名空间，例如 `ghcr.io/tokinx/singbox-panel:latest`。
+默认使用 `ghcr.io/tokinx/singbox-panel:latest`。`latest` 是镜像别名，检查通过的 `main` 构建和正式版本发布都会更新它，无需先创建 `v1.0.0` 这样的 Git 标签。镜像发布成功且包已公开后才能拉取；fork 用户可将镜像地址改为自己的 GHCR 命名空间。
 
 默认将宿主机的 `127.0.0.1:32334` 映射到容器内 `8080`，与原生安装的默认对外端口一致。容器内部监听和健康检查仍使用 `8080`。
 
@@ -17,7 +17,7 @@ Docker 只运行管理面板。每个被管理的 VPS 继续使用面板生成�
 替换下面的 HTTPS 域名、管理员账号和初始密码后执行：
 
 ```bash
-docker pull ghcr.io/hann0w0/singbox-panel:latest
+docker pull ghcr.io/tokinx/singbox-panel:latest
 docker run -d \
   --name singbox-panel \
   --restart unless-stopped \
@@ -34,7 +34,7 @@ docker run -d \
   --log-driver json-file \
   --log-opt max-size=10m \
   --log-opt max-file=3 \
-  ghcr.io/hann0w0/singbox-panel:latest
+  ghcr.io/tokinx/singbox-panel:latest
 ```
 
 查看状态和日志：
@@ -67,7 +67,7 @@ curl -fsS http://127.0.0.1:32334/api/ready
 ```yaml
 services:
   panel:
-    image: ghcr.io/hann0w0/singbox-panel:latest
+    image: ghcr.io/tokinx/singbox-panel:latest
     restart: unless-stopped
     stop_grace_period: 30s
     ports:
@@ -182,7 +182,7 @@ Docker 模式下，网页展示版本信息和镜像更新提示；原生二进�
 ### docker run 更新
 
 ```bash
-docker pull ghcr.io/hann0w0/singbox-panel:latest
+docker pull ghcr.io/tokinx/singbox-panel:latest
 docker stop singbox-panel
 docker rm singbox-panel
 ```
@@ -262,7 +262,7 @@ docker compose up -d
 需要开发或定制时才 clone 仓库。生产 `compose.yaml` 没有构建步骤；源码构建通过单独的覆盖文件启用：
 
 ```bash
-git clone https://github.com/hann0w0/SingBox-Panel.git
+git clone https://github.com/Tokinx/SingBox-Panel.git
 cd SingBox-Panel
 cp .env.example .env
 # 编辑域名、管理员账号和初始密码，并改为：
