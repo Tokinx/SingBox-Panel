@@ -870,3 +870,21 @@ func TestCompareVersions(t *testing.T) {
 		}
 	}
 }
+
+func TestPanelGitHubRepoEndpoints(t *testing.T) {
+	const wantRepo = "Tokinx/SingBox-Panel"
+	if githubRepo != wantRepo {
+		t.Fatalf("githubRepo = %q, want %q", githubRepo, wantRepo)
+	}
+	for name, endpoint := range map[string]string{
+		"panelReleaseURL":       panelReleaseURL,
+		"panelReleaseListURL":   panelReleaseListURL,
+		"panelSourceHeadURL":    panelSourceHeadURL,
+		"panelSourceCompareURL": panelSourceCompareURL,
+	} {
+		wantPrefix := "https://api.github.com/repos/" + wantRepo + "/"
+		if !strings.HasPrefix(endpoint, wantPrefix) {
+			t.Errorf("%s = %q, want prefix %q", name, endpoint, wantPrefix)
+		}
+	}
+}

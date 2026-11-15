@@ -36,7 +36,7 @@ import (
 // which runs outside our sandbox and outlives our restart.
 
 const (
-	githubRepo      = "hann0w0/SingBox-Panel"
+	githubRepo      = "Tokinx/SingBox-Panel"
 	serviceUnitName = "singbox-panel"
 	serviceUnitPath = "/etc/systemd/system/singbox-panel.service"
 	updateSubdir    = ".update" // under the install dir; holds one transactional release bundle
