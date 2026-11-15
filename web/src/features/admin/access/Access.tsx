@@ -219,23 +219,23 @@ const AccessItem = memo(function AccessItem({ item, checked, ipv6Checked, disabl
           type="button"
           className={`um-access-stack-btn${checked ? ' is-active' : ''}`}
           aria-pressed={checked}
-          aria-label={`分配 ${item.name} v4`}
+          aria-label={`分配 ${item.name} IPv4`}
           title={`主入口：${item.detail}`}
           disabled={disabled}
           onClick={() => onToggle(item, !checked)}
         >
-          v4
+          IPv4
         </button>
         <button
           type="button"
           className={`um-access-stack-btn${ipv6Checked ? ' is-active' : ''}`}
           aria-pressed={ipv6Checked}
-          aria-label={`分配 ${item.name} v6`}
+          aria-label={`分配 ${item.name} IPv6`}
           title={`IPv6 入口：${ipv6Detail}`}
           disabled={disabled}
           onClick={() => onToggleIPv6(item, !ipv6Checked)}
         >
-          v6
+          IPv6
         </button>
       </span>
     </div>
@@ -811,21 +811,21 @@ export function UserAccessEditor({ userId, onStateChange }: {
                 type="button"
                 className={`um-access-stack-btn${allV4Selected ? ' is-active' : ''}`}
                 aria-pressed={allV4Selected}
-                aria-label={`分配 ${group.label} 全部 v4`}
+                aria-label={`分配 ${group.label} 全部 IPv4`}
                 disabled={saving}
                 onClick={() => setIDs('managed', kinds.managed, !allV4Selected)}
               >
-                v4
+                IPv4
               </button>
               <button
                 type="button"
                 className={`um-access-stack-btn${allV6Selected ? ' is-active' : ''}`}
                 aria-pressed={allV6Selected}
-                aria-label={`分配 ${group.label} 全部 v6`}
+                aria-label={`分配 ${group.label} 全部 IPv6`}
                 disabled={saving}
                 onClick={() => setIDs('managed_ipv6', kinds.managed_ipv6, !allV6Selected)}
               >
-                v6
+                IPv6
               </button>
             </span>
           ) : null}

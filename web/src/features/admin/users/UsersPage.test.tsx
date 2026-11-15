@@ -502,8 +502,10 @@ describe('editing a selected user subscription', () => {
 
     selectTab(/面板节点/)
     fireEvent.click(screen.getByRole('button', { name: '展开 Tokyo' }))
-    const v4Btn = screen.getByRole('button', { name: '分配 vless-main v4' })
-    const v6Btn = screen.getByRole('button', { name: '分配 vless-main v6' })
+    const v4Btn = screen.getByRole('button', { name: '分配 vless-main IPv4' })
+    const v6Btn = screen.getByRole('button', { name: '分配 vless-main IPv6' })
+    expect(v4Btn.textContent?.trim()).toBe('IPv4')
+    expect(v6Btn.textContent?.trim()).toBe('IPv6')
     expect(v4Btn.getAttribute('aria-pressed')).toBe('true')
     expect(v6Btn.getAttribute('aria-pressed')).toBe('false')
     fireEvent.click(v6Btn)
@@ -563,8 +565,10 @@ describe('editing a selected user subscription', () => {
 
     selectTab(/面板节点/)
     fireEvent.click(screen.getByRole('button', { name: '展开 Tokyo' }))
-    fireEvent.click(screen.getByRole('button', { name: '分配 vless-main v4' }))
-    fireEvent.click(screen.getByRole('button', { name: '分配 Tokyo 全部 v6' }))
+    fireEvent.click(screen.getByRole('button', { name: '分配 vless-main IPv4' }))
+    const batchV6Btn = screen.getByRole('button', { name: '分配 Tokyo 全部 IPv6' })
+    expect(batchV6Btn.textContent?.trim()).toBe('IPv6')
+    fireEvent.click(batchV6Btn)
 
     selectTab(/已分配/)
     expect(orderedNames()).toEqual(['Tokyo - vless-main (v6)', 'Tokyo - Trojan (v6)'])
