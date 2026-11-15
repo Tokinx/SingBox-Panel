@@ -1,8 +1,8 @@
 /* Server detail (design A) */
 .sd-up { color: var(--console-warning); font-weight: 600; }
 .sd-strong { font-weight: 500; color: var(--console-ink); }
-.sd-addr { display: inline-flex; align-items: center; gap: 4px; }
-.sd-addr-text { cursor: pointer; }
+.sd-addr { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-width: 0; }
+.sd-addr-text { cursor: pointer; overflow-wrap: anywhere; }
 .sd-addr-toggle { display: inline-grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--console-faint); cursor: pointer; }
 .sd-addr-toggle:hover { color: var(--console-ink); background: var(--console-hover); }
 .sd-addr-toggle:focus-visible { outline: 2px solid var(--console-focus); outline-offset: 1px; }

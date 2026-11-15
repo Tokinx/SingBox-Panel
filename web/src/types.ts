@@ -44,6 +44,7 @@ export interface Server {
   arch: string
   kernel: string
   public_ip: string
+  public_ipv6?: string
   agent_version: string
   agent_has_update?: boolean
   agent_latest_version?: string
@@ -398,6 +399,7 @@ export interface StatusData {
   arch?: string
   kernel?: string
   public_ip?: string
+  public_ipv6?: string
   load1?: number
   mem_used?: number
   mem_total?: number

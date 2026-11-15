@@ -113,13 +113,15 @@ func (a *Agent) register() protocol.RegisterEvt {
 	defer cancel()
 	installed, ver := DetectVersion(ctx)
 	si := CollectSysInfo(ctx)
+	ipv4, ipv6 := DetectPublicIPs(ctx)
 	return protocol.RegisterEvt{
 		AgentVersion:     a.cfg.AgentVersion,
 		Hostname:         si.Hostname,
 		OS:               si.OS,
 		Arch:             si.Arch,
 		Kernel:           si.Kernel,
-		PublicIP:         DetectPublicIPv4(ctx),
+		PublicIP:         ipv4,
+		PublicIPv6:       ipv6,
 		SingboxInstalled: installed,
 		SingboxVersion:   ver,
 		PanelURL:         a.cfg.PanelURL,
@@ -281,6 +283,7 @@ func (a *Agent) onCommand(ctx context.Context, env protocol.Envelope) protocol.C
 	case protocol.CmdGetStatus:
 		installed, ver := DetectVersion(ctx)
 		si := CollectSysInfo(ctx)
+		ipv4, ipv6 := DetectPublicIPs(ctx)
 		_, briefs, hasCfg := ReadConfig()
 		data, _ := json.Marshal(protocol.StatusData{
 			AgentVersion:     a.cfg.AgentVersion,
@@ -294,7 +297,8 @@ func (a *Agent) onCommand(ctx context.Context, env protocol.Envelope) protocol.C
 			OS:               si.OS,
 			Arch:             si.Arch,
 			Kernel:           si.Kernel,
-			PublicIP:         DetectPublicIPv4(ctx),
+			PublicIP:         ipv4,
+			PublicIPv6:       ipv6,
 			Load1:            si.Load1,
 			MemUsed:          si.MemUsed,
 			MemTotal:         si.MemTotal,

@@ -391,6 +391,11 @@ var applicationMigrations = []schemaMigration{
 		name:    "user forwarded node assignments",
 		up:      func(tx *gorm.DB) error { return tx.AutoMigrate(&model.User{}) },
 	},
+	{
+		version: 36,
+		name:    "server public ipv6",
+		up:      func(tx *gorm.DB) error { return tx.AutoMigrate(&model.Server{}) },
+	},
 }
 
 // migrationReplaySafe records whether an interrupted attempt of each migration
@@ -445,6 +450,7 @@ var migrationReplaySafe = map[uint]bool{
 	33: true,  // DML transaction; only adopts legacy server-scoped rows
 	34: true,  // AutoMigrate of port forwarding and forward traffic tables
 	35: true,  // AutoMigrate adds user forward_ids column
+	36: true,  // AutoMigrate adds server public_ipv6 column
 }
 
 func migratePortForwards(db *gorm.DB) error {

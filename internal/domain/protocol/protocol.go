@@ -161,6 +161,7 @@ type RegisterEvt struct {
 	Arch             string `json:"arch"`
 	Kernel           string `json:"kernel"`
 	PublicIP         string `json:"public_ip,omitempty"`
+	PublicIPv6       string `json:"public_ipv6,omitempty"`
 	SingboxInstalled bool   `json:"singbox_installed"`
 	SingboxVersion   string `json:"singbox_version,omitempty"`
 	PanelURL         string `json:"panel_url,omitempty"`
@@ -281,6 +282,7 @@ type StatusData struct {
 	Arch             string         `json:"arch,omitempty"`
 	Kernel           string         `json:"kernel,omitempty"`
 	PublicIP         string         `json:"public_ip,omitempty"`
+	PublicIPv6       string         `json:"public_ipv6,omitempty"`
 	Load1            float64        `json:"load1,omitempty"`
 	MemUsed          uint64         `json:"mem_used,omitempty"`
 	MemTotal         uint64         `json:"mem_total,omitempty"`

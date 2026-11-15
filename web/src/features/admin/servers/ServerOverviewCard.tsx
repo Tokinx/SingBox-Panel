@@ -30,19 +30,22 @@ export function ServerOverviewCard({
     setShowAddress(false)
   }, [server.id])
 
-  const address = server.address || server.public_ip
-  const extraIP = server.public_ip && server.public_ip !== server.address ? server.public_ip : ''
-  const displayedAddress = showAddress ? address : maskHost(address)
-  const displayedExtraIP = extraIP ? (showAddress ? extraIP : maskHost(extraIP)) : ''
+  const primaryAddress = server.address || server.public_ip || server.public_ipv6 || ''
+  const addressParts = [primaryAddress, server.public_ip, server.public_ipv6].filter(
+    (part, index, list): part is string => Boolean(part) && list.indexOf(part) === index,
+  )
+  const displayedAddress = addressParts
+    .map((part) => (showAddress ? part : maskHost(part)))
+    .join(' · ')
 
   return <PageHeader
     title={server.name}
     meta={<>
       <Status tone={server.online ? 'ok' : 'off'}>{server.online ? '在线' : '离线'}</Status>
-      {address && (
+      {addressParts.length > 0 && (
         <span className="sd-addr mono" title={showAddress ? (server.agent_url || publicURL || undefined) : undefined}>
           <span className="sd-addr-text" onClick={() => setShowAddress((prev) => !prev)}>
-            {displayedAddress}{displayedExtraIP ? ` · ${displayedExtraIP}` : ''}
+            {displayedAddress}
           </span>
           <button
             type="button"

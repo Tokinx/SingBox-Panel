@@ -864,6 +864,55 @@ func TestRegisterPrefersReportedIPv4OverObservedIPv6(t *testing.T) {
 	}
 }
 
+func TestDualStackAgentIPv6DoesNotOverwriteIPv4(t *testing.T) {
+	db := testDB(t)
+	srv := model.Server{Name: "dual", AgentToken: "dual-token"}
+	if err := db.Create(&srv).Error; err != nil {
+		t.Fatal(err)
+	}
+	app := &App{db: db, hub: NewHub(db)}
+
+	conn := app.registerAuthenticatedAgent(srv.ID, "dual-token", "2001:db8::10", nil)
+	if conn == nil {
+		t.Fatal("expected authenticated agent connection")
+	}
+
+	var afterHandshake model.Server
+	if err := db.First(&afterHandshake, srv.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if afterHandshake.PublicIP != "" || afterHandshake.PublicIPv6 != "2001:db8::10" {
+		t.Fatalf("after IPv6 handshake: public_ip=%q public_ipv6=%q", afterHandshake.PublicIP, afterHandshake.PublicIPv6)
+	}
+
+	app.hub.onRegister(conn, protocol.RegisterEvt{
+		PublicIP:   "203.0.113.10",
+		PublicIPv6: "2001:db8::11",
+	})
+	var afterRegister model.Server
+	if err := db.First(&afterRegister, srv.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if afterRegister.PublicIP != "203.0.113.10" || afterRegister.PublicIPv6 != "2001:db8::11" {
+		t.Fatalf("after register: public_ip=%q public_ipv6=%q", afterRegister.PublicIP, afterRegister.PublicIPv6)
+	}
+
+	if err := persistServerStatus(db, srv.ID, protocol.StatusData{
+		Hostname:   "dual-host",
+		PublicIP:   "203.0.113.12",
+		PublicIPv6: "2001:db8::12",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var afterStatus model.Server
+	if err := db.First(&afterStatus, srv.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if afterStatus.PublicIP != "203.0.113.12" || afterStatus.PublicIPv6 != "2001:db8::12" {
+		t.Fatalf("after status: public_ip=%q public_ipv6=%q", afterStatus.PublicIP, afterStatus.PublicIPv6)
+	}
+}
+
 func TestSupportedInboundTypesMatchManagedUI(t *testing.T) {
 	want := map[string]bool{
 		"shadowsocks": true,

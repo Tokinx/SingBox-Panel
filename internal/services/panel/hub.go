@@ -425,6 +425,9 @@ func (h *Hub) onRegister(ac *agentConn, e protocol.RegisterEvt) {
 		}
 		updates["public_ip"] = ip
 	}
+	if ip6, ok := normalizedIPv6(e.PublicIPv6); ok {
+		updates["public_ipv6"] = ip6
+	}
 	if err := h.db.Model(&model.Server{}).Where("id = ?", serverID).Updates(updates).Error; err != nil {
 		return
 	}

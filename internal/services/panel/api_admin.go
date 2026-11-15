@@ -873,6 +873,9 @@ func persistServerStatus(db *gorm.DB, serverID uint, status protocol.StatusData)
 	if ip, ok := normalizedIPv4(status.PublicIP); ok {
 		updates["public_ip"] = ip
 	}
+	if ip6, ok := normalizedIPv6(status.PublicIPv6); ok {
+		updates["public_ipv6"] = ip6
+	}
 	return db.Model(&model.Server{}).Where("id = ?", serverID).Updates(updates).Error
 }
 

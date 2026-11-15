@@ -79,17 +79,26 @@ describe('server remarks', () => {
       onInstallAgent: vi.fn(), onUninstallAgent: vi.fn(), onImport: vi.fn(),
       onEditConfig: vi.fn(), onRestart: vi.fn(),
     }
-    const { container, rerender } = render(<ServerOverviewCard server={{ ...server, public_ip: '69.63.207.36' }} {...props} />)
+    const { container, rerender } = render(<ServerOverviewCard server={{ ...server, public_ip: '69.63.207.36', public_ipv6: '2001:db8::1' }} {...props} />)
     expect(screen.getByText('Backup exit').className).toBe('sd-remark')
     expect(screen.queryByRole('button', { name: '导出节点' })).toBeNull()
-    expect(screen.getByText('fra.***.com · 69.63.*.36')).toBeTruthy()
+    expect(screen.getByText('fra.***.com · 69.63.*.36 · 2001:***:1')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '显示连接地址与 IP' }))
-    expect(screen.getByText('fra.example.com · 69.63.207.36')).toBeTruthy()
+    expect(screen.getByText('fra.example.com · 69.63.207.36 · 2001:db8::1')).toBeTruthy()
     expect(screen.getByRole('button', { name: /维护/ }).className).toContain('ui-btn-default')
     fireEvent.keyDown(screen.getByRole('button', { name: /维护/ }), { key: 'Enter' })
     fireEvent.click(await screen.findByRole('menuitem', { name: '编辑节点' }))
     expect(onEditServer).toHaveBeenCalledTimes(1)
     rerender(<ServerOverviewCard server={{ ...server, remark: '  ' }} {...props} />)
     expect(container.querySelector('.sd-remark')).toBeNull()
+  })
+
+  it('shows detected IPv6 in the server list without duplicating address', async () => {
+    vi.mocked(getServersMeta).mockResolvedValue(metadata([
+      { ...server, public_ip: '69.63.207.36', public_ipv6: '2001:db8::1' } as Server,
+    ]))
+
+    render(<MemoryRouter><Servers /></MemoryRouter>)
+    await screen.findByText('fra.***.com · 2001:***:1')
   })
 })

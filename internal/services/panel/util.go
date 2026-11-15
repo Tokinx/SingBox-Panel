@@ -35,9 +35,25 @@ func trimRunes(s string, limit int) string {
 	return string(runes[:limit])
 }
 
-func normalizedIPv4(raw string) (string, bool) {
+func parseNormalizedIP(raw string) (netip.Addr, bool) {
 	addr, err := netip.ParseAddr(strings.TrimSpace(raw))
-	if err != nil || !addr.Is4() {
+	if err != nil || addr.Zone() != "" {
+		return netip.Addr{}, false
+	}
+	return addr.Unmap(), true
+}
+
+func normalizedIPv4(raw string) (string, bool) {
+	addr, ok := parseNormalizedIP(raw)
+	if !ok || !addr.Is4() {
+		return "", false
+	}
+	return addr.String(), true
+}
+
+func normalizedIPv6(raw string) (string, bool) {
+	addr, ok := parseNormalizedIP(raw)
+	if !ok || !addr.Is6() {
 		return "", false
 	}
 	return addr.String(), true

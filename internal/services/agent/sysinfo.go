@@ -11,12 +11,18 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 var publicIPv4Endpoints = []string{
 	"https://api4.ipify.org",
 	"https://ipv4.icanhazip.com",
+}
+
+var publicIPv6Endpoints = []string{
+	"https://api6.ipify.org",
+	"https://ipv6.icanhazip.com",
 }
 
 // SysInfo is a snapshot of host metrics reported to the panel.
@@ -52,12 +58,45 @@ func DetectPublicIPv4(ctx context.Context) string {
 	return detectPublicIPv4From(ctx, publicIPv4Endpoints)
 }
 
+// DetectPublicIPv6 asks IPv6-only endpoints for the host's public IPv6 address.
+func DetectPublicIPv6(ctx context.Context) string {
+	return detectPublicIPv6From(ctx, publicIPv6Endpoints)
+}
+
+// DetectPublicIPs probes public IPv4 and IPv6 addresses concurrently.
+func DetectPublicIPs(ctx context.Context) (ipv4, ipv6 string) {
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		ipv4 = DetectPublicIPv4(ctx)
+	}()
+	go func() {
+		defer wg.Done()
+		ipv6 = DetectPublicIPv6(ctx)
+	}()
+	wg.Wait()
+	return ipv4, ipv6
+}
+
 func detectPublicIPv4From(ctx context.Context, endpoints []string) string {
+	return detectPublicIPFrom(ctx, endpoints, "tcp4", func(addr netip.Addr) bool {
+		return addr.Unmap().Is4()
+	})
+}
+
+func detectPublicIPv6From(ctx context.Context, endpoints []string) string {
+	return detectPublicIPFrom(ctx, endpoints, "tcp6", func(addr netip.Addr) bool {
+		return addr.Zone() == "" && addr.Unmap().Is6()
+	})
+}
+
+func detectPublicIPFrom(ctx context.Context, endpoints []string, dialNetwork string, match func(netip.Addr) bool) string {
 	dialer := &net.Dialer{Timeout: 2 * time.Second}
 	transport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
-			conn, err := dialer.DialContext(ctx, "tcp4", address)
+			conn, err := dialer.DialContext(ctx, dialNetwork, address)
 			if err != nil {
 				return dialer.DialContext(ctx, network, address)
 			}
@@ -89,8 +128,8 @@ func detectPublicIPv4From(ctx context.Context, endpoints []string) string {
 			continue
 		}
 		addr, err := netip.ParseAddr(strings.TrimSpace(string(raw)))
-		if err == nil && addr.Is4() {
-			return addr.String()
+		if err == nil && match(addr) {
+			return addr.Unmap().String()
 		}
 	}
 	return ""

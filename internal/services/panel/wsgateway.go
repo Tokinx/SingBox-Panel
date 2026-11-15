@@ -144,10 +144,12 @@ func (a *App) registerAuthenticatedAgent(serverID uint, token, publicIP string, 
 		}
 		return nil
 	}
-	// Record the observed public IP (used for display; share links use the
-	// admin-configured Address).
-	if publicIP != "" {
-		a.db.Model(&model.Server{}).Where("id = ?", serverID).Update("public_ip", publicIP)
+	// Record the observed peer IP by family (used for display; share links use the
+	// admin-configured Address) so IPv6 WebSocket handshakes never overwrite IPv4.
+	if ip4, ok := normalizedIPv4(publicIP); ok {
+		a.db.Model(&model.Server{}).Where("id = ?", serverID).Update("public_ip", ip4)
+	} else if ip6, ok := normalizedIPv6(publicIP); ok {
+		a.db.Model(&model.Server{}).Where("id = ?", serverID).Update("public_ipv6", ip6)
 	}
 
 	return a.hub.register(serverID, publicIP, conn)
