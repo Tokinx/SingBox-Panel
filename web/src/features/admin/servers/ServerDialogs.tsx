@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
-import { Form, Input, Modal, Select, Table, type FormInstance } from '../../../ui'
+import { Form, Input, Modal, Segmented, Select, Table, type FormInstance } from '../../../ui'
 import type { ImportSummary } from '../../../api'
+import type { Server } from '../../../types'
 import { formatForwardNetwork } from './ForwardForm'
 import '../../../styles/forms.css'
 import { MODAL_LG, MODAL_SM } from '../../../ui/modal'
@@ -188,16 +189,50 @@ export function InstallSingboxModal({
   )
 }
 
+export function serverFormInitialValues(server?: Server | null) {
+  return {
+    name: server?.name ?? '',
+    address: server?.address ?? '',
+    ipv6_mode: server?.ipv6_mode || 'off',
+    address_v6: server?.address_v6 ?? '',
+    remark: server?.remark ?? '',
+    traffic_reset_day: server?.traffic_reset_day ?? 1,
+  }
+}
+
+export function normalizeServerFormValues(values: {
+  name: string
+  address?: string
+  ipv6_mode?: string
+  address_v6?: string
+  remark?: string
+  traffic_reset_day?: number
+}) {
+  return {
+    ...values,
+    ipv6_mode: values.ipv6_mode === 'off' ? '' : (values.ipv6_mode || ''),
+    address_v6: values.ipv6_mode === 'custom' ? (values.address_v6 ?? '').trim() : (values.address_v6 ?? ''),
+  }
+}
+
 export function ServerEditModal({
-  title, open, saving, form, onCancel, onConfirm,
+  title, open, saving, form, server, onCancel, onConfirm,
 }: {
   title: string
   open: boolean
   saving: boolean
   form: FormInstance
+  server?: Server | null
   onCancel: () => void
   onConfirm: () => void
 }) {
+  const ipv6Mode = Form.useWatch('ipv6_mode', form) || 'off'
+  const autoExtra = ipv6Mode === 'auto'
+    ? (server?.public_ipv6
+        ? `当前检测到的公网 IPv6：${server.public_ipv6}`
+        : '开启后将在分配或导出节点时使用 Agent 检测到的公网 IPv6')
+    : undefined
+
   return (
     <Modal
       title={title}
@@ -207,13 +242,33 @@ export function ServerEditModal({
       onCancel={onCancel}
       confirmLoading={saving}
     >
-      <Form form={form} layout="vertical" initialValues={{ traffic_reset_day: 1 }}>
+      <Form form={form} layout="vertical" initialValues={serverFormInitialValues(server)}>
         <Form.Item name="name" label="名称" rules={[{ required: true }]}>
           <Input placeholder="hk-1" />
         </Form.Item>
         <Form.Item name="address" label="连接地址">
           <Input placeholder="hk.example.com" />
         </Form.Item>
+        <Form.Item name="ipv6_mode" label="IPv6 入口" extra={autoExtra}>
+          <Segmented
+            aria-label="IPv6 入口"
+            options={[
+              { value: 'off', label: '不启用' },
+              { value: 'auto', label: '自动 IPv6' },
+              { value: 'custom', label: '自定义' },
+            ]}
+          />
+        </Form.Item>
+        {ipv6Mode === 'custom' && (
+          <Form.Item
+            name="address_v6"
+            label="IPv6 连接地址"
+            rules={[{ required: true, message: '请填写 IPv6 域名或 IPv6 地址' }]}
+            extra="可填仅解析 AAAA 的域名或纯 IPv6 地址；填纯 IPv6 时会自动复用主域名作为 TLS SNI"
+          >
+            <Input className="mono" placeholder="v6.example.com 或 2001:db8::1" />
+          </Form.Item>
+        )}
         <Form.Item name="remark" label="备注">
           <Input />
         </Form.Item>

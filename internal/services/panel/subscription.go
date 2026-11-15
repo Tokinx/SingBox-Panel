@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"sort"
 	"strconv"
 	"strings"
@@ -166,11 +167,7 @@ func (a *App) gatherNodesWithError(user *model.User) ([]node, error) {
 
 		for i := range servers {
 			srv := &servers[i]
-			host := srv.Address
-			if host == "" {
-				host = srv.PublicIP
-			}
-			host, err := normalizeNodeAddress(host)
+			host, err := serverPrimaryHost(srv)
 			if err != nil || host == "" {
 				continue
 			}
@@ -676,6 +673,23 @@ func applyForwardTLSServerName(st *singbox.InboundSettings, targetHost string) {
 	if targetHost != "" {
 		st.TLS.ServerName = targetHost
 	}
+}
+
+// applyIPv6TLSServerName preserves domain certificate verification when clients
+// dial an IPv6 literal for a TLS inbound whose certificate covers the server's
+// primary domain and no explicit SNI was configured.
+func applyIPv6TLSServerName(st *singbox.InboundSettings, primaryHost, ipv6Host string) {
+	if _, err := netip.ParseAddr(strings.TrimSpace(ipv6Host)); err != nil {
+		return
+	}
+	primaryHost = strings.TrimSpace(primaryHost)
+	if primaryHost == "" {
+		return
+	}
+	if _, err := netip.ParseAddr(primaryHost); err == nil {
+		return
+	}
+	applyForwardTLSServerName(st, primaryHost)
 }
 
 func buildForwardedNodes(db *gorm.DB, relaySrv *model.Server, relayHost string, forwards []model.PortForward, user *model.User, onlyAssigned bool) ([]node, error) {

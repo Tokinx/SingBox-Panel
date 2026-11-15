@@ -112,6 +112,8 @@ export const getOverview = (signal?: AbortSignal) =>
 interface ServerBody {
   name: string
   address?: string
+  ipv6_mode?: string
+  address_v6?: string
   region?: string
   remark?: string
   traffic_reset_day?: number
@@ -317,13 +319,23 @@ export interface NodeFormats {
   users: { id: number; email: string }[]
   multi_user_count: number
   user_id: number
+  has_ipv6?: boolean
+  ipv6_host?: string
+  stack?: 'primary' | 'ipv6'
   items: NodeFormatItem[]
   uri: string
   clash: string
   surge: string
 }
-export const getNodeFormats = (serverId: number, signal?: AbortSignal, userId?: number) =>
-  http.get<NodeFormats>(`/api/admin/servers/${serverId}/node-formats`, { signal, params: userId ? { user_id: userId } : undefined }).then((r) => r.data)
+export const getNodeFormats = (serverId: number, signal?: AbortSignal, userId?: number, stack?: 'primary' | 'ipv6') => {
+  const params: Record<string, string | number> = {}
+  if (userId) params.user_id = userId
+  if (stack === 'ipv6') params.stack = 'ipv6'
+  return http.get<NodeFormats>(`/api/admin/servers/${serverId}/node-formats`, {
+    signal,
+    params: Object.keys(params).length > 0 ? params : undefined,
+  }).then((r) => r.data)
+}
 
 // ---- admin: users ----
 interface UserBody {

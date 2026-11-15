@@ -1321,3 +1321,57 @@ func TestImportKeepsConfigWithLegacyLoopbackGuardManaged(t *testing.T) {
 		t.Fatalf("legacy-guard config mode = %q, want managed", got)
 	}
 }
+
+func TestServerCreateAndUpdateIPv6EntryValidation(t *testing.T) {
+	db := testDB(t)
+	app := &App{db: db}
+	r := gin.New()
+	r.POST("/servers", app.createServer)
+	r.PUT("/servers/:id", app.updateServer)
+
+	send := func(method, path, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		return w
+	}
+
+	if res := send(http.MethodPost, "/servers", `{"name":"s1","ipv6_mode":"custom"}`); res.Code != http.StatusBadRequest {
+		t.Fatalf("custom mode without address_v6 status = %d", res.Code)
+	}
+	if res := send(http.MethodPost, "/servers", `{"name":"s1","ipv6_mode":"custom","address_v6":"1.2.3.4"}`); res.Code != http.StatusBadRequest {
+		t.Fatalf("custom mode with IPv4 address_v6 status = %d", res.Code)
+	}
+	res := send(http.MethodPost, "/servers", `{"name":"s1","address":"v4.example.com","ipv6_mode":"custom","address_v6":"[2001:db8::5]"}`)
+	if res.Code != http.StatusOK {
+		t.Fatalf("create server failed: %d %s", res.Code, res.Body.String())
+	}
+	var created struct {
+		Server model.Server `json:"server"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	if created.Server.IPv6Mode != model.ServerIPv6ModeCustom || created.Server.AddressV6 != "2001:db8::5" {
+		t.Fatalf("unexpected created server: %+v", created.Server)
+	}
+
+	if upd := send(http.MethodPut, fmt.Sprintf("/servers/%d", created.Server.ID), `{"ipv6_mode":"off"}`); upd.Code != http.StatusOK {
+		t.Fatalf("switch ipv6_mode to off failed: %d %s", upd.Code, upd.Body.String())
+	}
+	var reloaded model.Server
+	if err := db.First(&reloaded, created.Server.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.IPv6Mode != "" {
+		t.Fatalf("expected off to normalize to empty mode, got %q", reloaded.IPv6Mode)
+	}
+	if upd := send(http.MethodPut, fmt.Sprintf("/servers/%d", created.Server.ID), `{"ipv6_mode":"custom","address_v6":"v6.example.com"}`); upd.Code != http.StatusOK {
+		t.Fatalf("switch back to custom failed: %d %s", upd.Code, upd.Body.String())
+	}
+	if badUpd := send(http.MethodPut, fmt.Sprintf("/servers/%d", created.Server.ID), `{"address_v6":""}`); badUpd.Code != http.StatusBadRequest {
+		t.Fatalf("clearing address_v6 while custom mode active status = %d", badUpd.Code)
+	}
+}

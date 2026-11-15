@@ -7,7 +7,10 @@ import { copyToClipboard } from '../../../util'
 import { TooltipProvider } from '../../../components/ui/tooltip'
 
 vi.mock('../../../api', () => ({ getNodeFormats: vi.fn(), errMsg: (error: Error) => error.message }))
-vi.mock('../../../util', () => ({ copyToClipboard: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('../../../util', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../util')>()
+  return { ...actual, copyToClipboard: vi.fn().mockResolvedValue(undefined) }
+})
 
 const initial: NodeFormats = { items: [], uri: '', clash: '', surge: '', users: [{ id: 1, email: 'alice' }, { id: 2, email: 'bob' }], multi_user_count: 2, user_id: 0 }
 const render = (element: ReactElement) => renderComponent(element, { wrapper: TooltipProvider })
@@ -98,5 +101,33 @@ describe('node export account selection', () => {
     expect(copyToClipboard).toHaveBeenCalledWith('vless://vless-7ec402-uuid@fra.example.com:443')
     fireEvent.click(screen.getByRole('button', { name: '复制 vless-7ec402 Clash' }))
     expect(copyToClipboard).toHaveBeenCalledWith('vless-7ec402-clash')
+  })
+
+  it('switches between primary and IPv6 endpoints when available', async () => {
+    vi.mocked(getNodeFormats).mockImplementation(async (_id, _signal, _userId, stack) => stack === 'ipv6'
+      ? {
+          ...result(0, 'vless-v6'),
+          multi_user_count: 0,
+          has_ipv6: true,
+          ipv6_host: '2001:db8::1',
+          stack: 'ipv6',
+          items: [{ tag: 'vless-v6', name: 'vless-v6', type: 'vless', server: '2001:db8::1', port: 443, params: { UUID: 'v6-uuid' }, uri: 'vless://v6-uuid@[2001:db8::1]:443', clash: 'v6-clash', surge: '' }],
+        }
+      : {
+          ...result(0, 'vless-v4'),
+          multi_user_count: 0,
+          has_ipv6: true,
+          ipv6_host: '2001:db8::1',
+          stack: 'primary',
+        })
+
+    render(<NodeFormatsExportModal serverId={7} open inboundTag="vless-v6" multiUser={false} onCancel={vi.fn()} />)
+    await screen.findByRole('radio', { name: 'IPv6' })
+    fireEvent.click(screen.getByRole('radio', { name: 'IPv6' }))
+
+    await screen.findByText('v6-uuid')
+    expect(getNodeFormats).toHaveBeenLastCalledWith(7, expect.any(AbortSignal), undefined, 'ipv6')
+    fireEvent.click(screen.getByRole('button', { name: '复制 vless-v6 URI' }))
+    expect(copyToClipboard).toHaveBeenCalledWith('vless://v6-uuid@[2001:db8::1]:443')
   })
 })

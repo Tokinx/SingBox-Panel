@@ -34,12 +34,32 @@ func (a *App) serverNodeFormats(c *gin.Context) {
 		return
 	}
 
-	host := srv.Address
-	if host == "" {
-		host = srv.PublicIP
+	primaryHost, err := serverPrimaryHost(&srv)
+	if err != nil {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "节点地址未配置或无效"})
+		return
 	}
-	host, err := normalizeNodeAddress(host)
-	if err != nil || host == "" {
+	ipv6Host := serverIPv6Host(&srv)
+
+	stack := strings.ToLower(strings.TrimSpace(c.Query("stack")))
+	switch stack {
+	case "", "primary":
+		stack = "primary"
+	case "ipv6":
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的地址栈参数"})
+		return
+	}
+
+	host := primaryHost
+	if stack == "ipv6" {
+		if ipv6Host == "" {
+			c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "该服务器未启用有效的 IPv6 入口"})
+			return
+		}
+		host = ipv6Host
+	}
+	if host == "" {
 		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "节点地址未配置或无效"})
 		return
 	}
@@ -158,6 +178,9 @@ func (a *App) serverNodeFormats(c *gin.Context) {
 		} else if !ok {
 			continue
 		}
+		if stack == "ipv6" {
+			applyIPv6TLSServerName(&st, primaryHost, host)
+		}
 		nodes = append(nodes, node{
 			tag:      ib.Tag,
 			server:   host,
@@ -187,6 +210,9 @@ func (a *App) serverNodeFormats(c *gin.Context) {
 		"users":            choices,
 		"multi_user_count": len(multiInbounds) + len(multiForwardIDs),
 		"user_id":          userID,
+		"has_ipv6":         ipv6Host != "",
+		"ipv6_host":        ipv6Host,
+		"stack":            stack,
 		"items":            buildNodeFormatItems(nodes),
 		"uri":              strings.Join(uriLines, "\n"),
 		"clash":            clashProxiesYAML(nodes),

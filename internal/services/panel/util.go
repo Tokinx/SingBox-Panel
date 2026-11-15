@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
+	"github.com/hann0w0/singbox-panel/internal/domain/model"
 )
 
 // randHex returns a cryptographically-random hex string of 2*n characters.
@@ -114,4 +115,75 @@ func normalizeNodeAddress(raw string) (string, error) {
 		}
 	}
 	return host, nil
+}
+
+func normalizeServerIPv6Mode(raw string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "off":
+		return model.ServerIPv6ModeOff, nil
+	case model.ServerIPv6ModeAuto:
+		return model.ServerIPv6ModeAuto, nil
+	case model.ServerIPv6ModeCustom:
+		return model.ServerIPv6ModeCustom, nil
+	default:
+		return "", fmt.Errorf("无效的 IPv6 入口模式")
+	}
+}
+
+func normalizeServerIPv6Address(raw string) (string, error) {
+	clean, err := normalizeNodeAddress(raw)
+	if err != nil {
+		return "", err
+	}
+	if clean == "" {
+		return "", nil
+	}
+	if _, isV4 := normalizedIPv4(clean); isV4 {
+		return "", fmt.Errorf("不能填写 IPv4 地址")
+	}
+	return clean, nil
+}
+
+func serverPrimaryHost(srv *model.Server) (string, error) {
+	if srv == nil {
+		return "", nil
+	}
+	host := srv.Address
+	if host == "" {
+		host = srv.PublicIP
+	}
+	if host == "" {
+		mode, _ := normalizeServerIPv6Mode(srv.IPv6Mode)
+		if mode == model.ServerIPv6ModeOff {
+			host = srv.PublicIPv6
+		}
+	}
+	return normalizeNodeAddress(host)
+}
+
+func serverIPv6Host(srv *model.Server) string {
+	if srv == nil {
+		return ""
+	}
+	mode, err := normalizeServerIPv6Mode(srv.IPv6Mode)
+	if err != nil {
+		return ""
+	}
+	var host string
+	switch mode {
+	case model.ServerIPv6ModeAuto:
+		host, _ = normalizedIPv6(srv.PublicIPv6)
+	case model.ServerIPv6ModeCustom:
+		host, _ = normalizeServerIPv6Address(srv.AddressV6)
+	default:
+		return ""
+	}
+	if host == "" {
+		return ""
+	}
+	primary, err := serverPrimaryHost(srv)
+	if err == nil && primary != "" && strings.EqualFold(host, primary) {
+		return ""
+	}
+	return host
 }

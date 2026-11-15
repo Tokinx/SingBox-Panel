@@ -7,6 +7,7 @@ import type { Server } from '../../../types'
 import { formatBytes, maskHost } from '../../../util'
 import { RequestState } from '../../../components/RequestState'
 import { PageHeader, Pills, Stats, Status } from '../../../ui/Page'
+import { ServerEditModal, normalizeServerFormValues, serverFormInitialValues } from './ServerDialogs'
 import '../../../styles/servers.css'
 import { MODAL_MD, MODAL_SM } from '../../../ui/modal'
 
@@ -160,6 +161,7 @@ export default function Servers() {
   const openCreate = () => {
     setEditing(null)
     form.resetFields()
+    form.setFieldsValue(serverFormInitialValues())
     setOpen(true)
   }
 
@@ -167,7 +169,7 @@ export default function Servers() {
     setEditing(s)
     // Reset first so fields the previous target had do not leak in.
     form.resetFields()
-    form.setFieldsValue({ name: s.name, address: s.address, remark: s.remark, traffic_reset_day: s.traffic_reset_day ?? 1 })
+    form.setFieldsValue(serverFormInitialValues(s))
     setOpen(true)
   }
 
@@ -176,7 +178,7 @@ export default function Servers() {
     submitLock.current = true
     setSaving(true)
     try {
-      const v = await form.validateFields()
+      const v = normalizeServerFormValues(await form.validateFields())
       if (editing) {
         await updateServer(editing.id, v)
         message.success('已保存')
@@ -478,29 +480,15 @@ export default function Servers() {
       <span id="server-sort-help" className="sr-only">使用方向键调整服务器顺序</span>
       <div className="sr-only" aria-live="polite" aria-atomic="true">{sortAnnouncement}</div>
 
-      <Modal
+      <ServerEditModal
         title={editing ? `编辑 ${editing.name}` : '新增服务器'}
-        width={MODAL_SM}
         open={open}
-        onOk={onSubmit}
+        saving={saving}
+        form={form}
+        server={editing}
         onCancel={() => setOpen(false)}
-        confirmLoading={saving}
-      >
-        <Form form={form} layout="vertical" initialValues={{ traffic_reset_day: 1 }}>
-          <Form.Item name="name" label="名称" rules={[{ required: true }]}>
-            <Input placeholder="hk-1" />
-          </Form.Item>
-          <Form.Item name="address" label="连接地址">
-            <Input placeholder="hk.example.com" />
-          </Form.Item>
-          <Form.Item name="remark" label="备注">
-            <Input />
-          </Form.Item>
-          <Form.Item name="traffic_reset_day" label="流量重置日" extra="每月当天 UTC 00:00 重新计量；短月按月末，重置前流量不计入页面，历史记录保留。" rules={[{ required: true }]}>
-            <Select options={Array.from({ length: 31 }, (_, index) => ({ value: index + 1, label: `每月 ${index + 1} 日` }))} />
-          </Form.Item>
-        </Form>
-      </Modal>
+        onConfirm={onSubmit}
+      />
 
       <Modal
         title="批量更新 sing-box"

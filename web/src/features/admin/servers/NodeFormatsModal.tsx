@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Button, Modal, Select, Tooltip, Typography, message } from '../../../ui'
+import { Button, Modal, Segmented, Select, Tooltip, Typography, message } from '../../../ui'
 import { Check, Copy, Eye } from 'lucide-react'
 import type { NodeFormats } from '../../../api'
 import { errMsg, getNodeFormats } from '../../../api'
 import { RequestState } from '../../../components/RequestState'
-import { copyToClipboard } from '../../../util'
+import { copyToClipboard, formatHostPort } from '../../../util'
 import '../../../styles/forms.css'
 import { MODAL_LG, MODAL_MD } from '../../../ui/modal'
 
@@ -53,6 +53,9 @@ function NodeExportSession({
   multiUser?: boolean
 }) {
   const [userId, setUserId] = useState(0)
+  const [stack, setStack] = useState<'primary' | 'ipv6'>('primary')
+  const [hasIPv6, setHasIPv6] = useState(false)
+  const [ipv6Host, setIpv6Host] = useState('')
   const [data, setData] = useState<NodeFormats | null>(null)
   const [users, setUsers] = useState<NodeFormats['users']>([])
   const [multiCount, setMultiCount] = useState(0)
@@ -65,28 +68,45 @@ function NodeExportSession({
     setLoading(true)
     setError(null)
     setData(null)
-    getNodeFormats(serverId, controller.signal, userId || undefined)
+    const req = stack === 'ipv6'
+      ? getNodeFormats(serverId, controller.signal, userId || undefined, 'ipv6')
+      : getNodeFormats(serverId, controller.signal, userId || undefined)
+    req
       .then((next) => {
         if (controller.signal.aborted) return
         setData(next)
         setUsers(next.users)
         setMultiCount(next.multi_user_count)
+        setHasIPv6(Boolean(next.has_ipv6))
+        setIpv6Host(next.ipv6_host || '')
       })
       .catch((cause) => { if (!controller.signal.aborted) setError(errMsg(cause)) })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [serverId, userId, attempt])
+  }, [serverId, userId, stack, attempt])
 
-  // Never show the previous account's credentials while its replacement loads.
-  const current = data?.user_id === userId ? data : null
+  // Never show the previous account or address stack while its replacement loads.
+  const current = data && data.user_id === userId && (data.stack || 'primary') === stack ? data : null
   const showUserSelect = inboundTag ? Boolean(multiUser) : multiCount > 0
   return <>
-    {showUserSelect && <div className="fm-export-user">
-      <Select aria-label="多用户凭证" value={userId} onChange={setUserId} showSearch options={[
+    {(showUserSelect || hasIPv6) && <div className="fm-export-user">
+      {showUserSelect && <Select aria-label="多用户凭证" value={userId} onChange={setUserId} showSearch options={[
         { value: 0, label: '选择用户以导出多用户节点' },
         ...users.map((user) => ({ value: user.id, label: user.email })),
-      ]} />
-      {!users.length && <p className="muted">暂无可用的授权用户，请先在用户页分配此服务器的多用户入站。</p>}
+      ]} />}
+      {hasIPv6 && <div className="fm-export-stack">
+        <Segmented
+          aria-label="导出地址栈"
+          value={stack}
+          onChange={(next) => setStack(next as 'primary' | 'ipv6')}
+          options={[
+            { value: 'primary', label: '主入口' },
+            { value: 'ipv6', label: 'IPv6' },
+          ]}
+        />
+        {stack === 'ipv6' && ipv6Host && <span className="fm-export-host mono">{ipv6Host}</span>}
+      </div>}
+      {showUserSelect && !users.length && <p className="muted" style={{ flexBasis: '100%', margin: 0 }}>暂无可用的授权用户，请先在用户页分配此服务器的多用户入站。</p>}
     </div>}
     <RequestState loading={loading} error={error} hasData={!!current} onRetry={() => setAttempt((value) => value + 1)}>
       {current && (inboundTag ? (
@@ -221,7 +241,7 @@ export function NodeFormatsModalContent({ data }: { data: NodeFormats }) {
                 <div className="fm-node-main">
                   <span className="fm-node-name">{displayTag}</span>
                   {item.type && <span className="ui-tag">{item.type}</span>}
-                  {item.server ? <span className="fm-node-addr mono">{item.server}:{item.port}</span> : null}
+                  {item.server ? <span className="fm-node-addr mono">{formatHostPort(item.server, item.port)}</span> : null}
                 </div>
                 <div className="fm-node-actions">
                   <Button size="small" type="text" icon={<Eye />} aria-label={`查看 ${displayTag} 详情`} onClick={() => setDetailItem(item)}>详情</Button>

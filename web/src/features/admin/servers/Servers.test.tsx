@@ -101,4 +101,24 @@ describe('server remarks', () => {
     render(<MemoryRouter><Servers /></MemoryRouter>)
     await screen.findByText('fra.***.com · 2001:***:1')
   })
+
+  it('configures server IPv6 mode in the edit modal', async () => {
+    vi.mocked(getServersMeta).mockResolvedValue(metadata([
+      { ...server, public_ipv6: '2001:db8::9' } as Server,
+    ]))
+
+    render(<MemoryRouter><Servers /></MemoryRouter>)
+    fireEvent.click(await screen.findByRole('button', { name: '编辑 Frankfurt' }))
+
+    fireEvent.click(screen.getByRole('radio', { name: '自动 IPv6' }))
+    expect(screen.getByText('当前检测到的公网 IPv6：2001:db8::9')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '确定' }))
+    await waitFor(() => expect(updateServer).toHaveBeenCalledWith(2, expect.objectContaining({ ipv6_mode: 'auto' })))
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑 Frankfurt' }))
+    fireEvent.click(screen.getByRole('radio', { name: '自定义' }))
+    fireEvent.change(screen.getByLabelText(/IPv6 连接地址/), { target: { value: 'v6.example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: '确定' }))
+    await waitFor(() => expect(updateServer).toHaveBeenCalledWith(2, expect.objectContaining({ ipv6_mode: 'custom', address_v6: 'v6.example.com' })))
+  })
 })

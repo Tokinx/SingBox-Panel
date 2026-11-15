@@ -137,3 +137,90 @@ func TestServerNodeFormatsExportsAuthorizedUserCredentials(t *testing.T) {
 		t.Fatal("user query failure silently returned a partial export")
 	}
 }
+
+func TestServerNodeFormatsSupportsIPv6StackPreview(t *testing.T) {
+	db := testDB(t)
+	srv := model.Server{
+		Name:       "Tokyo",
+		Address:    "tyo.example.com",
+		PublicIP:   "198.51.100.20",
+		PublicIPv6: "2001:db8:2::1",
+		IPv6Mode:   model.ServerIPv6ModeAuto,
+		AgentToken: "tyo-agent-secret",
+	}
+	if err := db.Create(&srv).Error; err != nil {
+		t.Fatal(err)
+	}
+	ib := model.Inbound{
+		ServerID:   srv.ID,
+		Tag:        "trojan-tls",
+		Type:       model.InboundTrojan,
+		ListenPort: 443,
+		Enabled:    true,
+		Settings:   model.JSONText(`{"single_user":true,"password":"pw-secret","tls":{"enabled":true,"cert_path":"/etc/ssl/cert.pem","key_path":"/etc/ssl/key.pem"}}`),
+	}
+	if err := db.Create(&ib).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	app := &App{db: db}
+	router := gin.New()
+	router.GET("/servers/:id/node-formats", app.serverNodeFormats)
+
+	fetch := func(query string) *httptest.ResponseRecorder {
+		t.Helper()
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/servers/%d/node-formats%s", srv.ID, query), nil))
+		return res
+	}
+
+	type resp struct {
+		HasIPv6  bool             `json:"has_ipv6"`
+		IPv6Host string           `json:"ipv6_host"`
+		Stack    string           `json:"stack"`
+		Items    []NodeFormatItem `json:"items"`
+	}
+
+	resPrimary := fetch("")
+	if resPrimary.Code != http.StatusOK {
+		t.Fatalf("primary status = %d: %s", resPrimary.Code, resPrimary.Body.String())
+	}
+	var primary resp
+	if err := json.Unmarshal(resPrimary.Body.Bytes(), &primary); err != nil {
+		t.Fatal(err)
+	}
+	if !primary.HasIPv6 || primary.IPv6Host != "2001:db8:2::1" || primary.Stack != "primary" {
+		t.Fatalf("unexpected primary metadata: %+v", primary)
+	}
+	if len(primary.Items) != 1 || primary.Items[0].Server != "tyo.example.com" {
+		t.Fatalf("primary items = %+v", primary.Items)
+	}
+
+	resV6 := fetch("?stack=ipv6")
+	if resV6.Code != http.StatusOK {
+		t.Fatalf("ipv6 status = %d: %s", resV6.Code, resV6.Body.String())
+	}
+	var ipv6Resp resp
+	if err := json.Unmarshal(resV6.Body.Bytes(), &ipv6Resp); err != nil {
+		t.Fatal(err)
+	}
+	if ipv6Resp.Stack != "ipv6" || len(ipv6Resp.Items) != 1 || ipv6Resp.Items[0].Server != "2001:db8:2::1" {
+		t.Fatalf("ipv6 items = %+v", ipv6Resp)
+	}
+	if ipv6Resp.Items[0].Params["SNI"] != "tyo.example.com" {
+		t.Fatalf("expected IPv6 literal preview to inherit domain SNI, got params=%+v", ipv6Resp.Items[0].Params)
+	}
+	if !strings.Contains(ipv6Resp.Items[0].URI, "[2001:db8:2::1]:443") || !strings.Contains(ipv6Resp.Items[0].URI, "sni=tyo.example.com") {
+		t.Fatalf("unexpected ipv6 share link: %s", ipv6Resp.Items[0].URI)
+	}
+
+	if bad := fetch("?stack=invalid"); bad.Code != http.StatusBadRequest {
+		t.Fatalf("invalid stack status = %d, want 400", bad.Code)
+	}
+	if err := db.Model(&model.Server{}).Where("id = ?", srv.ID).Update("ipv6_mode", "").Error; err != nil {
+		t.Fatal(err)
+	}
+	if disabled := fetch("?stack=ipv6"); disabled.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("disabled ipv6 stack status = %d, want 422", disabled.Code)
+	}
+}

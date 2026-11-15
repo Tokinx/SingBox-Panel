@@ -35,6 +35,8 @@ export interface Server {
   id: number
   name: string
   address: string
+  ipv6_mode?: '' | 'auto' | 'custom'
+  address_v6?: string
   remark: string
   region: string
   online: boolean

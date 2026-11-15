@@ -134,6 +134,10 @@ type UserNodeOrder struct {
 const (
 	ConfigModeManaged = "managed"
 	ConfigModeRaw     = "raw"
+
+	ServerIPv6ModeOff    = ""
+	ServerIPv6ModeAuto   = "auto"
+	ServerIPv6ModeCustom = "custom"
 )
 
 // Server is one VPS, i.e. one Agent.
@@ -147,7 +151,11 @@ type Server struct {
 
 	// Public host used in share/subscription links (domain or IP the clients dial).
 	Address string `gorm:"size:191" json:"address"`
-	Remark  string `gorm:"size:255" json:"remark"`
+	// Optional secondary IPv6 host used when exporting or splitting IPv6 endpoints
+	// for a dual-stack server ("": off, "auto": detected PublicIPv6, "custom": AddressV6).
+	IPv6Mode  string `gorm:"size:16" json:"ipv6_mode"`
+	AddressV6 string `gorm:"size:191" json:"address_v6"`
+	Remark    string `gorm:"size:255" json:"remark"`
 	Region  string `gorm:"size:64" json:"region"`
 
 	// Reported by the agent.

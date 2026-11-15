@@ -176,3 +176,14 @@ export function maskHost(value: string | null | undefined): string {
   }
   return trimmed.length > 2 ? `${trimmed[0]}***${trimmed[trimmed.length - 1]}` : '***'
 }
+
+// formatHostPort brackets IPv6 literals when appending a port so v4/domain and IPv6
+// endpoints display uniformly across modals and user node cards.
+export function formatHostPort(host: string | null | undefined, port?: number | string | null): string {
+  const trimmed = host?.trim() ?? ''
+  if (!trimmed) return ''
+  const bare = trimmed.replace(/^\[|\]$/g, '')
+  const formattedHost = bare.includes(':') ? `[${bare}]` : bare
+  if (port === undefined || port === null || port === '') return formattedHost
+  return `${formattedHost}:${port}`
+}

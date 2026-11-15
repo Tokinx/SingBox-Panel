@@ -180,6 +180,8 @@ func (a *App) serverLogs(c *gin.Context) {
 type serverReq struct {
 	Name            string `json:"name"`
 	Address         string `json:"address"`
+	IPv6Mode        string `json:"ipv6_mode"`
+	AddressV6       string `json:"address_v6"`
 	Region          string `json:"region"`
 	Remark          string `json:"remark"`
 	TrafficResetDay *int   `json:"traffic_reset_day"`
@@ -188,6 +190,8 @@ type serverReq struct {
 type serverUpdateReq struct {
 	Name            *string `json:"name"`
 	Address         *string `json:"address"`
+	IPv6Mode        *string `json:"ipv6_mode"`
+	AddressV6       *string `json:"address_v6"`
 	Region          *string `json:"region"`
 	Remark          *string `json:"remark"`
 	TrafficResetDay *int    `json:"traffic_reset_day"`
@@ -271,9 +275,25 @@ func (a *App) createServer(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "节点连接地址格式无效: " + err.Error()})
 		return
 	}
+	ipv6Mode, err := normalizeServerIPv6Mode(req.IPv6Mode)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	addressV6, err := normalizeServerIPv6Address(req.AddressV6)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "节点 IPv6 地址格式无效: " + err.Error()})
+		return
+	}
+	if ipv6Mode == model.ServerIPv6ModeCustom && addressV6 == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "自定义 IPv6 入口需要填写域名或 IPv6 地址"})
+		return
+	}
 	srv := &model.Server{
 		Name:            req.Name,
 		Address:         address,
+		IPv6Mode:        ipv6Mode,
+		AddressV6:       addressV6,
 		Region:          req.Region,
 		Remark:          req.Remark,
 		AgentToken:      randHex(24),
@@ -330,7 +350,7 @@ func (a *App) updateServer(c *gin.Context) {
 		return
 	}
 	var before model.Server
-	if req.Address != nil {
+	if req.Address != nil || req.IPv6Mode != nil || req.AddressV6 != nil {
 		if err := a.db.First(&before, id).Error; err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "server not found"})
 			return
@@ -356,6 +376,33 @@ func (a *App) updateServer(c *gin.Context) {
 			return
 		}
 		updates["address"] = address
+	}
+	if req.IPv6Mode != nil || req.AddressV6 != nil {
+		nextMode, err := normalizeServerIPv6Mode(before.IPv6Mode)
+		if err != nil {
+			nextMode = model.ServerIPv6ModeOff
+		}
+		if req.IPv6Mode != nil {
+			nextMode, err = normalizeServerIPv6Mode(*req.IPv6Mode)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			updates["ipv6_mode"] = nextMode
+		}
+		nextAddrV6 := before.AddressV6
+		if req.AddressV6 != nil {
+			nextAddrV6, err = normalizeServerIPv6Address(*req.AddressV6)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "节点 IPv6 地址格式无效: " + err.Error()})
+				return
+			}
+			updates["address_v6"] = nextAddrV6
+		}
+		if nextMode == model.ServerIPv6ModeCustom && nextAddrV6 == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "自定义 IPv6 入口需要填写域名或 IPv6 地址"})
+			return
+		}
 	}
 	if req.Region != nil {
 		updates["region"] = *req.Region

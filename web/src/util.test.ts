@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { SHADOWSOCKS_METHODS, daysUntil, maskHost, relativeTime, toCSV } from './util'
+import { SHADOWSOCKS_METHODS, daysUntil, formatHostPort, maskHost, relativeTime, toCSV } from './util'
 
 describe('Shadowsocks methods', () => {
   it('offers aes-128-gcm in every form through the shared method list', () => {
@@ -33,5 +33,12 @@ describe('usage helpers', () => {
     expect(maskHost('osid.cn')).toBe('o***.cn')
     expect(maskHost('2001:4860:4860::8888')).toBe('2001:***:8888')
     expect(maskHost('')).toBe('')
+  })
+  it('brackets IPv6 hosts when formatting host:port', () => {
+    expect(formatHostPort('fra.example.com', 443)).toBe('fra.example.com:443')
+    expect(formatHostPort('1.1.1.1', 443)).toBe('1.1.1.1:443')
+    expect(formatHostPort('2001:db8::1', 443)).toBe('[2001:db8::1]:443')
+    expect(formatHostPort('[2001:db8::1]', 443)).toBe('[2001:db8::1]:443')
+    expect(formatHostPort('', 443)).toBe('')
   })
 })

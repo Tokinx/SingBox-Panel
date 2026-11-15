@@ -56,7 +56,7 @@ import type { ForwardNetwork, Inbound, PortForward, RoutingNode, RouteRule, Rule
 import { ForwardForm, formatForwardNetwork } from './ForwardForm'
 import InboundForm from './InboundForm'
 import { RuleForm } from './RoutingForms'
-import { ConfigEditorModal, ImportPreviewModal, InstallSingboxModal, ServerEditModal } from './ServerDialogs'
+import { ConfigEditorModal, ImportPreviewModal, InstallSingboxModal, ServerEditModal, normalizeServerFormValues, serverFormInitialValues } from './ServerDialogs'
 import { NodeFormatsExportModal } from './NodeFormatsModal'
 import { ServerOverviewCard } from './ServerOverviewCard'
 import ServerTraffic from './ServerTraffic'
@@ -908,12 +908,7 @@ export default function ServerDetail() {
   const openEditServer = () => {
     if (!server) return
     serverEditForm.resetFields()
-    serverEditForm.setFieldsValue({
-      name: server.name,
-      address: server.address,
-      remark: server.remark,
-      traffic_reset_day: server.traffic_reset_day ?? 1,
-    })
+    serverEditForm.setFieldsValue(serverFormInitialValues(server))
     setServerEditOpen(true)
   }
 
@@ -923,7 +918,7 @@ export default function ServerDetail() {
     serverEditLockRef.current = true
     setServerEditSaving(true)
     try {
-      const values = await serverEditForm.validateFields()
+      const values = normalizeServerFormValues(await serverEditForm.validateFields())
       await updateServer(targetSID, values)
       if (currentSIDRef.current !== targetSID) return
       message.success('已保存')
@@ -1355,6 +1350,7 @@ export default function ServerDetail() {
         open={serverEditOpen}
         saving={serverEditSaving}
         form={serverEditForm}
+        server={server}
         onCancel={() => setServerEditOpen(false)}
         onConfirm={submitEditServer}
       />

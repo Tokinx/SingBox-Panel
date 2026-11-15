@@ -31,7 +31,8 @@ export function ServerOverviewCard({
   }, [server.id])
 
   const primaryAddress = server.address || server.public_ip || server.public_ipv6 || ''
-  const addressParts = [primaryAddress, server.public_ip, server.public_ipv6].filter(
+  const customAddressV6 = server.ipv6_mode === 'custom' ? server.address_v6 : ''
+  const addressParts = [primaryAddress, server.public_ip, server.public_ipv6, customAddressV6].filter(
     (part, index, list): part is string => Boolean(part) && list.indexOf(part) === index,
   )
   const displayedAddress = addressParts
