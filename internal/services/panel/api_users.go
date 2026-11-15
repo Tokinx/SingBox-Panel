@@ -19,6 +19,7 @@ import (
 var (
 	errInvalidServerAccess       = errors.New("服务器列表包含不存在的受管服务器")
 	errInvalidInboundAccess      = errors.New("节点列表包含不存在的受管节点")
+	errInvalidInboundIPv6Access  = errors.New("节点列表包含未启用有效 IPv6 入口的受管节点")
 	errInvalidForwardAccess      = errors.New("节点列表包含不存在的转发节点")
 	errInvalidCustomNodeAccess   = errors.New("节点列表包含不存在的自定义节点")
 	errInvalidUserNodeOrder      = errors.New("节点排序必须包含每个已分配节点且不能重复")
@@ -26,27 +27,30 @@ var (
 )
 
 const (
-	userNodeTypeManaged = "managed"
-	userNodeTypeForward = "forward"
-	userNodeTypeCustom  = "custom"
+	userNodeTypeManaged     = "managed"
+	userNodeTypeManagedIPv6 = "managed_ipv6"
+	userNodeTypeForward     = "forward"
+	userNodeTypeCustom      = "custom"
 )
 
 type userReq struct {
-	Email      string `json:"email"`
-	Password   string `json:"password"`
-	ServerIDs  []uint `json:"server_ids"`
-	InboundIDs []uint `json:"inbound_ids"` // empty = every inbound on those servers
-	ForwardIDs []uint `json:"forward_ids"` // inbound-targeting port forwards
-	ExpireAt   *int64 `json:"expire_at"`   // unix seconds; 0/null = never
-	Enabled    *bool  `json:"enabled"`
+	Email          string `json:"email"`
+	Password       string `json:"password"`
+	ServerIDs      []uint `json:"server_ids"`
+	InboundIDs     []uint `json:"inbound_ids"`      // empty + inbound_ipv6_ids empty = every inbound on those servers
+	InboundIPv6IDs []uint `json:"inbound_ipv6_ids"` // separate IPv6 endpoints for selected inbounds
+	ForwardIDs     []uint `json:"forward_ids"`      // inbound-targeting port forwards
+	ExpireAt       *int64 `json:"expire_at"`        // unix seconds; 0/null = never
+	Enabled        *bool  `json:"enabled"`
 }
 
 type userAccessReq struct {
-	ServerIDs     *[]uint              `json:"server_ids"`
-	InboundIDs    *[]uint              `json:"inbound_ids"`
-	ForwardIDs    *[]uint              `json:"forward_ids"`
-	CustomNodeIDs *[]uint              `json:"custom_node_ids"`
-	NodeOrder     *[]userNodeOrderItem `json:"node_order"`
+	ServerIDs      *[]uint              `json:"server_ids"`
+	InboundIDs     *[]uint              `json:"inbound_ids"`
+	InboundIPv6IDs *[]uint              `json:"inbound_ipv6_ids"`
+	ForwardIDs     *[]uint              `json:"forward_ids"`
+	CustomNodeIDs  *[]uint              `json:"custom_node_ids"`
+	NodeOrder      *[]userNodeOrderItem `json:"node_order"`
 }
 
 type userNodeOrderItem struct {
@@ -56,13 +60,14 @@ type userNodeOrderItem struct {
 }
 
 type userAccessResp struct {
-	UserID        uint                `json:"user_id"`
-	ServerIDs     []uint              `json:"server_ids"`
-	ServerWide    bool                `json:"server_wide"`
-	InboundIDs    []uint              `json:"inbound_ids"`
-	ForwardIDs    []uint              `json:"forward_ids"`
-	CustomNodeIDs []uint              `json:"custom_node_ids"`
-	NodeOrder     []userNodeOrderItem `json:"node_order"`
+	UserID         uint                `json:"user_id"`
+	ServerIDs      []uint              `json:"server_ids"`
+	ServerWide     bool                `json:"server_wide"`
+	InboundIDs     []uint              `json:"inbound_ids"`
+	InboundIPv6IDs []uint              `json:"inbound_ipv6_ids"`
+	ForwardIDs     []uint              `json:"forward_ids"`
+	CustomNodeIDs  []uint              `json:"custom_node_ids"`
+	NodeOrder      []userNodeOrderItem `json:"node_order"`
 }
 
 type userListItem struct {
@@ -112,8 +117,8 @@ func setID(ids []uint, id uint, present bool) []uint {
 
 func effectiveUserAccess(db *gorm.DB, user *model.User) (userAccessResp, error) {
 	resp := userAccessResp{
-		UserID: user.ID, ServerIDs: []uint{}, InboundIDs: []uint{}, ForwardIDs: []uint{},
-		CustomNodeIDs: []uint{}, NodeOrder: []userNodeOrderItem{},
+		UserID: user.ID, ServerIDs: []uint{}, InboundIDs: []uint{}, InboundIPv6IDs: []uint{},
+		ForwardIDs: []uint{}, CustomNodeIDs: []uint{}, NodeOrder: []userNodeOrderItem{},
 	}
 	if len(user.ServerIDs) > 0 {
 		if err := db.Model(&model.Server{}).Where("id IN ?", user.ServerIDs).Pluck("id", &resp.ServerIDs).Error; err != nil {
@@ -121,17 +126,23 @@ func effectiveUserAccess(db *gorm.DB, user *model.User) (userAccessResp, error) 
 		}
 		resp.ServerIDs = normalizedIDs(resp.ServerIDs)
 	}
-	resp.ServerWide = len(user.InboundIDs) == 0 && len(resp.ServerIDs) > 0
+	resp.ServerWide = len(user.InboundIDs) == 0 && len(user.InboundIPv6IDs) == 0 && len(resp.ServerIDs) > 0
 	if len(user.InboundIDs) > 0 {
 		if err := db.Model(&model.Inbound{}).Where("id IN ?", user.InboundIDs).Pluck("id", &resp.InboundIDs).Error; err != nil {
 			return resp, err
 		}
 		resp.InboundIDs = normalizedIDs(resp.InboundIDs)
-	} else if len(user.ServerIDs) > 0 {
-		if err := db.Model(&model.Inbound{}).Where("server_id IN ?", user.ServerIDs).Pluck("id", &resp.InboundIDs).Error; err != nil {
+	} else if resp.ServerWide {
+		if err := db.Model(&model.Inbound{}).Where("server_id IN ?", resp.ServerIDs).Pluck("id", &resp.InboundIDs).Error; err != nil {
 			return resp, err
 		}
 		resp.InboundIDs = normalizedIDs(resp.InboundIDs)
+	}
+	if len(user.InboundIPv6IDs) > 0 {
+		if err := db.Model(&model.Inbound{}).Where("id IN ?", user.InboundIPv6IDs).Pluck("id", &resp.InboundIPv6IDs).Error; err != nil {
+			return resp, err
+		}
+		resp.InboundIPv6IDs = normalizedIDs(resp.InboundIPv6IDs)
 	}
 	if len(user.ForwardIDs) > 0 {
 		if err := db.Model(&model.PortForward{}).
@@ -151,17 +162,20 @@ func effectiveUserAccess(db *gorm.DB, user *model.User) (userAccessResp, error) 
 		}
 	}
 	var err error
-	resp.NodeOrder, err = orderedUserNodeOrderWithForwards(db, user.ID, resp.InboundIDs, resp.ForwardIDs, resp.CustomNodeIDs)
+	resp.NodeOrder, err = orderedUserNodeOrderWithEndpoints(db, user.ID, resp.InboundIDs, resp.InboundIPv6IDs, resp.ForwardIDs, resp.CustomNodeIDs)
 	if err != nil {
 		return resp, err
 	}
 	return resp, nil
 }
 
-func userNodeSet(inboundIDs, forwardIDs, customNodeIDs []uint) map[string]bool {
-	set := make(map[string]bool, len(inboundIDs)+len(forwardIDs)+len(customNodeIDs))
+func userNodeSet(inboundIDs, inboundIPv6IDs, forwardIDs, customNodeIDs []uint) map[string]bool {
+	set := make(map[string]bool, len(inboundIDs)+len(inboundIPv6IDs)+len(forwardIDs)+len(customNodeIDs))
 	for _, id := range inboundIDs {
 		set[userNodeTypeManaged+":"+strconv.FormatUint(uint64(id), 10)] = true
+	}
+	for _, id := range inboundIPv6IDs {
+		set[userNodeTypeManagedIPv6+":"+strconv.FormatUint(uint64(id), 10)] = true
 	}
 	for _, id := range forwardIDs {
 		set[userNodeTypeForward+":"+strconv.FormatUint(uint64(id), 10)] = true
@@ -177,18 +191,31 @@ func userNodeKey(item userNodeOrderItem) string {
 }
 
 func canonicalUserNodeOrder(db *gorm.DB, inboundIDs, customNodeIDs []uint) ([]userNodeOrderItem, error) {
-	return canonicalUserNodeOrderWithForwards(db, inboundIDs, nil, customNodeIDs)
+	return canonicalUserNodeOrderWithEndpoints(db, inboundIDs, nil, nil, customNodeIDs)
 }
 
-// canonicalUserNodeOrderWithForwards follows the same stable administrator/server
-// order used by subscriptions (each server's direct inbounds followed by its
-// forwarded nodes, then custom nodes).
 func canonicalUserNodeOrderWithForwards(db *gorm.DB, inboundIDs, forwardIDs, customNodeIDs []uint) ([]userNodeOrderItem, error) {
-	out := make([]userNodeOrderItem, 0, len(inboundIDs)+len(forwardIDs)+len(customNodeIDs))
-	selectedInbounds := make(map[uint]model.Inbound, len(inboundIDs))
-	if len(inboundIDs) > 0 {
+	return canonicalUserNodeOrderWithEndpoints(db, inboundIDs, nil, forwardIDs, customNodeIDs)
+}
+
+// canonicalUserNodeOrderWithEndpoints follows the same stable administrator/server
+// order used by subscriptions (each server's direct primary and IPv6 endpoints
+// followed by its forwarded nodes, then custom nodes).
+func canonicalUserNodeOrderWithEndpoints(db *gorm.DB, inboundIDs, inboundIPv6IDs, forwardIDs, customNodeIDs []uint) ([]userNodeOrderItem, error) {
+	out := make([]userNodeOrderItem, 0, len(inboundIDs)+len(inboundIPv6IDs)+len(forwardIDs)+len(customNodeIDs))
+	selectedPrimary := make(map[uint]bool, len(inboundIDs))
+	for _, id := range inboundIDs {
+		selectedPrimary[id] = true
+	}
+	selectedIPv6 := make(map[uint]bool, len(inboundIPv6IDs))
+	for _, id := range inboundIPv6IDs {
+		selectedIPv6[id] = true
+	}
+	unionInboundIDs := normalizedIDs(append(append([]uint(nil), inboundIDs...), inboundIPv6IDs...))
+	selectedInbounds := make(map[uint]model.Inbound, len(unionInboundIDs))
+	if len(unionInboundIDs) > 0 {
 		var inbounds []model.Inbound
-		if err := db.Where("id IN ?", inboundIDs).Find(&inbounds).Error; err != nil {
+		if err := db.Where("id IN ?", unionInboundIDs).Find(&inbounds).Error; err != nil {
 			return nil, err
 		}
 		for i := range inbounds {
@@ -235,7 +262,12 @@ func canonicalUserNodeOrderWithForwards(db *gorm.DB, inboundIDs, forwardIDs, cus
 			}
 			sort.Slice(serverInboundIDs, func(i, j int) bool { return serverInboundIDs[i] < serverInboundIDs[j] })
 			for _, id := range serverInboundIDs {
-				out = append(out, userNodeOrderItem{NodeType: userNodeTypeManaged, NodeID: id})
+				if selectedPrimary[id] {
+					out = append(out, userNodeOrderItem{NodeType: userNodeTypeManaged, NodeID: id})
+				}
+				if selectedIPv6[id] {
+					out = append(out, userNodeOrderItem{NodeType: userNodeTypeManagedIPv6, NodeID: id})
+				}
 			}
 
 			var serverForwardIDs []uint
@@ -258,13 +290,20 @@ func canonicalUserNodeOrderWithForwards(db *gorm.DB, inboundIDs, forwardIDs, cus
 	}
 	var remainingInbounds []uint
 	for id := range selectedInbounds {
-		if !seen[userNodeTypeManaged+":"+strconv.FormatUint(uint64(id), 10)] {
+		hasUnseenPrimary := selectedPrimary[id] && !seen[userNodeTypeManaged+":"+strconv.FormatUint(uint64(id), 10)]
+		hasUnseenIPv6 := selectedIPv6[id] && !seen[userNodeTypeManagedIPv6+":"+strconv.FormatUint(uint64(id), 10)]
+		if hasUnseenPrimary || hasUnseenIPv6 {
 			remainingInbounds = append(remainingInbounds, id)
 		}
 	}
 	sort.Slice(remainingInbounds, func(i, j int) bool { return remainingInbounds[i] < remainingInbounds[j] })
 	for _, id := range remainingInbounds {
-		out = append(out, userNodeOrderItem{NodeType: userNodeTypeManaged, NodeID: id})
+		if selectedPrimary[id] && !seen[userNodeTypeManaged+":"+strconv.FormatUint(uint64(id), 10)] {
+			out = append(out, userNodeOrderItem{NodeType: userNodeTypeManaged, NodeID: id})
+		}
+		if selectedIPv6[id] && !seen[userNodeTypeManagedIPv6+":"+strconv.FormatUint(uint64(id), 10)] {
+			out = append(out, userNodeOrderItem{NodeType: userNodeTypeManagedIPv6, NodeID: id})
+		}
 	}
 	var remainingForwards []uint
 	for id := range selectedForwards {
@@ -291,17 +330,21 @@ func canonicalUserNodeOrderWithForwards(db *gorm.DB, inboundIDs, forwardIDs, cus
 }
 
 func orderedUserNodeOrder(db *gorm.DB, userID uint, inboundIDs, customNodeIDs []uint) ([]userNodeOrderItem, error) {
-	return orderedUserNodeOrderWithForwards(db, userID, inboundIDs, nil, customNodeIDs)
+	return orderedUserNodeOrderWithEndpoints(db, userID, inboundIDs, nil, nil, customNodeIDs)
 }
 
-// orderedUserNodeOrderWithForwards applies a saved personal order, filters removed
-// or unassigned nodes, and appends new assignments in canonical order.
 func orderedUserNodeOrderWithForwards(db *gorm.DB, userID uint, inboundIDs, forwardIDs, customNodeIDs []uint) ([]userNodeOrderItem, error) {
-	canonical, err := canonicalUserNodeOrderWithForwards(db, inboundIDs, forwardIDs, customNodeIDs)
+	return orderedUserNodeOrderWithEndpoints(db, userID, inboundIDs, nil, forwardIDs, customNodeIDs)
+}
+
+// orderedUserNodeOrderWithEndpoints applies a saved personal order, filters removed
+// or unassigned nodes, and appends new assignments in canonical order.
+func orderedUserNodeOrderWithEndpoints(db *gorm.DB, userID uint, inboundIDs, inboundIPv6IDs, forwardIDs, customNodeIDs []uint) ([]userNodeOrderItem, error) {
+	canonical, err := canonicalUserNodeOrderWithEndpoints(db, inboundIDs, inboundIPv6IDs, forwardIDs, customNodeIDs)
 	if err != nil {
 		return nil, err
 	}
-	valid := userNodeSet(inboundIDs, forwardIDs, customNodeIDs)
+	valid := userNodeSet(inboundIDs, inboundIPv6IDs, forwardIDs, customNodeIDs)
 	var saved []model.UserNodeOrder
 	if err := db.Where("user_id = ?", userID).Order("sort_order, id").Find(&saved).Error; err != nil {
 		return nil, err
@@ -330,18 +373,22 @@ func orderedUserNodeOrderWithForwards(db *gorm.DB, userID uint, inboundIDs, forw
 }
 
 func validateUserNodeOrder(order []userNodeOrderItem, inboundIDs, customNodeIDs []uint) error {
-	return validateUserNodeOrderWithForwards(order, inboundIDs, nil, customNodeIDs)
+	return validateUserNodeOrderWithEndpoints(order, inboundIDs, nil, nil, customNodeIDs)
 }
 
 func validateUserNodeOrderWithForwards(order []userNodeOrderItem, inboundIDs, forwardIDs, customNodeIDs []uint) error {
-	expected := userNodeSet(inboundIDs, forwardIDs, customNodeIDs)
+	return validateUserNodeOrderWithEndpoints(order, inboundIDs, nil, forwardIDs, customNodeIDs)
+}
+
+func validateUserNodeOrderWithEndpoints(order []userNodeOrderItem, inboundIDs, inboundIPv6IDs, forwardIDs, customNodeIDs []uint) error {
+	expected := userNodeSet(inboundIDs, inboundIPv6IDs, forwardIDs, customNodeIDs)
 	if len(order) != len(expected) {
 		return errInvalidUserNodeOrder
 	}
 	seen := make(map[string]bool, len(order))
 	for i := range order {
 		item := &order[i]
-		if item.NodeID == 0 || (item.NodeType != userNodeTypeManaged && item.NodeType != userNodeTypeForward && item.NodeType != userNodeTypeCustom) {
+		if item.NodeID == 0 || (item.NodeType != userNodeTypeManaged && item.NodeType != userNodeTypeManagedIPv6 && item.NodeType != userNodeTypeForward && item.NodeType != userNodeTypeCustom) {
 			return errInvalidUserNodeOrder
 		}
 		key := userNodeKey(*item)
@@ -443,12 +490,16 @@ func (a *App) updateUserAccess(c *gin.Context) {
 		serverIDs = normalizedIDs(*req.ServerIDs)
 	}
 	inboundIDs := normalizedIDs(*req.InboundIDs)
+	var inboundIPv6IDs []uint
+	if req.InboundIPv6IDs != nil {
+		inboundIPv6IDs = normalizedIDs(*req.InboundIPv6IDs)
+	}
 	customNodeIDs := normalizedIDs(*req.CustomNodeIDs)
 	var forwardIDs []uint
 	if req.ForwardIDs != nil {
 		forwardIDs = normalizedIDs(*req.ForwardIDs)
 	}
-	if rejectTooManyIDs(c, serverIDs, inboundIDs, forwardIDs, customNodeIDs) {
+	if rejectTooManyIDs(c, serverIDs, inboundIDs, inboundIPv6IDs, forwardIDs, customNodeIDs) {
 		return
 	}
 	if req.NodeOrder != nil && len(*req.NodeOrder) > maxBatchIDs {
@@ -466,26 +517,25 @@ func (a *App) updateUserAccess(c *gin.Context) {
 	if err != nil {
 		oldProvisionedServerIDs = append([]uint(nil), user.ServerIDs...)
 	}
+	prevIPv6IDs := normalizedIDs(user.InboundIPv6IDs)
+	if req.InboundIPv6IDs == nil {
+		inboundIPv6IDs = prevIPv6IDs
+	}
 
 	unlockAudience := a.subscriptionManager().lockAudience()
 	defer unlockAudience()
 	err = a.db.Transaction(func(tx *gorm.DB) error {
-		var inbounds []model.Inbound
-		if len(inboundIDs) > 0 {
-			if err := tx.Where("id IN ?", inboundIDs).Find(&inbounds).Error; err != nil {
-				return err
-			}
-			if len(inbounds) != len(inboundIDs) {
-				return errInvalidInboundAccess
-			}
+		unionInboundIDs := normalizedIDs(append(append([]uint(nil), inboundIDs...), inboundIPv6IDs...))
+		inboundsByID, inboundServerIDs, err := loadAndValidateInbounds(tx, unionInboundIDs)
+		if err != nil {
+			return err
 		}
-		inboundServerIDs := make([]uint, 0, len(inbounds))
-		for i := range inbounds {
-			inboundServerIDs = append(inboundServerIDs, inbounds[i].ServerID)
+		if err := validateIPv6InboundServers(tx, inboundsByID, inboundIPv6IDs, prevIPv6IDs); err != nil {
+			return err
 		}
 
 		managedOrderInboundIDs := inboundIDs
-		if req.ServerIDs != nil && len(inboundIDs) == 0 {
+		if req.ServerIDs != nil && len(inboundIDs) == 0 && len(inboundIPv6IDs) == 0 {
 			if len(serverIDs) > 0 {
 				var serverCount int64
 				if err := tx.Model(&model.Server{}).Where("id IN ?", serverIDs).Count(&serverCount).Error; err != nil {
@@ -501,9 +551,11 @@ func (a *App) updateUserAccess(c *gin.Context) {
 			}
 			user.ServerIDs = serverIDs
 			user.InboundIDs = []uint{}
+			user.InboundIPv6IDs = []uint{}
 		} else {
 			user.ServerIDs = normalizedIDs(inboundServerIDs)
 			user.InboundIDs = inboundIDs
+			user.InboundIPv6IDs = inboundIPv6IDs
 		}
 
 		effectiveForwardIDs := normalizedIDs(user.ForwardIDs)
@@ -544,7 +596,7 @@ func (a *App) updateUserAccess(c *gin.Context) {
 				return errInvalidCustomNodeAccess
 			}
 		}
-		updateCols := []string{"ServerIDs", "InboundIDs", "UpdatedAt"}
+		updateCols := []string{"ServerIDs", "InboundIDs", "InboundIPv6IDs", "UpdatedAt"}
 		if req.ForwardIDs != nil {
 			updateCols = append(updateCols, "ForwardIDs")
 		}
@@ -573,14 +625,14 @@ func (a *App) updateUserAccess(c *gin.Context) {
 		var order []userNodeOrderItem
 		if req.NodeOrder != nil {
 			order = append([]userNodeOrderItem(nil), (*req.NodeOrder)...)
-			if err := validateUserNodeOrderWithForwards(order, managedOrderInboundIDs, effectiveForwardIDs, customNodeIDs); err != nil {
+			if err := validateUserNodeOrderWithEndpoints(order, managedOrderInboundIDs, inboundIPv6IDs, effectiveForwardIDs, customNodeIDs); err != nil {
 				return err
 			}
 		} else {
 			// Older clients only send assignment arrays. Preserve any saved
 			// personal order and append newly assigned nodes deterministically.
 			var err error
-			order, err = orderedUserNodeOrderWithForwards(tx, user.ID, managedOrderInboundIDs, effectiveForwardIDs, customNodeIDs)
+			order, err = orderedUserNodeOrderWithEndpoints(tx, user.ID, managedOrderInboundIDs, inboundIPv6IDs, effectiveForwardIDs, customNodeIDs)
 			if err != nil {
 				return err
 			}
@@ -589,7 +641,7 @@ func (a *App) updateUserAccess(c *gin.Context) {
 	})
 	if err != nil {
 		status := http.StatusInternalServerError
-		if errors.Is(err, errInvalidServerAccess) || errors.Is(err, errInvalidInboundAccess) || errors.Is(err, errInvalidForwardAccess) || errors.Is(err, errInvalidCustomNodeAccess) || errors.Is(err, errInvalidUserNodeOrder) || errors.Is(err, errInvalidUserNodeCustomName) {
+		if errors.Is(err, errInvalidServerAccess) || errors.Is(err, errInvalidInboundAccess) || errors.Is(err, errInvalidInboundIPv6Access) || errors.Is(err, errInvalidForwardAccess) || errors.Is(err, errInvalidCustomNodeAccess) || errors.Is(err, errInvalidUserNodeOrder) || errors.Is(err, errInvalidUserNodeCustomName) {
 			status = http.StatusBadRequest
 		}
 		c.JSON(status, gin.H{"error": err.Error()})
@@ -608,11 +660,80 @@ func (a *App) updateUserAccess(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"access": access})
 }
 
+func loadAndValidateInbounds(db *gorm.DB, inboundIDs []uint) (map[uint]model.Inbound, []uint, error) {
+	byID := make(map[uint]model.Inbound, len(inboundIDs))
+	serverIDs := make([]uint, 0, len(inboundIDs))
+	if len(inboundIDs) == 0 {
+		return byID, serverIDs, nil
+	}
+	var inbounds []model.Inbound
+	if err := db.Where("id IN ?", inboundIDs).Find(&inbounds).Error; err != nil {
+		return nil, nil, err
+	}
+	if len(inbounds) != len(inboundIDs) {
+		return nil, nil, errInvalidInboundAccess
+	}
+	for i := range inbounds {
+		byID[inbounds[i].ID] = inbounds[i]
+		serverIDs = append(serverIDs, inbounds[i].ServerID)
+	}
+	return byID, normalizedIDs(serverIDs), nil
+}
+
+func validateIPv6InboundServers(db *gorm.DB, inboundsByID map[uint]model.Inbound, inboundIPv6IDs, alreadyAssigned []uint) error {
+	if len(inboundIPv6IDs) == 0 {
+		return nil
+	}
+	existing := make(map[uint]bool, len(alreadyAssigned))
+	for _, id := range alreadyAssigned {
+		existing[id] = true
+	}
+	neededServers := make([]uint, 0, len(inboundIPv6IDs))
+	for _, id := range inboundIPv6IDs {
+		if existing[id] {
+			continue
+		}
+		if ib, ok := inboundsByID[id]; ok {
+			neededServers = append(neededServers, ib.ServerID)
+		}
+	}
+	neededServers = normalizedIDs(neededServers)
+	if len(neededServers) == 0 {
+		return nil
+	}
+	var servers []model.Server
+	if err := db.Where("id IN ?", neededServers).Find(&servers).Error; err != nil {
+		return err
+	}
+	serversByID := make(map[uint]model.Server, len(servers))
+	for i := range servers {
+		serversByID[servers[i].ID] = servers[i]
+	}
+	for _, id := range inboundIPv6IDs {
+		if existing[id] {
+			continue
+		}
+		ib, ok := inboundsByID[id]
+		if !ok {
+			return errInvalidInboundAccess
+		}
+		srv, hasServer := serversByID[ib.ServerID]
+		if !hasServer || serverIPv6Host(&srv) == "" {
+			return errInvalidInboundIPv6Access
+		}
+	}
+	return nil
+}
+
 // validateUserNodeIDs checks that every server and inbound referenced by the
-// user's assignment actually exists, and keeps ServerIDs consistent with a
-// non-empty InboundIDs (the inbound's server is always included). Mirrors the
-// validation done in updateUserAccess so both write paths reject bad IDs.
+// user's assignment actually exists, and keeps ServerIDs consistent with
+// non-empty InboundIDs or InboundIPv6IDs (the inbound's server is always
+// included). Mirrors updateUserAccess so both write paths reject bad IDs.
 func (a *App) validateUserNodeIDs(u *model.User) error {
+	return a.validateUserNodeIDsWithPrevIPv6(u, nil)
+}
+
+func (a *App) validateUserNodeIDsWithPrevIPv6(u *model.User, prevIPv6IDs []uint) error {
 	if len(u.ServerIDs) > 0 {
 		var servers int64
 		if err := a.db.Model(&model.Server{}).Where("id IN ?", u.ServerIDs).Count(&servers).Error; err != nil {
@@ -622,23 +743,24 @@ func (a *App) validateUserNodeIDs(u *model.User) error {
 			return errors.New("服务器列表包含不存在的受管服务器")
 		}
 	}
-	if len(u.InboundIDs) > 0 {
-		var inbounds []model.Inbound
-		if err := a.db.Where("id IN ?", u.InboundIDs).Find(&inbounds).Error; err != nil {
+	unionInboundIDs := normalizedIDs(append(append([]uint(nil), u.InboundIDs...), u.InboundIPv6IDs...))
+	if len(unionInboundIDs) > 0 {
+		inboundsByID, inboundServerIDs, err := loadAndValidateInbounds(a.db, unionInboundIDs)
+		if err != nil {
 			return err
 		}
-		if len(inbounds) != len(u.InboundIDs) {
-			return errInvalidInboundAccess
+		if err := validateIPv6InboundServers(a.db, inboundsByID, u.InboundIPv6IDs, prevIPv6IDs); err != nil {
+			return err
 		}
 		// A user assigned specific inbounds must also be provisioned on the
 		// servers that own them, otherwise proxy-access refreshes would miss
 		// those servers. Merge them so the two lists can never drift.
-		serverSet := make(map[uint]bool, len(u.ServerIDs)+len(inbounds))
+		serverSet := make(map[uint]bool, len(u.ServerIDs)+len(inboundServerIDs))
 		for _, id := range u.ServerIDs {
 			serverSet[id] = true
 		}
-		for i := range inbounds {
-			serverSet[inbounds[i].ServerID] = true
+		for _, serverID := range inboundServerIDs {
+			serverSet[serverID] = true
 		}
 		merged := make([]uint, 0, len(serverSet))
 		for id := range serverSet {
@@ -708,11 +830,18 @@ func (a *App) listUsers(c *gin.Context) {
 	items := make([]userListItem, 0, len(users))
 	for i := range users {
 		count := 0
-		if len(users[i].InboundIDs) > 0 {
-			seen := make(map[uint]bool, len(users[i].InboundIDs))
+		if len(users[i].InboundIDs) > 0 || len(users[i].InboundIPv6IDs) > 0 {
+			seenPrimary := make(map[uint]bool, len(users[i].InboundIDs))
 			for _, inboundID := range users[i].InboundIDs {
-				if _, exists := inboundServers[inboundID]; exists && !seen[inboundID] {
-					seen[inboundID] = true
+				if _, exists := inboundServers[inboundID]; exists && !seenPrimary[inboundID] {
+					seenPrimary[inboundID] = true
+					count++
+				}
+			}
+			seenIPv6 := make(map[uint]bool, len(users[i].InboundIPv6IDs))
+			for _, inboundID := range users[i].InboundIPv6IDs {
+				if _, exists := inboundServers[inboundID]; exists && !seenIPv6[inboundID] {
+					seenIPv6[inboundID] = true
 					count++
 				}
 			}
@@ -754,7 +883,7 @@ func (a *App) createUser(c *gin.Context) {
 	if !bindJSON(c, &req) {
 		return
 	}
-	if rejectTooManyIDs(c, req.ServerIDs, req.InboundIDs, req.ForwardIDs) {
+	if rejectTooManyIDs(c, req.ServerIDs, req.InboundIDs, req.InboundIPv6IDs, req.ForwardIDs) {
 		return
 	}
 	a.userAccessMu.Lock()
@@ -789,6 +918,7 @@ func (a *App) createUser(c *gin.Context) {
 		Role:            model.RoleUser,
 		ServerIDs:       normalizedIDs(req.ServerIDs),
 		InboundIDs:      normalizedIDs(req.InboundIDs),
+		InboundIPv6IDs:  normalizedIDs(req.InboundIPv6IDs),
 		ForwardIDs:      normalizedIDs(req.ForwardIDs),
 		ExpireAt:        unixToTime(req.ExpireAt),
 		SubToken:        randHex(16),
@@ -836,7 +966,7 @@ func (a *App) updateUser(c *gin.Context) {
 	if !bindJSON(c, &req) {
 		return
 	}
-	if rejectTooManyIDs(c, req.ServerIDs, req.InboundIDs, req.ForwardIDs) {
+	if rejectTooManyIDs(c, req.ServerIDs, req.InboundIDs, req.InboundIPv6IDs, req.ForwardIDs) {
 		return
 	}
 	a.userAccessMu.Lock()
@@ -894,6 +1024,7 @@ func (a *App) updateUser(c *gin.Context) {
 	}
 	accessChanged := false
 	forwardChanged := false
+	prevIPv6IDs := normalizedIDs(u.InboundIPv6IDs)
 	if req.ServerIDs != nil {
 		u.ServerIDs = normalizedIDs(req.ServerIDs)
 		accessChanged = true
@@ -901,6 +1032,10 @@ func (a *App) updateUser(c *gin.Context) {
 	// A nil slice means "not sent"; an empty one means "cleared" (= all inbounds).
 	if req.InboundIDs != nil {
 		u.InboundIDs = normalizedIDs(req.InboundIDs)
+		accessChanged = true
+	}
+	if req.InboundIPv6IDs != nil {
+		u.InboundIPv6IDs = normalizedIDs(req.InboundIPv6IDs)
 		accessChanged = true
 	}
 	if req.ForwardIDs != nil {
@@ -911,7 +1046,7 @@ func (a *App) updateUser(c *gin.Context) {
 	// Validate the assigned node lists the same way updateUserAccess does, so an
 	// API client passing a stale/nonexistent ID gets a clear 400 instead of a
 	// silently dropped assignment.
-	if err := a.validateUserNodeIDs(&u); err != nil {
+	if err := a.validateUserNodeIDsWithPrevIPv6(&u, prevIPv6IDs); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -932,7 +1067,7 @@ func (a *App) updateUser(c *gin.Context) {
 	}
 	if accessChanged {
 		// validateUserNodeIDs may merge the owning server of a selected inbound.
-		columns = append(columns, "ServerIDs", "InboundIDs")
+		columns = append(columns, "ServerIDs", "InboundIDs", "InboundIPv6IDs")
 	}
 	if forwardChanged {
 		columns = append(columns, "ForwardIDs")

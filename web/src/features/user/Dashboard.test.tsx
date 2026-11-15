@@ -132,4 +132,15 @@ describe('user subscription dashboard', () => {
     await screen.findByText('Tokyo')
     expect(getUserNodes).toHaveBeenCalledTimes(3)
   })
+
+  it('brackets literal IPv6 server addresses when formatting node endpoints', async () => {
+    const v6Node: UserNode = {
+      name: 'Tokyo - v6', type: 'vless', server: '2001:db8::1', port: 8443, region: 'JP',
+      link: 'vless://uuid@[2001:db8::1]:8443', params: { 地址: '2001:db8::1', 端口: '8443' },
+    }
+    vi.mocked(getUserNodes).mockResolvedValueOnce([v6Node])
+    mount()
+    await screen.findByText('Tokyo - v6')
+    expect(screen.getByText('[2001:db8::1]:8443')).toBeTruthy()
+  })
 })

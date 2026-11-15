@@ -173,3 +173,51 @@ func TestLegacyMultiUserSOCKSBecomesAuthenticatedSingleUser(t *testing.T) {
 		t.Fatalf("legacy SOCKS became unauthenticated: %s", raw)
 	}
 }
+
+func TestHasInboundProvisionsCredentialsForIPv6OnlyAssignment(t *testing.T) {
+	db := testDB(t)
+	server := model.Server{
+		Name: "v6-cred", AgentToken: "v6-cred-token", ConfigMode: model.ConfigModeManaged,
+		IPv6Mode: model.ServerIPv6ModeAuto, PublicIPv6: "2001:db8::55",
+	}
+	if err := db.Create(&server).Error; err != nil {
+		t.Fatal(err)
+	}
+	vlessSettings, _ := json.Marshal(singbox.InboundSettings{MultiUser: true})
+	vless := model.Inbound{
+		ServerID: server.ID, Tag: "vless", Type: model.InboundVLESS,
+		ListenPort: 26001, Enabled: true, Settings: vlessSettings,
+	}
+	if err := db.Create(&vless).Error; err != nil {
+		t.Fatal(err)
+	}
+	user := model.User{
+		Email: "v6-user", Password: "x", Role: model.RoleUser, Enabled: true,
+		SubToken: "v6-cred-sub", ProxyToken: "v6-cred-proxy",
+		ServerIDs: []uint{server.ID}, InboundIPv6IDs: []uint{vless.ID},
+	}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatal(err)
+	}
+	if user.IsServerWide() || !user.HasInbound(server.ID, vless.ID) || user.HasPrimaryInbound(server.ID, vless.ID) || !user.HasIPv6Inbound(server.ID, vless.ID) {
+		t.Fatalf("unexpected inbound predicate state: serverWide=%v has=%v primary=%v ipv6=%v",
+			user.IsServerWide(), user.HasInbound(server.ID, vless.ID), user.HasPrimaryInbound(server.ID, vless.ID), user.HasIPv6Inbound(server.ID, vless.ID))
+	}
+	raw, err := NewOrchestrator(db, NewHub(db)).BuildServerConfig(&server)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config struct {
+		Inbounds []struct {
+			Users []struct {
+				UUID string `json:"uuid"`
+			} `json:"users"`
+		} `json:"inbounds"`
+	}
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatal(err)
+	}
+	if len(config.Inbounds) != 1 || len(config.Inbounds[0].Users) != 1 {
+		t.Fatalf("v6-only user credential missing from server config: %s", raw)
+	}
+}

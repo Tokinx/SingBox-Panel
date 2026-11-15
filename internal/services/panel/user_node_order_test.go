@@ -151,3 +151,41 @@ func TestPerUserCustomNodeNameOverridesManagedAndSingleNodeDefaults(t *testing.T
 		t.Fatal("expected validateUserNodeOrder to reject newline in custom_name")
 	}
 }
+
+func TestOrderedUserNodeOrderIncludesManagedIPv6(t *testing.T) {
+	db := testDB(t)
+	srv := model.Server{Name: "DualOrder", AgentToken: "dual-order", IPv6Mode: model.ServerIPv6ModeAuto, PublicIPv6: "2001:db8::77"}
+	if err := db.Create(&srv).Error; err != nil {
+		t.Fatal(err)
+	}
+	ib := model.Inbound{ServerID: srv.ID, Tag: "vless-in", Type: model.InboundVLESS, ListenPort: 27001, Enabled: true}
+	if err := db.Create(&ib).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	canonical, err := canonicalUserNodeOrderWithEndpoints(db, []uint{ib.ID}, []uint{ib.ID}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(canonical) != 2 || canonical[0].NodeType != userNodeTypeManaged || canonical[1].NodeType != userNodeTypeManagedIPv6 {
+		t.Fatalf("canonical order = %+v", canonical)
+	}
+
+	desired := []userNodeOrderItem{
+		{NodeType: userNodeTypeManagedIPv6, NodeID: ib.ID, CustomName: "IPv6 优先"},
+		{NodeType: userNodeTypeManaged, NodeID: ib.ID, CustomName: "IPv4 备用"},
+	}
+	if err := validateUserNodeOrderWithEndpoints(desired, []uint{ib.ID}, []uint{ib.ID}, nil, nil); err != nil {
+		t.Fatalf("validateUserNodeOrderWithEndpoints: %v", err)
+	}
+	if err := saveUserNodeOrder(db, 42, desired); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := orderedUserNodeOrderWithEndpoints(db, 42, []uint{ib.ID}, []uint{ib.ID}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded) != 2 || loaded[0] != desired[0] || loaded[1] != desired[1] {
+		t.Fatalf("loaded order = %+v; want %+v", loaded, desired)
+	}
+}

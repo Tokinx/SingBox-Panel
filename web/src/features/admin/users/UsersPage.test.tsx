@@ -468,4 +468,118 @@ describe('editing a selected user subscription', () => {
       node_order: [{ node_type: 'forward', node_id: 101, custom_name: 'Tokyo -> LA Reality' }],
     }))
   })
+
+  it('splits dual-stack managed inbound into independent v4 and v6 endpoints', async () => {
+    const dualServer: Server = {
+      ...server,
+      ipv6_mode: 'auto',
+      public_ipv6: '2001:db8::10',
+    }
+    const singleAccess: UserAccess = {
+      user_id: 2,
+      server_ids: [5],
+      server_wide: false,
+      inbound_ids: [10],
+      inbound_ipv6_ids: [],
+      custom_node_ids: [],
+      node_order: [{ node_type: 'managed', node_id: 10 }],
+    }
+    vi.mocked(listServers).mockResolvedValue([dualServer])
+    vi.mocked(getUserAccess).mockResolvedValue(structuredClone(singleAccess))
+    vi.mocked(updateUserAccess).mockImplementation(async (_id, body) => ({
+      user_id: 2,
+      server_ids: body.server_ids,
+      server_wide: false,
+      inbound_ids: body.inbound_ids,
+      inbound_ipv6_ids: body.inbound_ipv6_ids ?? [],
+      forward_ids: body.forward_ids ?? [],
+      custom_node_ids: body.custom_node_ids,
+      node_order: body.node_order,
+    }))
+
+    mount('/admin/users/2')
+    await screen.findByRole('textbox', { name: '自定义 Tokyo 的节点名称' })
+
+    selectTab(/面板节点/)
+    fireEvent.click(screen.getByRole('button', { name: '展开 Tokyo' }))
+    const v4Btn = screen.getByRole('button', { name: '分配 vless-main v4' })
+    const v6Btn = screen.getByRole('button', { name: '分配 vless-main v6' })
+    expect(v4Btn.getAttribute('aria-pressed')).toBe('true')
+    expect(v6Btn.getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(v6Btn)
+    expect(v6Btn.getAttribute('aria-pressed')).toBe('true')
+
+    selectTab(/已分配/)
+    expect(orderedNames()).toEqual(['Tokyo - v4', 'Tokyo - v6'])
+    expect(screen.getByText(/\[2001:db8::10\]:443/)).toBeTruthy()
+
+    fireEvent.change(screen.getByRole('textbox', { name: '自定义 Tokyo - v6 的节点名称' }), { target: { value: '东京 IPv6' } })
+    fireEvent.keyDown(screen.getByRole('button', { name: '调整第 2 个节点顺序' }), { key: 'ArrowUp' })
+    fireEvent.click(screen.getByRole('button', { name: '保存更改' }))
+
+    await waitFor(() => expect(updateUserAccess).toHaveBeenCalledWith(2, {
+      server_ids: [],
+      inbound_ids: [10],
+      inbound_ipv6_ids: [10],
+      forward_ids: [],
+      custom_node_ids: [],
+      node_order: [
+        { node_type: 'managed_ipv6', node_id: 10, custom_name: '东京 IPv6' },
+        { node_type: 'managed', node_id: 10 },
+      ],
+    }))
+  })
+
+  it('supports v6-only assignment and server group batch v6 selection', async () => {
+    const dualServer: Server = {
+      ...server,
+      ipv6_mode: 'custom',
+      address_v6: '2001:db8::20',
+    }
+    const singleAccess: UserAccess = {
+      user_id: 2,
+      server_ids: [5],
+      server_wide: false,
+      inbound_ids: [10],
+      inbound_ipv6_ids: [],
+      custom_node_ids: [],
+      node_order: [{ node_type: 'managed', node_id: 10 }],
+    }
+    vi.mocked(listServers).mockResolvedValue([dualServer])
+    vi.mocked(getUserAccess).mockResolvedValue(structuredClone(singleAccess))
+    vi.mocked(updateUserAccess).mockImplementation(async (_id, body) => ({
+      user_id: 2,
+      server_ids: body.server_ids,
+      server_wide: false,
+      inbound_ids: body.inbound_ids,
+      inbound_ipv6_ids: body.inbound_ipv6_ids ?? [],
+      forward_ids: body.forward_ids ?? [],
+      custom_node_ids: body.custom_node_ids,
+      node_order: body.node_order,
+    }))
+
+    mount('/admin/users/2')
+    await screen.findByRole('textbox', { name: '自定义 Tokyo 的节点名称' })
+
+    selectTab(/面板节点/)
+    fireEvent.click(screen.getByRole('button', { name: '展开 Tokyo' }))
+    fireEvent.click(screen.getByRole('button', { name: '分配 vless-main v4' }))
+    fireEvent.click(screen.getByRole('button', { name: '分配 Tokyo 全部 v6' }))
+
+    selectTab(/已分配/)
+    expect(orderedNames()).toEqual(['Tokyo - vless-main (v6)', 'Tokyo - Trojan (v6)'])
+    fireEvent.click(screen.getByRole('button', { name: '保存更改' }))
+
+    await waitFor(() => expect(updateUserAccess).toHaveBeenCalledWith(2, {
+      server_ids: [],
+      inbound_ids: [],
+      inbound_ipv6_ids: [10, 11],
+      forward_ids: [],
+      custom_node_ids: [],
+      node_order: [
+        { node_type: 'managed_ipv6', node_id: 10 },
+        { node_type: 'managed_ipv6', node_id: 11 },
+      ],
+    }))
+  })
 })

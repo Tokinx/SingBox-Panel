@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { SHADOWSOCKS_METHODS, daysUntil, formatHostPort, maskHost, relativeTime, toCSV } from './util'
+import { SHADOWSOCKS_METHODS, daysUntil, formatHostPort, maskHost, relativeTime, serverIPv6Host, serverPrimaryHost, toCSV } from './util'
 
 describe('Shadowsocks methods', () => {
   it('offers aes-128-gcm in every form through the shared method list', () => {
@@ -40,5 +40,13 @@ describe('usage helpers', () => {
     expect(formatHostPort('2001:db8::1', 443)).toBe('[2001:db8::1]:443')
     expect(formatHostPort('[2001:db8::1]', 443)).toBe('[2001:db8::1]:443')
     expect(formatHostPort('', 443)).toBe('')
+  })
+  it('resolves distinct server primary and IPv6 hosts by mode', () => {
+    expect(serverPrimaryHost({ address: '', public_ip: '', public_ipv6: '2001:db8::1', ipv6_mode: '' })).toBe('2001:db8::1')
+    expect(serverPrimaryHost({ address: '', public_ip: '', public_ipv6: '2001:db8::1', ipv6_mode: 'auto' })).toBe('')
+    expect(serverIPv6Host({ address: 'v4.example.com', public_ipv6: '2001:db8::1', ipv6_mode: 'auto' })).toBe('2001:db8::1')
+    expect(serverIPv6Host({ address: '2001:db8::1', public_ipv6: '2001:db8::1', ipv6_mode: 'auto' })).toBe('')
+    expect(serverIPv6Host({ address: 'v4.example.com', address_v6: 'v6.example.com', ipv6_mode: 'custom' })).toBe('v6.example.com')
+    expect(serverIPv6Host({ address: 'v4.example.com', public_ipv6: '2001:db8::1', ipv6_mode: '' })).toBe('')
   })
 })

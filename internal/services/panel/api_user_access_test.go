@@ -324,3 +324,135 @@ func TestListUsersIncludesEffectiveNodeCount(t *testing.T) {
 		t.Fatalf("explicit node_count = %d; want %d", got, want)
 	}
 }
+
+func TestUserAccessIPv6SplittingAndValidation(t *testing.T) {
+	db := testDB(t)
+	dualServer := model.Server{
+		Name: "Dual", AgentToken: "dual-token", Address: "dual.example.com",
+		IPv6Mode: model.ServerIPv6ModeAuto, PublicIPv6: "2001:db8::10",
+	}
+	v4OnlyServer := model.Server{Name: "V4Only", AgentToken: "v4-token", Address: "v4.example.com"}
+	mustCreate(t, db, &dualServer)
+	mustCreate(t, db, &v4OnlyServer)
+
+	inbounds := []model.Inbound{
+		{ServerID: dualServer.ID, Tag: "vless-dual", Type: model.InboundVLESS, ListenPort: 24001, Enabled: true},
+		{ServerID: dualServer.ID, Tag: "trojan-dual", Type: model.InboundTrojan, ListenPort: 24002, Enabled: true},
+		{ServerID: v4OnlyServer.ID, Tag: "vless-v4", Type: model.InboundVLESS, ListenPort: 24003, Enabled: true},
+	}
+	mustCreate(t, db, &inbounds)
+
+	user := model.User{
+		Email: "split-user", Password: "unused", Role: model.RoleUser, Enabled: true,
+		SubToken: "split-user-sub",
+	}
+	mustCreate(t, db, &user)
+
+	gin.SetMode(gin.TestMode)
+	app := &App{db: db}
+	router := gin.New()
+	router.GET("/users", app.listUsers)
+	router.GET("/users/:id/access", app.getUserAccess)
+	router.PUT("/users/:id/access", app.updateUserAccess)
+
+	// Reject IPv6 assignment for an inbound whose server has no IPv6 entry enabled.
+	badBody, _ := json.Marshal(map[string]any{
+		"server_ids":       []uint{},
+		"inbound_ids":      []uint{inbounds[2].ID},
+		"inbound_ipv6_ids": []uint{inbounds[2].ID},
+		"custom_node_ids":  []uint{},
+	})
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodPut, fmt.Sprintf("/users/%d/access", user.ID), bytes.NewReader(badBody)))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 when server has no IPv6 entry, got %d body=%s", w.Code, w.Body.String())
+	}
+
+	// Assign dual-stack endpoint on inbound 0 plus v4-only on inbound 1, with independent names and order.
+	body, _ := json.Marshal(map[string]any{
+		"server_ids":       []uint{},
+		"inbound_ids":      []uint{inbounds[0].ID, inbounds[1].ID},
+		"inbound_ipv6_ids": []uint{inbounds[0].ID},
+		"custom_node_ids":  []uint{},
+		"node_order": []map[string]any{
+			{"node_type": userNodeTypeManagedIPv6, "node_id": inbounds[0].ID, "custom_name": "Dual IPv6 First"},
+			{"node_type": userNodeTypeManaged, "node_id": inbounds[1].ID},
+			{"node_type": userNodeTypeManaged, "node_id": inbounds[0].ID, "custom_name": "Dual IPv4 Last"},
+		},
+	})
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodPut, fmt.Sprintf("/users/%d/access", user.ID), bytes.NewReader(body)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("PUT dual-stack access = %d body=%s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/users/%d/access", user.ID), nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET dual-stack access = %d body=%s", w.Code, w.Body.String())
+	}
+	var gotResp struct {
+		Access userAccessResp `json:"access"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &gotResp); err != nil {
+		t.Fatal(err)
+	}
+	if gotResp.Access.ServerWide {
+		t.Fatal("expected server_wide=false after explicit split assignment")
+	}
+	if fmt.Sprint(gotResp.Access.InboundIDs) != fmt.Sprint([]uint{inbounds[0].ID, inbounds[1].ID}) {
+		t.Fatalf("inbound_ids = %v; want [%d %d]", gotResp.Access.InboundIDs, inbounds[0].ID, inbounds[1].ID)
+	}
+	if fmt.Sprint(gotResp.Access.InboundIPv6IDs) != fmt.Sprint([]uint{inbounds[0].ID}) {
+		t.Fatalf("inbound_ipv6_ids = %v; want [%d]", gotResp.Access.InboundIPv6IDs, inbounds[0].ID)
+	}
+	if len(gotResp.Access.NodeOrder) != 3 ||
+		gotResp.Access.NodeOrder[0].NodeType != userNodeTypeManagedIPv6 ||
+		gotResp.Access.NodeOrder[0].CustomName != "Dual IPv6 First" ||
+		gotResp.Access.NodeOrder[2].CustomName != "Dual IPv4 Last" {
+		t.Fatalf("unexpected node_order: %+v", gotResp.Access.NodeOrder)
+	}
+
+	// Switch to v6-only and confirm wildcard expansion does not kick in and node_count = 1.
+	v6OnlyBody, _ := json.Marshal(map[string]any{
+		"server_ids":       []uint{},
+		"inbound_ids":      []uint{},
+		"inbound_ipv6_ids": []uint{inbounds[0].ID},
+		"custom_node_ids":  []uint{},
+		"node_order": []map[string]any{
+			{"node_type": userNodeTypeManagedIPv6, "node_id": inbounds[0].ID},
+		},
+	})
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodPut, fmt.Sprintf("/users/%d/access", user.ID), bytes.NewReader(v6OnlyBody)))
+	if w.Code != http.StatusOK {
+		t.Fatalf("PUT v6-only access = %d body=%s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, fmt.Sprintf("/users/%d/access", user.ID), nil))
+	var v6OnlyResp struct {
+		Access userAccessResp `json:"access"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &v6OnlyResp); err != nil {
+		t.Fatal(err)
+	}
+	if v6OnlyResp.Access.ServerWide || len(v6OnlyResp.Access.InboundIDs) != 0 || fmt.Sprint(v6OnlyResp.Access.InboundIPv6IDs) != fmt.Sprint([]uint{inbounds[0].ID}) {
+		t.Fatalf("v6-only get access unexpected: %+v", v6OnlyResp.Access)
+	}
+
+	w = httptest.NewRecorder()
+	router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/users", nil))
+	var usersResp struct {
+		Users []struct {
+			ID        uint `json:"id"`
+			NodeCount int  `json:"node_count"`
+		} `json:"users"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &usersResp); err != nil {
+		t.Fatal(err)
+	}
+	if len(usersResp.Users) != 1 || usersResp.Users[0].NodeCount != 1 {
+		t.Fatalf("v6-only node_count = %+v; want 1", usersResp.Users)
+	}
+}

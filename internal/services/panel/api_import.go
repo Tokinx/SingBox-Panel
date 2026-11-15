@@ -510,7 +510,7 @@ func syncImportedInbounds(tx *gorm.DB, serverID uint, parsed []singbox.ParsedInb
 	if err := rejectInboundForwardReferences(tx, removedIDs); err != nil {
 		return err
 	}
-	if err := deleteUserNodeOrderRefs(tx, userNodeTypeManaged, removedIDs); err != nil {
+	if err := deleteManagedUserNodeOrderRefs(tx, removedIDs); err != nil {
 		return err
 	}
 	if err := deleteRowsExcept(tx, serverID, keepIDs, &model.Inbound{}); err != nil {

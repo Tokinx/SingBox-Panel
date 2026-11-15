@@ -49,7 +49,7 @@ import {
 import type { CustomNode, CustomNodeSubscription, NameRewriteRule, UserNodeOrderItem } from '../../../api'
 import type { Inbound, Server } from '../../../types'
 import { RegionFlag, regionCodeFromFlag, removeRegionFlag } from '../../../components/RegionFlag'
-import { SHADOWSOCKS_METHODS } from '../../../util'
+import { formatHostPort, serverIPv6Host, serverPrimaryHost, SHADOWSOCKS_METHODS } from '../../../util'
 import { RequestState } from '../../../components/RequestState'
 import { buildCustomNodeParams } from '../../../customNodeForm'
 import { Pills, Status } from '../../../ui/Page'
@@ -90,7 +90,7 @@ const MANAGEMENT_TABLE_ROW_HEIGHT = 53
 const MANAGEMENT_TABLE_HEAD_HEIGHT = 42
 const SUBSCRIPTION_TABLE_SCROLL_HEIGHT = MANAGEMENT_TABLE_HEAD_HEIGHT + MAX_VISIBLE_SUBSCRIPTIONS * MANAGEMENT_TABLE_ROW_HEIGHT
 
-type AccessKind = 'managed' | 'forward' | 'custom'
+type AccessKind = 'managed' | 'managed_ipv6' | 'forward' | 'custom'
 
 interface AccessNodeItem {
   id: number
@@ -98,6 +98,8 @@ interface AccessNodeItem {
   name: string
   serverId?: number
   serverName?: string
+  port?: number
+  ipv6Host?: string
   defaultDisplayName?: string
   detail: string
   protocol: string
@@ -147,6 +149,20 @@ function formatManagedNodeDisplayName(serverName: string, tag: string, typ: stri
   return `${trimmedServer} - ${tag}`
 }
 
+function formatManagedEndpointDisplayName(
+  serverName: string,
+  tag: string,
+  typ: string,
+  countOnServer: number,
+  stack: 'v4' | 'v6' | null = null,
+): string {
+  const trimmedServer = serverName.trim()
+  const base = formatManagedNodeDisplayName(serverName, tag, typ, countOnServer)
+  if (!stack) return base
+  if (countOnServer <= 1 && trimmedServer) return `${base} - ${stack}`
+  return `${base} (${stack})`
+}
+
 interface AccessGroup {
   key: string
   label: string
@@ -163,23 +179,66 @@ function userNodeOrderKey(item: UserNodeOrderItem) {
 // onToggle takes (item, checked) so the parent can pass a stable useCallback
 // reference — an inline (checked) => toggleItem(item, checked) arrow would get
 // a fresh identity every render and defeat the memo (all chips would re-render).
-const AccessItem = memo(function AccessItem({ item, checked, disabled, onToggle }: {
+const AccessItem = memo(function AccessItem({ item, checked, ipv6Checked, disabled, onToggle, onToggleIPv6 }: {
   item: AccessNodeItem
   checked: boolean
+  ipv6Checked: boolean
   disabled: boolean
   onToggle: (item: AccessNodeItem, checked: boolean) => void
+  onToggleIPv6: (item: AccessNodeItem, checked: boolean) => void
 }) {
+  if (!item.ipv6Host) {
+    return (
+      <Checkbox className={`um-access-chip${checked ? ' checked' : ''}${disabled ? ' disabled' : ''}`} title={item.detail}
+        aria-label={`分配 ${item.name}`} checked={checked} disabled={disabled} onChange={(event) => onToggle(item, event.target.checked)}>
+        <span className="um-access-chip-name">{item.name}</span>
+        <span className="um-access-chip-proto">
+          {item.kind === 'forward'
+            ? `转发 · ${nodeTypeLabel[item.protocol] || item.protocol || '-'}`
+            : (nodeTypeLabel[item.protocol] || item.protocol || '-')}
+        </span>
+        {!item.enabled ? <span className="um-access-chip-off">停用</span> : null}
+      </Checkbox>
+    )
+  }
+
+  const anyChecked = checked || ipv6Checked
+  const ipv6Detail = formatHostPort(item.ipv6Host, item.port)
   return (
-    <Checkbox className={`um-access-chip${checked ? ' checked' : ''}${disabled ? ' disabled' : ''}`} title={item.detail}
-      aria-label={`分配 ${item.name}`} checked={checked} disabled={disabled} onChange={(event) => onToggle(item, event.target.checked)}>
-      <span className="um-access-chip-name">{item.name}</span>
-      <span className="um-access-chip-proto">
-        {item.kind === 'forward'
-          ? `转发 · ${nodeTypeLabel[item.protocol] || item.protocol || '-'}`
-          : (nodeTypeLabel[item.protocol] || item.protocol || '-')}
+    <div
+      className={`um-access-chip um-access-chip-dual${anyChecked ? ' checked' : ''}${disabled ? ' disabled' : ''}`}
+      title={`${item.detail} / ${ipv6Detail}`}
+    >
+      <span className="um-access-chip-main">
+        <span className="um-access-chip-name">{item.name}</span>
+        <span className="um-access-chip-proto">{nodeTypeLabel[item.protocol] || item.protocol || '-'}</span>
+        {!item.enabled ? <span className="um-access-chip-off">停用</span> : null}
       </span>
-      {!item.enabled ? <span className="um-access-chip-off">停用</span> : null}
-    </Checkbox>
+      <span className="um-access-stack-group" role="group" aria-label={`${item.name} 协议栈`}>
+        <button
+          type="button"
+          className={`um-access-stack-btn${checked ? ' is-active' : ''}`}
+          aria-pressed={checked}
+          aria-label={`分配 ${item.name} v4`}
+          title={`主入口：${item.detail}`}
+          disabled={disabled}
+          onClick={() => onToggle(item, !checked)}
+        >
+          v4
+        </button>
+        <button
+          type="button"
+          className={`um-access-stack-btn${ipv6Checked ? ' is-active' : ''}`}
+          aria-pressed={ipv6Checked}
+          aria-label={`分配 ${item.name} v6`}
+          title={`IPv6 入口：${ipv6Detail}`}
+          disabled={disabled}
+          onClick={() => onToggleIPv6(item, !ipv6Checked)}
+        >
+          v6
+        </button>
+      </span>
+    </div>
   )
 })
 
@@ -194,10 +253,12 @@ export function UserAccessEditor({ userId, onStateChange }: {
   const [loadedServerIDs, setLoadedServerIDs] = useState<number[]>([])
   const [loadedServerWide, setLoadedServerWide] = useState(false)
   const [loadedInboundIDs, setLoadedInboundIDs] = useState<number[]>([])
+  const [loadedInboundIPv6IDs, setLoadedInboundIPv6IDs] = useState<number[]>([])
   const [loadedForwardIDs, setLoadedForwardIDs] = useState<number[]>([])
   const [loadedCustomNodeIDs, setLoadedCustomNodeIDs] = useState<number[]>([])
   const [loadedNodeOrder, setLoadedNodeOrder] = useState<UserNodeOrderItem[]>([])
   const [inboundIDs, setInboundIDs] = useState<number[]>([])
+  const [inboundIPv6IDs, setInboundIPv6IDs] = useState<number[]>([])
   const [forwardIDs, setForwardIDs] = useState<number[]>([])
   const [customNodeIDs, setCustomNodeIDs] = useState<number[]>([])
   const [nodeOrder, setNodeOrder] = useState<UserNodeOrderItem[]>([])
@@ -266,10 +327,12 @@ export function UserAccessEditor({ userId, onStateChange }: {
         setLoadedServerIDs(access.server_ids ?? [])
         setLoadedServerWide(!!access.server_wide)
         setLoadedInboundIDs(access.inbound_ids)
+        setLoadedInboundIPv6IDs(access.inbound_ipv6_ids ?? [])
         setLoadedForwardIDs(access.forward_ids ?? [])
         setLoadedCustomNodeIDs(access.custom_node_ids)
         setLoadedNodeOrder(initialOrder)
         setInboundIDs(access.inbound_ids)
+        setInboundIPv6IDs(access.inbound_ipv6_ids ?? [])
         setForwardIDs(access.forward_ids ?? [])
         setCustomNodeIDs(access.custom_node_ids)
         setNodeOrder(initialOrder)
@@ -295,13 +358,17 @@ export function UserAccessEditor({ userId, onStateChange }: {
       }
     }
     return servers.map((server) => {
+      const primaryHost = serverPrimaryHost(server)
+      const ipv6Host = serverIPv6Host(server)
       const inboundItems: AccessNodeItem[] = (server.inbounds ?? []).map((inbound: Inbound) => ({
         id: inbound.id,
         kind: 'managed' as const,
         name: inbound.tag || nodeTypeLabel[inbound.type] || inbound.type,
         serverId: server.id,
         serverName: server.name,
-        detail: `${server.address || server.public_ip || '-'}:${inbound.listen_port}`,
+        port: inbound.listen_port,
+        ipv6Host: ipv6Host || undefined,
+        detail: primaryHost ? formatHostPort(primaryHost, inbound.listen_port) : `-:${inbound.listen_port}`,
         protocol: inbound.type,
         enabled: inbound.enabled,
       }))
@@ -405,14 +472,17 @@ export function UserAccessEditor({ userId, onStateChange }: {
   )
 
   const selectedInboundSet = useMemo(() => new Set(inboundIDs), [inboundIDs])
+  const selectedIPv6Set = useMemo(() => new Set(inboundIPv6IDs), [inboundIPv6IDs])
   const selectedForwardSet = useMemo(() => new Set(forwardIDs), [forwardIDs])
   const selectedCustomSet = useMemo(() => new Set(customNodeIDs), [customNodeIDs])
   const isSelected = (item: AccessNodeItem) => (
     item.kind === 'managed'
       ? selectedInboundSet.has(item.id)
-      : item.kind === 'forward'
-        ? selectedForwardSet.has(item.id)
-        : selectedCustomSet.has(item.id)
+      : item.kind === 'managed_ipv6'
+        ? selectedIPv6Set.has(item.id)
+        : item.kind === 'forward'
+          ? selectedForwardSet.has(item.id)
+          : selectedCustomSet.has(item.id)
   )
 
   const isDirty = useMemo(() => {
@@ -426,8 +496,14 @@ export function UserAccessEditor({ userId, onStateChange }: {
         userNodeOrderKey(item) === userNodeOrderKey(nodeOrder[index])
         && (item.custom_name ?? '').trim() === (nodeOrder[index].custom_name ?? '').trim(),
       )
-    return !equal(loadedInboundIDs, inboundIDs) || !equal(loadedForwardIDs, forwardIDs) || !equal(loadedCustomNodeIDs, customNodeIDs) || !sameOrder
-  }, [customNodeIDs, forwardIDs, inboundIDs, loadedCustomNodeIDs, loadedForwardIDs, loadedInboundIDs, loadedNodeOrder, nodeOrder])
+    return (
+      !equal(loadedInboundIDs, inboundIDs)
+      || !equal(loadedInboundIPv6IDs, inboundIPv6IDs)
+      || !equal(loadedForwardIDs, forwardIDs)
+      || !equal(loadedCustomNodeIDs, customNodeIDs)
+      || !sameOrder
+    )
+  }, [customNodeIDs, forwardIDs, inboundIDs, inboundIPv6IDs, loadedCustomNodeIDs, loadedForwardIDs, loadedInboundIDs, loadedInboundIPv6IDs, loadedNodeOrder, nodeOrder])
 
   useEffect(() => {
     onStateChange({ dirty: isDirty, saving })
@@ -450,6 +526,7 @@ export function UserAccessEditor({ userId, onStateChange }: {
       return [...next]
     }
     if (kind === 'managed') setInboundIDs(update)
+    else if (kind === 'managed_ipv6') setInboundIPv6IDs(update)
     else if (kind === 'forward') setForwardIDs(update)
     else setCustomNodeIDs(update)
     if (!checked) setRenamingNode((current) => current && ids.some((id) => current.key === `${kind}:${id}`) ? null : current)
@@ -498,6 +575,10 @@ export function UserAccessEditor({ userId, onStateChange }: {
     setIDs(item.kind, [item.id], checked)
   }, [setIDs])
 
+  const toggleItemIPv6 = useCallback((item: AccessNodeItem, checked: boolean) => {
+    setIDs('managed_ipv6', [item.id], checked)
+  }, [setIDs])
+
   const toggleGroupExpanded = (key: string) => {
     setExpandedGroups((current) => {
       const next = new Set(current)
@@ -519,6 +600,7 @@ export function UserAccessEditor({ userId, onStateChange }: {
       if (item.custom_name) customNameCacheRef.current.set(userNodeOrderKey(item), item.custom_name)
     }
     setInboundIDs(loadedInboundIDs)
+    setInboundIPv6IDs(loadedInboundIPv6IDs)
     setForwardIDs(loadedForwardIDs)
     setCustomNodeIDs(loadedCustomNodeIDs)
     setNodeOrder(loadedNodeOrder)
@@ -532,7 +614,11 @@ export function UserAccessEditor({ userId, onStateChange }: {
     next.splice(to, 0, moved)
     nodeOrderRef.current = next
     setNodeOrder(next)
-    const label = moved.node_type === 'managed' ? '面板节点' : moved.node_type === 'forward' ? '转发节点' : '外部节点'
+    const label = moved.node_type === 'managed' || moved.node_type === 'managed_ipv6'
+      ? '面板节点'
+      : moved.node_type === 'forward'
+        ? '转发节点'
+        : '外部节点'
     setSortAnnouncement(`${label} #${moved.node_id} 已移动到第 ${to + 1} 位`)
   }, [])
 
@@ -638,22 +724,29 @@ export function UserAccessEditor({ userId, onStateChange }: {
       // and future inbound on A. Keep that wildcard whenever the administrator
       // only edits custom nodes or ordering; materialize to explicit inbounds
       // only after the managed selection itself changes.
-      const preserveServerWide = loadedServerWide && sameIDs(loadedInboundIDs, inboundIDs)
+      const preserveServerWide = loadedServerWide
+        && sameIDs(loadedInboundIDs, inboundIDs)
+        && sameIDs(loadedInboundIPv6IDs, inboundIPv6IDs)
+      const includeIPv6Field = inboundIPv6IDs.length > 0 || loadedInboundIPv6IDs.length > 0
       const access = await updateUserAccess(userId, {
         server_ids: preserveServerWide ? loadedServerIDs : [],
         inbound_ids: preserveServerWide ? [] : inboundIDs,
+        ...(includeIPv6Field ? { inbound_ipv6_ids: preserveServerWide ? [] : inboundIPv6IDs } : {}),
         forward_ids: forwardIDs,
         custom_node_ids: customNodeIDs,
         node_order: nodeOrder,
       })
       if (session !== assignmentSessionRef.current) return
+      const nextInboundIPv6IDs = access.inbound_ipv6_ids ?? []
       setLoadedServerIDs(access.server_ids ?? [])
       setLoadedServerWide(!!access.server_wide)
       setLoadedInboundIDs(access.inbound_ids)
+      setLoadedInboundIPv6IDs(nextInboundIPv6IDs)
       setLoadedForwardIDs(access.forward_ids ?? [])
       setLoadedCustomNodeIDs(access.custom_node_ids)
       setLoadedNodeOrder(access.node_order)
       setInboundIDs(access.inbound_ids)
+      setInboundIPv6IDs(nextInboundIPv6IDs)
       setForwardIDs(access.forward_ids ?? [])
       setCustomNodeIDs(access.custom_node_ids)
       setNodeOrder(access.node_order)
@@ -672,12 +765,19 @@ export function UserAccessEditor({ userId, onStateChange }: {
   // Renders panel-server groups and external-node groups together as
   // expandable, select-all-able sections in the unified node tab.
   const renderGroupSections = (groupList: AccessGroup[]) => groupList.map((group) => {
-    const groupSelectedCount = group.items.filter(isSelected).length
     const expanded = expandedGroups.has(group.key)
     const kinds = group.items.reduce<Record<AccessKind, number[]>>((result, item) => {
       result[item.kind].push(item.id)
+      if (item.kind === 'managed' && item.ipv6Host) {
+        result.managed_ipv6.push(item.id)
+      }
       return result
-    }, { managed: [], forward: [], custom: [] })
+    }, { managed: [], managed_ipv6: [], forward: [], custom: [] })
+    const groupEndpointCount = group.items.length + kinds.managed_ipv6.length
+    const groupSelectedCount = group.items.filter(isSelected).length
+      + kinds.managed_ipv6.filter((id) => selectedIPv6Set.has(id)).length
+    const allV4Selected = kinds.managed.length > 0 && kinds.managed.every((id) => selectedInboundSet.has(id))
+    const allV6Selected = kinds.managed_ipv6.length > 0 && kinds.managed_ipv6.every((id) => selectedIPv6Set.has(id))
     return (
       <section className="um-access-modal-group" key={group.key}>
         <div className="um-access-modal-group-head">
@@ -693,18 +793,43 @@ export function UserAccessEditor({ userId, onStateChange }: {
           </button>
           <Checkbox
             aria-label={`选择 ${group.label} 全部节点`}
-            checked={groupSelectedCount === group.items.length && group.items.length > 0}
-            indeterminate={groupSelectedCount > 0 && groupSelectedCount < group.items.length}
+            checked={groupSelectedCount === groupEndpointCount && groupEndpointCount > 0}
+            indeterminate={groupSelectedCount > 0 && groupSelectedCount < groupEndpointCount}
             disabled={saving}
             onChange={(event) => {
               setIDs('managed', kinds.managed, event.target.checked)
+              setIDs('managed_ipv6', kinds.managed_ipv6, event.target.checked)
               setIDs('forward', kinds.forward, event.target.checked)
               setIDs('custom', kinds.custom, event.target.checked)
             }}
           />
           <strong>{group.label === '未分组' ? <span className="um-access-group-unnamed">{group.label}</span> : group.label}</strong>
           {group.meta ? <small>{group.meta}</small> : null}
-          <span className="um-access-group-count">{groupSelectedCount} / {group.items.length}</span>
+          {kinds.managed_ipv6.length > 0 ? (
+            <span className="um-access-stack-group um-access-group-stacks" role="group" aria-label={`${group.label} 批量协议栈`}>
+              <button
+                type="button"
+                className={`um-access-stack-btn${allV4Selected ? ' is-active' : ''}`}
+                aria-pressed={allV4Selected}
+                aria-label={`分配 ${group.label} 全部 v4`}
+                disabled={saving}
+                onClick={() => setIDs('managed', kinds.managed, !allV4Selected)}
+              >
+                v4
+              </button>
+              <button
+                type="button"
+                className={`um-access-stack-btn${allV6Selected ? ' is-active' : ''}`}
+                aria-pressed={allV6Selected}
+                aria-label={`分配 ${group.label} 全部 v6`}
+                disabled={saving}
+                onClick={() => setIDs('managed_ipv6', kinds.managed_ipv6, !allV6Selected)}
+              >
+                v6
+              </button>
+            </span>
+          ) : null}
+          <span className="um-access-group-count">{groupSelectedCount} / {groupEndpointCount}</span>
         </div>
         {expanded ? (
           <div className="um-access-modal-items">
@@ -713,8 +838,10 @@ export function UserAccessEditor({ userId, onStateChange }: {
                 key={`${item.kind}:${item.id}`}
                 item={item}
                 checked={isSelected(item)}
+                ipv6Checked={item.kind === 'managed' && Boolean(item.ipv6Host) && selectedIPv6Set.has(item.id)}
                 disabled={saving}
                 onToggle={toggleItem}
+                onToggleIPv6={toggleItemIPv6}
               />
             ))}
           </div>
@@ -735,13 +862,27 @@ export function UserAccessEditor({ userId, onStateChange }: {
     const counts = new Map<number, number>()
     for (const group of managedGroups) {
       for (const item of group.items) {
-        if (item.enabled && selectedInboundSet.has(item.id) && item.serverId != null) {
+        const selectedAnyStack = selectedInboundSet.has(item.id)
+          || (Boolean(item.ipv6Host) && selectedIPv6Set.has(item.id))
+        if (item.kind === 'managed' && item.enabled && selectedAnyStack && item.serverId != null) {
           counts.set(item.serverId, (counts.get(item.serverId) ?? 0) + 1)
         }
       }
     }
     return counts
-  }, [managedGroups, selectedInboundSet])
+  }, [managedGroups, selectedIPv6Set, selectedInboundSet])
+
+  const activeIPv6InboundSet = useMemo(() => {
+    const set = new Set<number>()
+    for (const group of managedGroups) {
+      for (const item of group.items) {
+        if (item.kind === 'managed' && item.ipv6Host && selectedIPv6Set.has(item.id)) {
+          set.add(item.id)
+        }
+      }
+    }
+    return set
+  }, [managedGroups, selectedIPv6Set])
 
   const renderNodeOrder = () => {
     if (nodeOrder.length === 0) {
@@ -761,27 +902,49 @@ export function UserAccessEditor({ userId, onStateChange }: {
           const dropTargetAfter = dropIndex !== null && dropIndex >= remainingOrder.length
           return nodeOrder.map((orderItem, index) => {
             const key = userNodeOrderKey(orderItem)
-            const item = nodeItemMap.get(key)
+            const lookupKey = orderItem.node_type === 'managed_ipv6' ? `managed:${orderItem.node_id}` : key
+            const item = nodeItemMap.get(lookupKey)
+            const isManagedEndpoint = orderItem.node_type === 'managed' || orderItem.node_type === 'managed_ipv6'
+            const hasSplitIPv6 = orderItem.node_type === 'managed_ipv6' || activeIPv6InboundSet.has(orderItem.node_id)
+            const stack: 'v4' | 'v6' | null = isManagedEndpoint && hasSplitIPv6
+              ? (orderItem.node_type === 'managed_ipv6' ? 'v6' : 'v4')
+              : null
             const defaultName = item
-              ? (item.kind === 'managed' && item.serverName
-                ? formatManagedNodeDisplayName(
+              ? (isManagedEndpoint && item.serverName
+                ? formatManagedEndpointDisplayName(
                   item.serverName,
                   item.name,
                   item.protocol,
                   (item.serverId != null ? selectedManagedPerServer.get(item.serverId) : undefined) ?? 1,
+                  stack,
                 )
                 : item.kind === 'forward'
                   ? (item.defaultDisplayName || item.name)
                   : item.name)
               : `节点 #${orderItem.node_id}`
+            const endpointDetail = orderItem.node_type === 'managed_ipv6'
+              ? (formatHostPort(item?.ipv6Host, item?.port) || 'IPv6')
+              : (item?.detail ?? '')
             const subtitle = item
-              ? (item.kind === 'managed' && item.serverName
-                ? `${item.serverName} · ${item.name} · ${item.detail}`
+              ? (isManagedEndpoint && item.serverName
+                ? `${item.serverName} · ${item.name} · ${endpointDetail}`
                 : item.kind === 'forward' && item.serverName
                   ? `${item.serverName} · ${item.name} · ${item.detail}`
                   : item.detail)
-              : (orderItem.node_type === 'managed' ? '面板节点' : orderItem.node_type === 'forward' ? '转发节点' : '节点')
-            const kindLabel = orderItem.node_type === 'managed' ? '面板' : orderItem.node_type === 'forward' ? '转发' : '外部'
+              : (orderItem.node_type === 'managed_ipv6'
+                ? '面板 IPv6 节点'
+                : orderItem.node_type === 'managed'
+                  ? '面板节点'
+                  : orderItem.node_type === 'forward'
+                    ? '转发节点'
+                    : '节点')
+            const kindLabel = orderItem.node_type === 'managed_ipv6'
+              ? '面板 v6'
+              : orderItem.node_type === 'managed'
+                ? '面板'
+                : orderItem.node_type === 'forward'
+                  ? '转发'
+                  : '外部'
             const dropClass = dropTargetKey === key
               ? (dropTargetAfter ? ' sort-drop-after' : ' sort-drop-before')
               : ''

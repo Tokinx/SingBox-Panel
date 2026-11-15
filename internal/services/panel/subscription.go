@@ -167,8 +167,12 @@ func (a *App) gatherNodesWithError(user *model.User) ([]node, error) {
 
 		for i := range servers {
 			srv := &servers[i]
-			host, err := serverPrimaryHost(srv)
-			if err != nil || host == "" {
+			host, hostErr := serverPrimaryHost(srv)
+			if hostErr != nil {
+				host = ""
+			}
+			ipv6Host := serverIPv6Host(srv)
+			if host == "" && ipv6Host == "" {
 				continue
 			}
 			if user.HasServer(srv.ID) {
@@ -178,9 +182,9 @@ func (a *App) gatherNodesWithError(user *model.User) ([]node, error) {
 				}
 				first := len(out)
 				for _, ib := range inbounds {
-					// Respect per-inbound access: a protocol the user isn't granted must
-					// not appear in their subscription.
-					if !user.HasInbound(srv.ID, ib.ID) {
+					hasPrimary := host != "" && user.HasPrimaryInbound(srv.ID, ib.ID)
+					hasIPv6 := ipv6Host != "" && user.HasIPv6Inbound(srv.ID, ib.ID)
+					if !hasPrimary && !hasIPv6 {
 						continue
 					}
 					st, identity, ok, err := buildInboundNodeSettings(user, ib)
@@ -190,26 +194,45 @@ func (a *App) gatherNodesWithError(user *model.User) ([]node, error) {
 					if !ok {
 						continue
 					}
-					out = append(out, node{
-						orderType: userNodeTypeManaged,
-						orderID:   ib.ID,
-						tag:       ib.Tag,
-						server:    host,
-						port:      ib.ListenPort,
-						typ:       string(ib.Type),
-						region:    srv.Region,
-						settings:  st,
-						user:      identity,
-					})
+					if hasPrimary {
+						out = append(out, node{
+							orderType: userNodeTypeManaged,
+							orderID:   ib.ID,
+							tag:       ib.Tag,
+							server:    host,
+							port:      ib.ListenPort,
+							typ:       string(ib.Type),
+							region:    srv.Region,
+							settings:  st,
+							user:      identity,
+						})
+					}
+					if hasIPv6 {
+						stV6 := st
+						applyIPv6TLSServerName(&stV6, host, ipv6Host)
+						out = append(out, node{
+							orderType: userNodeTypeManagedIPv6,
+							orderID:   ib.ID,
+							tag:       ib.Tag,
+							server:    ipv6Host,
+							port:      ib.ListenPort,
+							typ:       string(ib.Type),
+							region:    srv.Region,
+							settings:  stV6,
+							user:      identity,
+						})
+					}
 				}
 				nameServerNodes(srv.Name, out[first:])
 			}
-			if serverForwards := relayForwardsByServer[srv.ID]; len(serverForwards) > 0 {
-				fwdNodes, err := buildForwardedNodes(a.db, srv, host, serverForwards, user, true)
-				if err != nil {
-					return nil, err
+			if host != "" {
+				if serverForwards := relayForwardsByServer[srv.ID]; len(serverForwards) > 0 {
+					fwdNodes, err := buildForwardedNodes(a.db, srv, host, serverForwards, user, true)
+					if err != nil {
+						return nil, err
+					}
+					out = append(out, fwdNodes...)
 				}
-				out = append(out, fwdNodes...)
 			}
 		}
 	}
@@ -622,15 +645,46 @@ func regionFromName(name string) string {
 // nameServerNodes names the panel-managed nodes one server contributes to a
 // node list. A server's only node is named after the server alone; the protocol
 // (or a custom inbound tag) is appended only when the same server contributes
-// several nodes, so those entries stay distinguishable.
+// multiple distinct inbounds, and v4/v6 suffixes are added when an inbound has
+// an IPv6 endpoint assignment.
 func nameServerNodes(serverName string, nodes []node) {
 	serverName = strings.TrimSpace(serverName)
+	distinctInbounds := 0
+	seenInbound := make(map[uint]bool, len(nodes))
+	hasIPv6ByInbound := make(map[uint]bool, len(nodes))
 	for i := range nodes {
-		if len(nodes) == 1 && serverName != "" {
-			nodes[i].name = serverName
+		id := nodes[i].orderID
+		if id == 0 {
+			distinctInbounds++
+		} else if !seenInbound[id] {
+			seenInbound[id] = true
+			distinctInbounds++
+		}
+		if nodes[i].orderType == userNodeTypeManagedIPv6 {
+			hasIPv6ByInbound[id] = true
+		}
+	}
+	for i := range nodes {
+		n := &nodes[i]
+		var base string
+		if distinctInbounds == 1 && serverName != "" {
+			base = serverName
+		} else {
+			base = formatNodeDisplayName(serverName, n.tag, n.typ)
+		}
+		if !hasIPv6ByInbound[n.orderID] {
+			n.name = base
 			continue
 		}
-		nodes[i].name = formatNodeDisplayName(serverName, nodes[i].tag, nodes[i].typ)
+		stack := "v4"
+		if n.orderType == userNodeTypeManagedIPv6 {
+			stack = "v6"
+		}
+		if distinctInbounds == 1 && serverName != "" {
+			n.name = base + " - " + stack
+		} else {
+			n.name = fmt.Sprintf("%s (%s)", base, stack)
+		}
 	}
 }
 

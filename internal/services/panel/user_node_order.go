@@ -16,3 +16,11 @@ func deleteUserNodeOrderRefs(tx *gorm.DB, nodeType string, nodeIDs []uint) error
 	return tx.Where("node_type = ? AND node_id IN ?", nodeType, nodeIDs).
 		Delete(&model.UserNodeOrder{}).Error
 }
+
+func deleteManagedUserNodeOrderRefs(tx *gorm.DB, inboundIDs []uint) error {
+	if len(inboundIDs) == 0 {
+		return nil
+	}
+	return tx.Where("node_type IN ? AND node_id IN ?", []string{userNodeTypeManaged, userNodeTypeManagedIPv6}, inboundIDs).
+		Delete(&model.UserNodeOrder{}).Error
+}

@@ -401,6 +401,11 @@ var applicationMigrations = []schemaMigration{
 		name:    "server ipv6 entry config",
 		up:      func(tx *gorm.DB) error { return tx.AutoMigrate(&model.Server{}) },
 	},
+	{
+		version: 38,
+		name:    "user ipv6 inbound assignments",
+		up:      func(tx *gorm.DB) error { return tx.AutoMigrate(&model.User{}) },
+	},
 }
 
 // migrationReplaySafe records whether an interrupted attempt of each migration
@@ -457,6 +462,7 @@ var migrationReplaySafe = map[uint]bool{
 	35: true,  // AutoMigrate adds user forward_ids column
 	36: true,  // AutoMigrate adds server public_ipv6 column
 	37: true,  // AutoMigrate adds server ipv6_mode and address_v6 columns
+	38: true,  // AutoMigrate adds user inbound_ipv6_ids column
 }
 
 func migratePortForwards(db *gorm.DB) error {

@@ -79,6 +79,10 @@ type User struct {
 	// inbound on the selected servers (the previous, server-level behaviour).
 	InboundIDs []uint `gorm:"serializer:json" json:"inbound_ids"`
 
+	// InboundIPv6IDs grants additional IPv6 endpoint access for specific
+	// inbounds whose owning server exposes a distinct IPv6 entry host.
+	InboundIPv6IDs []uint `gorm:"serializer:json" json:"inbound_ipv6_ids"`
+
 	// ForwardIDs grants forwarded node access via inbound-targeting PortForward
 	// rules (e.g. a relay server forwarding traffic to a landing inbound).
 	ForwardIDs []uint `gorm:"serializer:json" json:"forward_ids"`
@@ -506,14 +510,19 @@ func (u *User) HasServer(id uint) bool {
 	return false
 }
 
-// HasInbound reports whether the user may use one specific inbound. The user
-// must hold the server, and — when a per-inbound selection exists — that
-// inbound must be in it. An empty selection means all of the server's inbounds.
-func (u *User) HasInbound(serverID, inboundID uint) bool {
+// IsServerWide reports whether the user holds whole-server wildcard access
+// (server-level selection with no explicit primary or IPv6 inbound filtering).
+func (u *User) IsServerWide() bool {
+	return u != nil && len(u.ServerIDs) > 0 && len(u.InboundIDs) == 0 && len(u.InboundIPv6IDs) == 0
+}
+
+// HasPrimaryInbound reports whether the user may subscribe to the primary entry
+// host of one specific inbound.
+func (u *User) HasPrimaryInbound(serverID, inboundID uint) bool {
 	if !u.HasServer(serverID) {
 		return false
 	}
-	if len(u.InboundIDs) == 0 {
+	if len(u.InboundIDs) == 0 && len(u.InboundIPv6IDs) == 0 {
 		return true
 	}
 	for _, id := range u.InboundIDs {
@@ -522,6 +531,26 @@ func (u *User) HasInbound(serverID, inboundID uint) bool {
 		}
 	}
 	return false
+}
+
+// HasIPv6Inbound reports whether the user is assigned the separate IPv6 entry
+// host for one specific inbound.
+func (u *User) HasIPv6Inbound(serverID, inboundID uint) bool {
+	if !u.HasServer(serverID) {
+		return false
+	}
+	for _, id := range u.InboundIPv6IDs {
+		if id == inboundID {
+			return true
+		}
+	}
+	return false
+}
+
+// HasInbound reports whether the user may use one specific inbound on either its
+// primary entry host or its split IPv6 entry host.
+func (u *User) HasInbound(serverID, inboundID uint) bool {
+	return u.HasPrimaryInbound(serverID, inboundID) || u.HasIPv6Inbound(serverID, inboundID)
 }
 
 // HasForward reports whether the user holds direct access to one forwarded

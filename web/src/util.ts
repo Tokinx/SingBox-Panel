@@ -187,3 +187,34 @@ export function formatHostPort(host: string | null | undefined, port?: number | 
   if (port === undefined || port === null || port === '') return formattedHost
   return `${formattedHost}:${port}`
 }
+
+export function serverPrimaryHost(server: {
+  address?: string | null
+  public_ip?: string | null
+  public_ipv6?: string | null
+  ipv6_mode?: '' | 'auto' | 'custom' | string | null
+}): string {
+  const direct = (server.address || server.public_ip || '').trim()
+  if (direct) return direct
+  return !server.ipv6_mode ? (server.public_ipv6 || '').trim() : ''
+}
+
+export function serverIPv6Host(server: {
+  address?: string | null
+  public_ip?: string | null
+  public_ipv6?: string | null
+  ipv6_mode?: '' | 'auto' | 'custom' | string | null
+  address_v6?: string | null
+}): string {
+  const mode = server.ipv6_mode || ''
+  const candidate = mode === 'auto'
+    ? (server.public_ipv6 || '').trim()
+    : mode === 'custom'
+      ? (server.address_v6 || '').trim()
+      : ''
+  if (!candidate) return ''
+  const primary = serverPrimaryHost(server).replace(/^\[|\]$/g, '').toLowerCase()
+  const bareCandidate = candidate.replace(/^\[|\]$/g, '').toLowerCase()
+  if (primary && bareCandidate === primary) return ''
+  return candidate
+}

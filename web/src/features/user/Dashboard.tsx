@@ -13,6 +13,7 @@ import regionData from '../../assets/regions.json'
 import { VirtualList } from '../../components/VirtualList'
 import { RequestState } from '../../components/RequestState'
 import { RegionFlag } from '../../components/RegionFlag'
+import { formatHostPort } from '../../util'
 import { Pills, Section } from '../../ui/Page'
 import '../../styles/settings-user.css'
 import { MODAL_MD } from '../../ui/modal'
@@ -144,7 +145,7 @@ export default function Dashboard() {
         <span className="sub-node-name">{n.name}</span>
         <span className="sub-node-meta">
           {labelOf(n.region || '') && <span>{labelOf(n.region || '')}</span>}
-          <span className="mono">{n.server}:{n.port}</span>
+          <span className="mono">{formatHostPort(n.server, n.port)}</span>
         </span>
       </div>
       <span className="ui-tag sub-node-type">{n.type}</span>

@@ -19,31 +19,22 @@ func removeServerUserAssignments(tx *gorm.DB, serverID uint, deletedInboundIDs [
 	}
 	for i := range users {
 		user := &users[i]
-		affected := containsID(user.ServerIDs, serverID)
-		for _, id := range user.InboundIDs {
-			affected = affected || deleted[id]
-		}
+		affected := containsID(user.ServerIDs, serverID) ||
+			containsAnyID(user.InboundIDs, deleted) ||
+			containsAnyID(user.InboundIPv6IDs, deleted)
 		if !affected {
 			continue
 		}
 		servers := removeID(user.ServerIDs, serverID)
-		if len(user.InboundIDs) > 0 {
-			var remaining []model.Inbound
-			if len(servers) > 0 {
-				if err := tx.Select("id", "server_id").Where("id IN ? AND server_id IN ?", user.InboundIDs, servers).Find(&remaining).Error; err != nil {
-					return err
-				}
+		hadExplicit := len(user.InboundIDs) > 0 || len(user.InboundIPv6IDs) > 0
+		if hadExplicit {
+			if err := syncRemainingExplicitInboundAccess(tx, user, servers, deleted, true); err != nil {
+				return err
 			}
-			user.InboundIDs = make([]uint, 0, len(remaining))
-			servers = make([]uint, 0, len(remaining))
-			for _, inbound := range remaining {
-				user.InboundIDs = append(user.InboundIDs, inbound.ID)
-				servers = append(servers, inbound.ServerID)
-			}
-			user.InboundIDs = normalizedIDs(user.InboundIDs)
+		} else {
+			user.ServerIDs = normalizedIDs(servers)
 		}
-		user.ServerIDs = normalizedIDs(servers)
-		if err := tx.Model(user).Select("ServerIDs", "InboundIDs", "UpdatedAt").Updates(user).Error; err != nil {
+		if err := tx.Model(user).Select("ServerIDs", "InboundIDs", "InboundIPv6IDs", "UpdatedAt").Updates(user).Error; err != nil {
 			return err
 		}
 	}
@@ -90,5 +81,60 @@ func removeForwardUserAssignments(tx *gorm.DB, forwardIDs []uint) error {
 			return err
 		}
 	}
+	return nil
+}
+
+func containsAnyID(ids []uint, targets map[uint]bool) bool {
+	for _, id := range ids {
+		if targets[id] {
+			return true
+		}
+	}
+	return false
+}
+
+func filterOutIDs(ids []uint, exclude map[uint]bool) []uint {
+	out := make([]uint, 0, len(ids))
+	for _, id := range ids {
+		if !exclude[id] {
+			out = append(out, id)
+		}
+	}
+	return normalizedIDs(out)
+}
+
+func filterIDsBySet(ids []uint, valid map[uint]bool) []uint {
+	out := make([]uint, 0, len(ids))
+	for _, id := range ids {
+		if valid[id] {
+			out = append(out, id)
+		}
+	}
+	return normalizedIDs(out)
+}
+
+func syncRemainingExplicitInboundAccess(tx *gorm.DB, user *model.User, candidateServers []uint, exclude map[uint]bool, filterByServers bool) error {
+	primary := filterOutIDs(user.InboundIDs, exclude)
+	ipv6 := filterOutIDs(user.InboundIPv6IDs, exclude)
+	union := normalizedIDs(append(append([]uint(nil), primary...), ipv6...))
+	var inbounds []model.Inbound
+	if len(union) > 0 && (!filterByServers || len(candidateServers) > 0) {
+		query := tx.Select("id", "server_id").Where("id IN ?", union)
+		if filterByServers {
+			query = query.Where("server_id IN ?", candidateServers)
+		}
+		if err := query.Find(&inbounds).Error; err != nil {
+			return err
+		}
+	}
+	validIDs := make(map[uint]bool, len(inbounds))
+	serverIDs := make([]uint, 0, len(inbounds))
+	for _, inbound := range inbounds {
+		validIDs[inbound.ID] = true
+		serverIDs = append(serverIDs, inbound.ServerID)
+	}
+	user.InboundIDs = filterIDsBySet(primary, validIDs)
+	user.InboundIPv6IDs = filterIDsBySet(ipv6, validIDs)
+	user.ServerIDs = normalizedIDs(serverIDs)
 	return nil
 }

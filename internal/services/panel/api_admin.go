@@ -515,7 +515,7 @@ func (a *App) deleteServer(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	if err := deleteUserNodeOrderRefs(tx, userNodeTypeManaged, inboundIDs); err != nil {
+	if err := deleteManagedUserNodeOrderRefs(tx, inboundIDs); err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -1394,7 +1394,7 @@ func (a *App) deleteInbound(c *gin.Context) {
 		if err := tx.Delete(&ib).Error; err != nil {
 			return err
 		}
-		if err := deleteUserNodeOrderRefs(tx, userNodeTypeManaged, []uint{ib.ID}); err != nil {
+		if err := deleteManagedUserNodeOrderRefs(tx, []uint{ib.ID}); err != nil {
 			return err
 		}
 		return removeInboundUserAssignments(tx, ib.ID)
@@ -1414,26 +1414,15 @@ func removeInboundUserAssignments(tx *gorm.DB, inboundID uint) error {
 	if err := tx.Find(&users).Error; err != nil {
 		return err
 	}
+	exclude := map[uint]bool{inboundID: true}
 	for i := range users {
-		if !containsID(users[i].InboundIDs, inboundID) {
+		if !containsID(users[i].InboundIDs, inboundID) && !containsID(users[i].InboundIPv6IDs, inboundID) {
 			continue
 		}
-		remaining := removeID(users[i].InboundIDs, inboundID)
-		var inbounds []model.Inbound
-		if len(remaining) > 0 {
-			if err := tx.Where("id IN ?", remaining).Find(&inbounds).Error; err != nil {
-				return err
-			}
+		if err := syncRemainingExplicitInboundAccess(tx, &users[i], nil, exclude, false); err != nil {
+			return err
 		}
-		validInboundIDs := make([]uint, 0, len(inbounds))
-		serverIDs := make([]uint, 0, len(inbounds))
-		for _, inbound := range inbounds {
-			validInboundIDs = append(validInboundIDs, inbound.ID)
-			serverIDs = append(serverIDs, inbound.ServerID)
-		}
-		users[i].InboundIDs = normalizedIDs(validInboundIDs)
-		users[i].ServerIDs = normalizedIDs(serverIDs)
-		if err := tx.Model(&users[i]).Select("ServerIDs", "InboundIDs", "UpdatedAt").Updates(&users[i]).Error; err != nil {
+		if err := tx.Model(&users[i]).Select("ServerIDs", "InboundIDs", "InboundIPv6IDs", "UpdatedAt").Updates(&users[i]).Error; err != nil {
 			return err
 		}
 	}
