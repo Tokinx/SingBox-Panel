@@ -197,7 +197,6 @@ export default function ServerDetail() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [sectionError, setSectionError] = useState<string | null>(null)
   const [install, setInstall] = useState('')
-  const [publicURL, setPublicURL] = useState('')
   const [busy, setBusy] = useState('')
   const [refreshing, setRefreshing] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
@@ -293,7 +292,6 @@ export default function ServerDetail() {
       if (generation !== loadGenerationRef.current || currentSIDRef.current !== targetSID) return
       setServer(d.server)
       setInstall(d.install_command)
-      setPublicURL(d.public_url)
       const [nodeRows, ruleRows, ruleSetRows, forwardRows] = await Promise.allSettled([
         listRoutingNodes(controller.signal, targetSID),
         listRules(targetSID, controller.signal),
@@ -1238,7 +1236,6 @@ export default function ServerDetail() {
     <div className="sd-page">
       <ServerOverviewCard
         server={server}
-        publicURL={publicURL}
         busy={busy}
         refreshing={refreshing}
         onRefresh={refresh}

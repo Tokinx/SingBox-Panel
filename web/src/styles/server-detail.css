@@ -1,11 +1,31 @@
 /* Server detail (design A) */
 .sd-up { color: var(--console-warning); font-weight: 600; }
 .sd-strong { font-weight: 500; color: var(--console-ink); }
-.sd-addr { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-width: 0; }
-.sd-addr-text { cursor: pointer; overflow-wrap: anywhere; }
-.sd-addr-toggle { display: inline-grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--console-faint); cursor: pointer; }
-.sd-addr-toggle:hover { color: var(--console-ink); background: var(--console-hover); }
-.sd-addr-toggle:focus-visible { outline: 2px solid var(--console-focus); outline-offset: 1px; }
+.sd-addr { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; max-width: 100%; min-width: 0; }
+.sd-addr-sep { color: var(--console-faint); user-select: none; }
+.sd-addr-tag {
+  background: var(--console-surface);
+  color: var(--console-muted);
+  border-color: var(--console-border);
+  font-family: var(--app-font);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color .12s, border-color .12s, color .12s;
+}
+.sd-addr-tag:hover,
+.sd-addr-tag[data-state='delayed-open'],
+.sd-addr-tag[data-state='instant-open'] {
+  background: var(--console-hover);
+  border-color: var(--console-border-hover);
+  color: var(--console-ink);
+}
+.sd-addr-tag:focus-visible { outline: 2px solid var(--console-focus); outline-offset: 2px; }
+.sd-addr-tip { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 10px; margin: 0; padding: 2px 0; max-width: min(360px, calc(100vw - 48px)); text-align: left; text-wrap: wrap; user-select: text; }
+.sd-addr-tip-row { display: contents; }
+.sd-addr-tip-row dt { margin: 0; opacity: .72; font-size: 11.5px; line-height: 1.45; white-space: nowrap; }
+.sd-addr-tip-row dd { margin: 0; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
 .sd-remark { flex-basis: 100%; min-width: 0; color: var(--console-muted); white-space: pre-wrap; overflow-wrap: anywhere; }
 .sd-raw { margin: -12px 0 24px; }
 .sd-page :is(.ui-table-tbody > tr.is-disabled > td) { color: var(--console-faint); }

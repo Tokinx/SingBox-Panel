@@ -20,6 +20,7 @@ const metadata = (servers: Server[]) => ({ servers, latest_agent_version: 'v1.0.
 beforeEach(() => {
   vi.resetAllMocks()
   vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
   vi.mocked(getServersMeta).mockResolvedValue(metadata([server]))
   vi.mocked(getOverview).mockResolvedValue({ users_total: 0 } as Awaited<ReturnType<typeof getOverview>>)
   vi.mocked(updateServer).mockResolvedValue({ ok: true })
@@ -71,26 +72,117 @@ describe('server remarks', () => {
     await screen.findByText('Backup exit')
   })
 
-  it('shows the remark and masks address/IP by default in the detail heading', async () => {
+  it('shows IPv4 · IPv6 tags and reveals domains and addresses in tooltips on hover/focus/click', async () => {
     const onEditServer = vi.fn()
     const props = {
-      publicURL: '', busy: '', refreshing: false,
+      busy: '', refreshing: false,
       onRefresh: vi.fn(), onEditServer, onInstallSingbox: vi.fn(), onUninstallSingbox: vi.fn(),
       onInstallAgent: vi.fn(), onUninstallAgent: vi.fn(), onImport: vi.fn(),
       onEditConfig: vi.fn(), onRestart: vi.fn(),
     }
-    const { container, rerender } = render(<ServerOverviewCard server={{ ...server, public_ip: '69.63.207.36', public_ipv6: '2001:db8::1' }} {...props} />)
+    const { container, rerender } = render(
+      <ServerOverviewCard
+        server={{
+          ...server,
+          public_ip: '69.63.207.36',
+          public_ipv6: '2001:db8::1',
+          ipv6_mode: 'custom',
+          address_v6: 'v6.example.com',
+        }}
+        {...props}
+      />,
+    )
     expect(screen.getByText('Backup exit').className).toBe('sd-remark')
     expect(screen.queryByRole('button', { name: '导出节点' })).toBeNull()
-    expect(screen.getByText('fra.***.com · 69.63.*.36 · 2001:***:1')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: '显示连接地址与 IP' }))
-    expect(screen.getByText('fra.example.com · 69.63.207.36 · 2001:db8::1')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /显示连接地址|隐藏连接地址/ })).toBeNull()
+    expect(screen.queryByText(/fra\./)).toBeNull()
+
+    const ipv4Tag = screen.getByRole('button', { name: 'IPv4' })
+    const ipv6Tag = screen.getByRole('button', { name: 'IPv6' })
+    expect(container.querySelector('.sd-addr-sep')?.textContent).toBe('·')
+
+    fireEvent.focus(ipv4Tag)
+    const v4Tip = await screen.findByRole('tooltip')
+    expect(v4Tip.textContent).toContain('域名')
+    expect(v4Tip.textContent).toContain('fra.example.com')
+    expect(v4Tip.textContent).toContain('地址')
+    expect(v4Tip.textContent).toContain('69.63.207.36')
+    fireEvent.blur(ipv4Tag)
+    await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull())
+
+    // Mouse hover reveals tooltip and pointer leave closes it.
+    fireEvent.pointerMove(ipv4Tag, { pointerType: 'mouse' })
+    expect((await screen.findByRole('tooltip')).textContent).toContain('fra.example.com')
+    fireEvent(ipv4Tag, Object.assign(new MouseEvent('pointerleave', { clientX: 0, clientY: -10 }), { pointerType: 'mouse' }))
+    fireEvent(document, Object.assign(new MouseEvent('pointermove', { bubbles: true, clientX: -50, clientY: -50 }), { pointerType: 'mouse' }))
+    await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull())
+
+    fireEvent.pointerDown(ipv6Tag, { pointerType: 'touch' })
+    fireEvent.click(ipv6Tag)
+    const v6Tip = await screen.findByRole('tooltip')
+    expect(v6Tip.textContent).toContain('域名')
+    expect(v6Tip.textContent).toContain('v6.example.com')
+    expect(v6Tip.textContent).toContain('地址')
+    expect(v6Tip.textContent).toContain('2001:db8::1')
+    fireEvent.pointerDown(ipv6Tag, { pointerType: 'touch' })
+    fireEvent.click(ipv6Tag)
+    await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull())
+
     expect(screen.getByRole('button', { name: /维护/ }).className).toContain('ui-btn-default')
     fireEvent.keyDown(screen.getByRole('button', { name: /维护/ }), { key: 'Enter' })
     fireEvent.click(await screen.findByRole('menuitem', { name: '编辑节点' }))
     expect(onEditServer).toHaveBeenCalledTimes(1)
-    rerender(<ServerOverviewCard server={{ ...server, remark: '  ' }} {...props} />)
+
+    // IPv4-only server omits IPv6 tag and separator, and ignores inactive address_v6.
+    rerender(
+      <ServerOverviewCard
+        server={{ ...server, address: '69.63.207.36', public_ip: '69.63.207.36', ipv6_mode: '', address_v6: 'v6.example.com', remark: '  ' }}
+        {...props}
+      />,
+    )
     expect(container.querySelector('.sd-remark')).toBeNull()
+    expect(screen.getByRole('button', { name: 'IPv4' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'IPv6' })).toBeNull()
+    expect(container.querySelector('.sd-addr-sep')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'IPv4' }))
+    const dedupedTip = await screen.findByRole('tooltip')
+    expect(dedupedTip.textContent?.match(/69\.63\.207\.36/g)?.length).toBe(1)
+    fireEvent.keyDown(dedupedTip, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull())
+
+    // Distinct custom IPv4 entry and detected public IP both appear in tooltip.
+    rerender(
+      <ServerOverviewCard
+        server={{ ...server, id: 4, address: '1.2.3.4', public_ip: '69.63.207.36' }}
+        {...props}
+      />,
+    )
+    fireEvent.focus(screen.getByRole('button', { name: 'IPv4' }))
+    const splitV4Tip = await screen.findByRole('tooltip')
+    expect(splitV4Tip.textContent).toContain('连接地址')
+    expect(splitV4Tip.textContent).toContain('1.2.3.4')
+    expect(splitV4Tip.textContent).toContain('公网 IP')
+    expect(splitV4Tip.textContent).toContain('69.63.207.36')
+
+    // IPv6-only server renders only IPv6 tag, and empty server omits address tags.
+    rerender(
+      <ServerOverviewCard
+        server={{ ...server, id: 3, address: '', public_ip: '', public_ipv6: '2001:db8::9' }}
+        {...props}
+      />,
+    )
+    expect(screen.queryByRole('tooltip')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'IPv4' })).toBeNull()
+    fireEvent.focus(screen.getByRole('button', { name: 'IPv6' }))
+    expect((await screen.findByRole('tooltip')).textContent).toContain('2001:db8::9')
+
+    rerender(
+      <ServerOverviewCard
+        server={{ ...server, id: 5, address: '', public_ip: '', public_ipv6: '' }}
+        {...props}
+      />,
+    )
+    expect(container.querySelector('.sd-addr')).toBeNull()
   })
 
   it('shows detected IPv6 in the server list without duplicating address', async () => {
