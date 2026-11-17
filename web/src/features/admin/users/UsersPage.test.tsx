@@ -532,7 +532,7 @@ describe('editing a selected user subscription', () => {
     }))
   })
 
-  it('supports v6-only assignment and server group batch v6 selection', async () => {
+  it('supports v6-only assignment without server group header IPv4/IPv6 toggles', async () => {
     const dualServer: Server = {
       ...server,
       ipv6_mode: 'custom',
@@ -564,11 +564,14 @@ describe('editing a selected user subscription', () => {
     await screen.findByRole('textbox', { name: '自定义 Tokyo 的节点名称' })
 
     selectTab(/面板节点/)
+    expect(screen.queryByRole('group', { name: 'Tokyo 批量协议栈' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '分配 Tokyo 全部 IPv4' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '分配 Tokyo 全部 IPv6' })).toBeNull()
+
     fireEvent.click(screen.getByRole('button', { name: '展开 Tokyo' }))
     fireEvent.click(screen.getByRole('button', { name: '分配 vless-main IPv4' }))
-    const batchV6Btn = screen.getByRole('button', { name: '分配 Tokyo 全部 IPv6' })
-    expect(batchV6Btn.textContent?.trim()).toBe('IPv6')
-    fireEvent.click(batchV6Btn)
+    fireEvent.click(screen.getByRole('button', { name: '分配 vless-main IPv6' }))
+    fireEvent.click(screen.getByRole('button', { name: '分配 trojan-backup IPv6' }))
 
     selectTab(/已分配/)
     expect(orderedNames()).toEqual(['Tokyo - vless-main (v6)', 'Tokyo - Trojan (v6)'])

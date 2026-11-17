@@ -84,9 +84,7 @@
 .um-access-modal-group-head strong { min-width: 0; font-weight: 500; color: var(--console-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .um-access-modal-group-head small { min-width: 0; color: var(--console-faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .um-access-group-unnamed { color: var(--console-muted); }
-.um-access-group-stacks { margin-left: auto; }
 .um-access-group-count { margin-left: auto; flex: none; color: var(--console-faint); font-family: var(--app-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
-.um-access-group-stacks + .um-access-group-count { margin-left: 0; }
 .um-access-group-toggle { flex: none; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--console-faint); font-size: 10px; cursor: pointer; }
 .um-access-group-toggle:hover { color: var(--console-ink); background: var(--console-hover); }
 .um-access-group-toggle:focus-visible, .um-access-order-handle:focus-visible, .um-access-stack-btn:focus-visible { outline: 2px solid var(--console-focus); outline-offset: 1px; }

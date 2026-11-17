@@ -776,8 +776,6 @@ export function UserAccessEditor({ userId, onStateChange }: {
     const groupEndpointCount = group.items.length + kinds.managed_ipv6.length
     const groupSelectedCount = group.items.filter(isSelected).length
       + kinds.managed_ipv6.filter((id) => selectedIPv6Set.has(id)).length
-    const allV4Selected = kinds.managed.length > 0 && kinds.managed.every((id) => selectedInboundSet.has(id))
-    const allV6Selected = kinds.managed_ipv6.length > 0 && kinds.managed_ipv6.every((id) => selectedIPv6Set.has(id))
     return (
       <section className="um-access-modal-group" key={group.key}>
         <div className="um-access-modal-group-head">
@@ -805,30 +803,6 @@ export function UserAccessEditor({ userId, onStateChange }: {
           />
           <strong>{group.label === '未分组' ? <span className="um-access-group-unnamed">{group.label}</span> : group.label}</strong>
           {group.meta ? <small>{group.meta}</small> : null}
-          {kinds.managed_ipv6.length > 0 ? (
-            <span className="um-access-stack-group um-access-group-stacks" role="group" aria-label={`${group.label} 批量协议栈`}>
-              <button
-                type="button"
-                className={`um-access-stack-btn${allV4Selected ? ' is-active' : ''}`}
-                aria-pressed={allV4Selected}
-                aria-label={`分配 ${group.label} 全部 IPv4`}
-                disabled={saving}
-                onClick={() => setIDs('managed', kinds.managed, !allV4Selected)}
-              >
-                IPv4
-              </button>
-              <button
-                type="button"
-                className={`um-access-stack-btn${allV6Selected ? ' is-active' : ''}`}
-                aria-pressed={allV6Selected}
-                aria-label={`分配 ${group.label} 全部 IPv6`}
-                disabled={saving}
-                onClick={() => setIDs('managed_ipv6', kinds.managed_ipv6, !allV6Selected)}
-              >
-                IPv6
-              </button>
-            </span>
-          ) : null}
           <span className="um-access-group-count">{groupSelectedCount} / {groupEndpointCount}</span>
         </div>
         {expanded ? (
