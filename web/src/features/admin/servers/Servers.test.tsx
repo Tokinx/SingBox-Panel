@@ -133,10 +133,18 @@ describe('server remarks', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: '编辑节点' }))
     expect(onEditServer).toHaveBeenCalledTimes(1)
 
-    // IPv4-only server omits IPv6 tag and separator, and ignores inactive address_v6.
+    // IPv4-only / disabled-IPv6 server omits IPv6 tag and separator, ignoring inactive address_v6 and detected public_ipv6.
     rerender(
       <ServerOverviewCard
-        server={{ ...server, address: '69.63.207.36', public_ip: '69.63.207.36', ipv6_mode: '', address_v6: 'v6.example.com', remark: '  ' }}
+        server={{
+          ...server,
+          address: '69.63.207.36',
+          public_ip: '69.63.207.36',
+          ipv6_mode: '',
+          address_v6: 'v6.example.com',
+          public_ipv6: '2001:db8::1',
+          remark: '  ',
+        }}
         {...props}
       />,
     )
@@ -164,10 +172,18 @@ describe('server remarks', () => {
     expect(splitV4Tip.textContent).toContain('公网 IP')
     expect(splitV4Tip.textContent).toContain('69.63.207.36')
 
-    // IPv6-only server renders only IPv6 tag, and empty server omits address tags.
+    // Detected IPv6 alone is hidden while ipv6_mode is disabled, and appears when auto IPv6 is enabled.
     rerender(
       <ServerOverviewCard
         server={{ ...server, id: 3, address: '', public_ip: '', public_ipv6: '2001:db8::9' }}
+        {...props}
+      />,
+    )
+    expect(container.querySelector('.ui-addr')).toBeNull()
+
+    rerender(
+      <ServerOverviewCard
+        server={{ ...server, id: 3, address: '', public_ip: '', ipv6_mode: 'auto', public_ipv6: '2001:db8::9' }}
         {...props}
       />,
     )
@@ -175,6 +191,18 @@ describe('server remarks', () => {
     expect(screen.queryByRole('button', { name: 'IPv4' })).toBeNull()
     fireEvent.focus(screen.getByRole('button', { name: 'IPv6' }))
     expect((await screen.findByRole('tooltip')).textContent).toContain('2001:db8::9')
+
+    // Explicitly configured IPv6 primary address still displays without exposing unconfigured detected public_ipv6.
+    rerender(
+      <ServerOverviewCard
+        server={{ ...server, id: 6, address: '2001:db8::5', public_ip: '', ipv6_mode: '', public_ipv6: '2001:db8::9' }}
+        {...props}
+      />,
+    )
+    fireEvent.focus(screen.getByRole('button', { name: 'IPv6' }))
+    const primaryV6Tip = await screen.findByRole('tooltip')
+    expect(primaryV6Tip.textContent).toContain('2001:db8::5')
+    expect(primaryV6Tip.textContent).not.toContain('2001:db8::9')
 
     rerender(
       <ServerOverviewCard
@@ -200,11 +228,19 @@ describe('server remarks', () => {
         name: 'Tokyo',
         address: '',
         public_ip: '',
-        public_ipv6: '',
+        public_ipv6: '2001:db8::3',
+      } as Server,
+      {
+        ...server,
+        id: 4,
+        name: 'Singapore',
+        address: 'sg.example.com',
+        public_ip: '198.51.100.2',
+        public_ipv6: '2001:db8::4',
       } as Server,
     ]))
 
-    const { container } = render(
+    render(
       <MemoryRouter initialEntries={['/admin/servers']}>
         <Routes>
           <Route path="/admin/servers" element={<Servers />} />
@@ -213,9 +249,14 @@ describe('server remarks', () => {
       </MemoryRouter>,
     )
 
-    const ipv4Tag = await screen.findByRole('button', { name: 'IPv4' })
-    const ipv6Tag = screen.getByRole('button', { name: 'IPv6' })
-    expect(container.querySelector('.srv-name .ui-addr-sep')?.textContent).toBe('·')
+    const frankfurtRow = (await screen.findByText('Frankfurt')).closest('.srv-row')!
+    const tokyoRow = screen.getByText('Tokyo').closest('.srv-row')!
+    const singaporeRow = screen.getByText('Singapore').closest('.srv-row')!
+    const ipv4Tag = frankfurtRow.querySelector('button.ui-addr-tag') as HTMLButtonElement
+    const ipv6Tag = frankfurtRow.querySelectorAll('button.ui-addr-tag')[1] as HTMLButtonElement
+    expect(frankfurtRow.querySelector('.srv-name .ui-addr-sep')?.textContent).toBe('·')
+    expect(tokyoRow.querySelectorAll('button.ui-addr-tag').length).toBe(0)
+    expect(Array.from(singaporeRow.querySelectorAll('button.ui-addr-tag')).map((el) => el.textContent)).toEqual(['IPv4'])
     expect(screen.getByText('未设置地址')).toBeTruthy()
     expect(screen.queryByText(/fra\.\*\*\*\.com/)).toBeNull()
 

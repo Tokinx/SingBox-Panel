@@ -51,7 +51,9 @@ function buildServerEndpointTags(server: Server): EndpointTagGroup[] {
 
   const rawCustomV6 = server.ipv6_mode === 'custom' ? (server.address_v6?.trim() ?? '') : ''
   const customV6 = isIPv6Host(rawCustomV6) ? stripBrackets(rawCustomV6) : rawCustomV6
-  const publicV6 = stripBrackets(server.public_ipv6 ?? '')
+  // Agent-probed IPv6 stays hidden while IPv6 entry is left at the default "off" mode.
+  const showDetectedV6 = server.ipv6_mode === 'auto' || server.ipv6_mode === 'custom'
+  const publicV6 = showDetectedV6 ? stripBrackets(server.public_ipv6 ?? '') : ''
   const primaryV6 = primaryIsV6 ? address : ''
 
   const ipv6Items = buildStackItems(customV6 || primaryV6, publicV6, isIPv6Host)
