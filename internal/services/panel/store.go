@@ -58,19 +58,15 @@ func InitDB(cfg config.PanelConfig) (*gorm.DB, error) {
 			return nil, fmt.Errorf("protect sqlite database: %w", err)
 		}
 	}
-	sqlDB, err := db.DB()
-	if err != nil {
-		return nil, fmt.Errorf("get database pool: %w", err)
-	}
 	if strings.EqualFold(cfg.Database.Driver, "sqlite") || cfg.Database.Driver == "" {
-		// Subscription reconciliation can run in parallel with HTTP writes. WAL
-		// plus a busy timeout prevents transient writer collisions, while a single
-		// pooled connection keeps SQLite transaction ordering deterministic.
-		sqlDB.SetMaxOpenConns(1)
-		sqlDB.SetMaxIdleConns(1)
-		sqlDB.SetConnMaxLifetime(0)
-		sqlDB.SetConnMaxIdleTime(0)
+		if err := configureSQLitePool(db); err != nil {
+			return nil, err
+		}
 	} else {
+		sqlDB, err := db.DB()
+		if err != nil {
+			return nil, fmt.Errorf("get database pool: %w", err)
+		}
 		sqlDB.SetMaxOpenConns(cfg.Database.MaxOpenConns)
 		sqlDB.SetMaxIdleConns(cfg.Database.MaxIdleConns)
 		sqlDB.SetConnMaxLifetime(cfg.Database.ConnMaxLifetime)
@@ -128,6 +124,21 @@ func (l *secureDatabaseLogger) Trace(
 		_, rows := fc()
 		return "[SQL redacted]", rows
 	}, err)
+}
+
+func configureSQLitePool(db *gorm.DB) error {
+	sqlDB, err := db.DB()
+	if err != nil {
+		return fmt.Errorf("get database pool: %w", err)
+	}
+	// Subscription reconciliation can run in parallel with HTTP writes. WAL
+	// plus a busy timeout prevents transient writer collisions, while a single
+	// pooled connection keeps SQLite transaction ordering deterministic.
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
+	sqlDB.SetConnMaxLifetime(0)
+	sqlDB.SetConnMaxIdleTime(0)
+	return nil
 }
 
 func sqliteDSN(dsn string) string {

@@ -68,7 +68,7 @@ func TestForwardedUserNodesAccessSubscriptionAndCredentialSync(t *testing.T) {
 	}
 	mustCreate(t, db, &alice)
 
-	app, router := portForwardTestRouter(db)
+	app, router := portForwardTestRouter(t, db)
 	router.GET("/servers", app.listServers)
 	router.GET("/servers/:id/node-formats", app.serverNodeFormats)
 	router.GET("/users", app.listUsers)
@@ -271,7 +271,7 @@ func TestForwardedUserNodeCleanupOnDeleteUpdateAndImport(t *testing.T) {
 	mustCreate(t, db, &model.UserNodeOrder{UserID: alice.ID, NodeType: userNodeTypeForward, NodeID: fwd2.ID, SortOrder: 1})
 	mustCreate(t, db, &model.UserNodeOrder{UserID: alice.ID, NodeType: userNodeTypeForward, NodeID: fwd3.ID, SortOrder: 2})
 
-	_, router := portForwardTestRouter(db)
+	_, router := portForwardTestRouter(t, db)
 
 	// 1. Changing fwd1 from inbound -> custom cleans user assignment & order.
 	updateBody := `{"tag":"fwd-1","listen_port":30001,"network":"tcp","target_type":"custom","target_address":"203.0.113.10","target_port":80,"outbound":"direct","enabled":true}`

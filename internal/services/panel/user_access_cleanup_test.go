@@ -93,7 +93,7 @@ func TestDeleteInboundAndServerPruneIPv6Assignments(t *testing.T) {
 	}
 
 	hub := NewHub(db)
-	app := &App{db: db, hub: hub, orch: NewOrchestrator(db, hub)}
+	app := &App{db: db, hub: hub, orch: testOrchestrator(t, db, hub)}
 	router := gin.New()
 	router.DELETE("/servers/:id", app.deleteServer)
 	router.DELETE("/servers/:id/inbounds/:inboundID", app.deleteInbound)

@@ -23,11 +23,15 @@ import (
 
 // Orchestrator builds server configs from the database and pushes them to agents.
 type Orchestrator struct {
-	db    *gorm.DB
-	hub   *Hub
-	locks *keyedMutex[uint]
+	db     *gorm.DB
+	hub    *Hub
+	locks  *keyedMutex[uint]
+	ctx    context.Context
+	cancel context.CancelFunc
 
 	asyncMu      sync.Mutex
+	asyncClosed  bool
+	asyncWg      sync.WaitGroup
 	asyncRunning map[uint]bool
 	asyncPending map[uint]bool
 }
@@ -52,10 +56,27 @@ type ConfigApplyResult struct {
 
 // NewOrchestrator builds an Orchestrator.
 func NewOrchestrator(db *gorm.DB, hub *Hub) *Orchestrator {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Orchestrator{
 		db: db, hub: hub, locks: newKeyedMutex[uint](),
+		ctx: ctx, cancel: cancel,
 		asyncRunning: make(map[uint]bool), asyncPending: make(map[uint]bool),
 	}
+}
+
+// Close cancels pending background config retries and waits for running pushes
+// to exit so callers can safely close the database afterwards.
+func (o *Orchestrator) Close() {
+	if o == nil {
+		return
+	}
+	o.asyncMu.Lock()
+	o.asyncClosed = true
+	o.asyncMu.Unlock()
+	if o.cancel != nil {
+		o.cancel()
+	}
+	o.asyncWg.Wait()
 }
 
 func (o *Orchestrator) lockServer(serverID uint) func() {
@@ -368,42 +389,69 @@ func (o *Orchestrator) SwitchToManagedConfig(ctx context.Context, serverID uint)
 // PushConfigAsync pushes in the background, ignoring offline agents.
 func (o *Orchestrator) PushConfigAsync(serverID uint) {
 	o.asyncMu.Lock()
+	if o.asyncClosed {
+		o.asyncMu.Unlock()
+		return
+	}
 	if o.asyncRunning[serverID] {
 		o.asyncPending[serverID] = true
 		o.asyncMu.Unlock()
 		return
 	}
 	o.asyncRunning[serverID] = true
+	o.asyncWg.Add(1)
 	o.asyncMu.Unlock()
 
+	baseCtx := o.ctx
+	if baseCtx == nil {
+		baseCtx = context.Background()
+	}
+
 	go func() {
+		defer o.asyncWg.Done()
 		for {
+			if baseCtx.Err() != nil {
+				o.finishAsyncPush(serverID, true)
+				return
+			}
 			var err error
 			for attempt := 1; attempt <= asyncPushAttempts; attempt++ {
-				err = o.PushConfigWithTimeout(context.Background(), serverID, 60*time.Second)
-				if err == nil || errors.Is(err, ErrAgentOffline) {
+				err = o.PushConfigWithTimeout(baseCtx, serverID, 60*time.Second)
+				if err == nil || errors.Is(err, ErrAgentOffline) || baseCtx.Err() != nil {
 					break
 				}
 				log.Printf("orchestrator: push config to server %d failed (attempt %d/%d): %v", serverID, attempt, asyncPushAttempts, err)
 				if attempt < asyncPushAttempts {
-					time.Sleep(asyncPushRetryDelay)
+					timer := time.NewTimer(asyncPushRetryDelay)
+					select {
+					case <-baseCtx.Done():
+						timer.Stop()
+						o.finishAsyncPush(serverID, true)
+						return
+					case <-timer.C:
+					}
 				}
 			}
-			if err != nil && !errors.Is(err, ErrAgentOffline) {
+			if err != nil && !errors.Is(err, ErrAgentOffline) && baseCtx.Err() == nil {
 				log.Printf("orchestrator: push config to server %d exhausted retries: %v", serverID, err)
 			}
-
-			o.asyncMu.Lock()
-			if o.asyncPending[serverID] {
-				delete(o.asyncPending, serverID)
-				o.asyncMu.Unlock()
-				continue
+			if !o.finishAsyncPush(serverID, baseCtx.Err() != nil) {
+				return
 			}
-			delete(o.asyncRunning, serverID)
-			o.asyncMu.Unlock()
-			return
 		}
 	}()
+}
+
+func (o *Orchestrator) finishAsyncPush(serverID uint, forceStop bool) bool {
+	o.asyncMu.Lock()
+	defer o.asyncMu.Unlock()
+	if !forceStop && !o.asyncClosed && o.asyncPending[serverID] {
+		delete(o.asyncPending, serverID)
+		return true
+	}
+	delete(o.asyncPending, serverID)
+	delete(o.asyncRunning, serverID)
+	return false
 }
 
 // PushConfigIfManaged reconciles nodes that have a raw config, structured

@@ -21,12 +21,13 @@ import (
 	"github.com/tokinx/singbox-panel/internal/domain/singbox"
 )
 
-func portForwardTestRouter(db *gorm.DB) (*App, *gin.Engine) {
+func portForwardTestRouter(t *testing.T, db *gorm.DB) (*App, *gin.Engine) {
+	t.Helper()
 	hub := NewHub(db)
 	app := &App{
 		db:   db,
 		hub:  hub,
-		orch: NewOrchestrator(db, hub),
+		orch: testOrchestrator(t, db, hub),
 	}
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -72,7 +73,7 @@ func checkSingBoxBinary(t *testing.T, raw []byte) {
 func setupForwardClusterFixture(t *testing.T) (*gorm.DB, *App, *gin.Engine, model.Server, model.Server, model.Server, model.Inbound, model.Inbound, model.Inbound) {
 	t.Helper()
 	db := testDB(t)
-	app, router := portForwardTestRouter(db)
+	app, router := portForwardTestRouter(t, db)
 
 	relay := model.Server{Name: "relay-hk", AgentToken: "tok-relay", ConfigMode: model.ConfigModeManaged, Address: "relay.example.com"}
 	target := model.Server{Name: "target-jp", AgentToken: "tok-target", ConfigMode: model.ConfigModeManaged, Address: "jp.example.com"}
@@ -263,7 +264,7 @@ func TestPortForwardCRUDAndValidation(t *testing.T) {
 
 func TestPortForwardOrchestratorBuildAndSingBoxCheck(t *testing.T) {
 	db, _, router, relay, _, _, _, targetSocks, landingSocks := setupForwardClusterFixture(t)
-	app := &App{db: db, orch: NewOrchestrator(db, NewHub(db))}
+	app := &App{db: db, orch: testOrchestrator(t, db, NewHub(db))}
 
 	node := model.CustomNode{
 		Name: "proxy-node", Group: "g", Protocol: "socks", Address: "198.51.100.10", Port: 1080,
@@ -522,7 +523,7 @@ func TestPortForwardImportRoundTripAndTagProtection(t *testing.T) {
 
 func TestPortForwardTrafficAccountingAndPrune(t *testing.T) {
 	db := testDB(t)
-	_, router := portForwardTestRouter(db)
+	_, router := portForwardTestRouter(t, db)
 
 	srv := model.Server{Name: "node-traffic", AgentToken: "tok-tr", ConfigMode: model.ConfigModeManaged, TrafficResetDay: 1}
 	mustCreate(t, db, &srv)

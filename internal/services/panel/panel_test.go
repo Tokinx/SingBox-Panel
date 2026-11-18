@@ -28,14 +28,29 @@ import (
 
 func testDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "test.db")), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(sqliteDSN(filepath.Join(t.TempDir(), "test.db"))), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if err := configureSQLitePool(db); err != nil {
+		t.Fatal(err)
+	}
+	if sqlDB, err := db.DB(); err == nil {
+		t.Cleanup(func() {
+			_ = sqlDB.Close()
+		})
 	}
 	if err := db.AutoMigrate(model.AllModels()...); err != nil {
 		t.Fatal(err)
 	}
 	return db
+}
+
+func testOrchestrator(t *testing.T, db *gorm.DB, hub *Hub) *Orchestrator {
+	t.Helper()
+	orch := NewOrchestrator(db, hub)
+	t.Cleanup(orch.Close)
+	return orch
 }
 
 func TestRawConfigIsTheReconnectSourceOfTruth(t *testing.T) {
@@ -89,7 +104,7 @@ func TestImportSyncPreservesInboundGrantsByTag(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	app := &App{db: db, orch: NewOrchestrator(db, NewHub(db))}
+	app := &App{db: db, orch: testOrchestrator(t, db, NewHub(db))}
 	if err := app.applyImport(&srv, parsed, raw); err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +212,7 @@ func TestImportAutomaticallySelectsSafeConfigMode(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			app := &App{db: db, orch: NewOrchestrator(db, NewHub(db))}
+			app := &App{db: db, orch: testOrchestrator(t, db, NewHub(db))}
 			if err := app.applyImport(&srv, parsed, tc.raw); err != nil {
 				t.Fatal(err)
 			}
@@ -743,6 +758,7 @@ func TestDeleteServerWaitsForServerOperation(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := NewApp(config.PanelConfig{JWTSecret: testLiveJWTSecret}, db)
+	t.Cleanup(a.Close)
 	router := gin.New()
 	router.DELETE("/servers/:id", a.deleteServer)
 

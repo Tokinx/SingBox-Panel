@@ -66,7 +66,7 @@ func TestUserAccessReplacesAssignmentsAtomically(t *testing.T) {
 	}
 
 	gin.SetMode(gin.TestMode)
-	app := &App{db: db, orch: NewOrchestrator(db, NewHub(db))}
+	app := &App{db: db, orch: testOrchestrator(t, db, NewHub(db))}
 	router := gin.New()
 	router.PUT("/users/:id/access", app.updateUserAccess)
 
@@ -203,7 +203,7 @@ func TestUserAccessPreservesServerWideGrant(t *testing.T) {
 	}
 
 	gin.SetMode(gin.TestMode)
-	app := &App{db: db, orch: NewOrchestrator(db, NewHub(db))}
+	app := &App{db: db, orch: testOrchestrator(t, db, NewHub(db))}
 	router := gin.New()
 	router.PUT("/users/:id/access", app.updateUserAccess)
 	body, err := json.Marshal(map[string]any{

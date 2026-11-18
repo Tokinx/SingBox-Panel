@@ -386,12 +386,21 @@ func (a *App) Run(ctx context.Context) error {
 
 	log.Printf("panel listening on %s (base URL %s)", a.cfg.Listen, a.cfg.BaseURL)
 	err := srv.ListenAndServe()
+	a.Close()
 	// Persist buffered traffic history before the process exits.
 	a.flushTraffic()
 	if err != nil && err != http.ErrServerClosed {
 		return err
 	}
 	return nil
+}
+
+// Close releases background orchestrator workers owned by the panel app.
+func (a *App) Close() {
+	if a == nil {
+		return
+	}
+	a.orch.Close()
 }
 
 // flushTraffic writes buffered traffic history so reads include it.
