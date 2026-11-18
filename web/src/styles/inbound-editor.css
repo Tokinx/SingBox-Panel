@@ -162,14 +162,23 @@
   padding: 0 9px;
 }
 
-.inbound-compact .ui-input-affix-wrapper .ui-input {
+.inbound-compact .ui-input-affix-wrapper input.ui-input {
   min-height: 34px;
+  height: 34px;
+  padding-inline: 0;
+  border: 0;
+  box-shadow: none;
   background: transparent;
 }
 
 .inbound-compact :is(.ui-input, .ui-input-affix-wrapper, .ui-input-number, .ui-select-selector):is(:focus, :focus-within, :focus-visible) {
   border-color: var(--inbound-focus);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--inbound-focus) 55%, transparent);
+}
+
+.inbound-compact .ui-input-affix-wrapper input.ui-input:focus {
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .inbound-compact .ui-form-item-has-error :is(.ui-input, .ui-input-affix-wrapper, .ui-input-number, .ui-select-selector) {
@@ -192,12 +201,14 @@
   gap: 6px;
 }
 
-.inbound-compact .ui-space-compact > .ui-form-item {
+.inbound-compact .ui-space-compact > .ui-form-item,
+.inbound-compact .ui-space-compact > :is(.ui-input, .ui-input-affix-wrapper) {
   flex: 1 1 auto;
   min-width: 0;
+  border-radius: 7px;
 }
 
-.inbound-compact .ui-space-compact > .ui-form-item .ui-input {
+.inbound-compact .ui-space-compact > .ui-form-item :is(.ui-input, .ui-input-affix-wrapper) {
   border-radius: 7px;
 }
 

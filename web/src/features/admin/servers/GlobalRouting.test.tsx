@@ -1,8 +1,8 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { RuleForm } from './RoutingForms'
+import { OutboundForm, RuleForm } from './RoutingForms'
 import RuleSets from './RuleSets'
-import { createRule, updateRule, listRoutingNodes, listRuleSets } from '../../../api'
+import { createOutbound, createRule, updateRule, listRoutingNodes, listRuleSets } from '../../../api'
 import type { RouteRule } from '../../../types'
 
 vi.mock('../../../api', () => ({
@@ -105,5 +105,48 @@ describe('rule-set IP match direction', () => {
     expect(match).not.toHaveProperty('rule_set')
     expect(match).not.toHaveProperty('rule_set_ip_cidr_match_source')
     expect(match.inbound).toEqual(['dmit-in'])
+  })
+})
+
+describe('Hysteria2 outbound obfuscation password', () => {
+  it('shows obfs password in plaintext by default and fills a random value on click', async () => {
+    vi.mocked(createOutbound).mockResolvedValue({ apply_state: 'pending' } as Awaited<ReturnType<typeof createOutbound>>)
+    render(<OutboundForm serverId={1} outbound={null} open onClose={vi.fn()} onSaved={vi.fn()} />)
+
+    fireEvent.click(await screen.findByLabelText(/^类型/))
+    fireEvent.click(await screen.findByRole('option', { name: 'Hysteria2' }))
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByLabelText(/^类型/)))
+
+    fireEvent.change(screen.getByLabelText(/标签/), { target: { value: 'hy2-out' } })
+    fireEvent.change(screen.getByLabelText(/服务器地址/), { target: { value: 'hy2.example.com' } })
+    fireEvent.change(screen.getByLabelText(/端口/), { target: { value: '443' } })
+
+    fireEvent.click(screen.getByText('认证'))
+    fireEvent.change(screen.getByLabelText(/^密码/), { target: { value: 'hy2-secret' } })
+
+    fireEvent.click(screen.getByText('协议参数'))
+    fireEvent.click(await screen.findByLabelText('混淆类型'))
+    fireEvent.click(await screen.findByRole('option', { name: 'salamander' }))
+    await waitFor(() => expect(screen.getByLabelText('混淆类型').textContent).toContain('salamander'))
+
+    const obfsInput = await screen.findByLabelText('混淆密码') as HTMLInputElement
+    expect(obfsInput.type).toBe('text')
+
+    const compact = obfsInput.closest('.ui-space-compact') as HTMLElement
+    fireEvent.click(within(compact).getByRole('button', { name: '随机' }))
+    expect(obfsInput.value).toMatch(/^[0-9a-f]{32}$/)
+    expect(obfsInput.type).toBe('text')
+
+    fireEvent.click(screen.getByRole('button', { name: '确定' }))
+    await waitFor(() => expect(createOutbound).toHaveBeenCalledWith(1, expect.objectContaining({
+      tag: 'hy2-out',
+      type: 'hysteria2',
+      settings: expect.objectContaining({
+        settings: expect.objectContaining({
+          obfs_type: 'salamander',
+          obfs_password: obfsInput.value,
+        }),
+      }),
+    })))
   })
 })

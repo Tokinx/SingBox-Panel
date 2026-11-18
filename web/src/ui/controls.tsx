@@ -223,9 +223,12 @@ const BaseInput = forwardRef<HTMLInputElement, InputProps>(function Input(
 })
 const Password = forwardRef<
   HTMLInputElement,
-  InputProps & { iconRender?: (visible: boolean) => React.ReactNode }
->(function Password({ iconRender, ...props }, ref) {
-  const [visible, setVisible] = useState(false)
+  InputProps & {
+    iconRender?: (visible: boolean) => React.ReactNode
+    defaultVisible?: boolean
+  }
+>(function Password({ iconRender, defaultVisible = false, ...props }, ref) {
+  const [visible, setVisible] = useState(defaultVisible)
   return (
     <BaseInput
       {...props}
@@ -235,9 +238,10 @@ const Password = forwardRef<
         <button
           className="ui-input-clear"
           type="button"
+          aria-pressed={visible}
           aria-label={visible ? '隐藏密码' : '显示密码'}
           disabled={props.disabled}
-          onClick={() => setVisible(!visible)}
+          onClick={() => setVisible((current) => !current)}
         >
           {iconRender?.(visible) ||
             (visible ? <EyeOff size={16} /> : <Eye size={16} />)}

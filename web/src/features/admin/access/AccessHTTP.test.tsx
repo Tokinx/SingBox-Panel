@@ -174,4 +174,19 @@ describe('external HTTP and SOCKS proxy forms', () => {
       protocol: 'http', user_ids: [2], params: expect.objectContaining({ ...params, tls: secure ? 'tls' : 'none' }),
     })])
   })
+
+  it('shows Hysteria2 obfuscation password in plaintext by default', async () => {
+    const hy2Node: CustomNode = {
+      ...node,
+      id: 2,
+      name: 'HY2 Node',
+      protocol: 'hysteria2',
+      params: { password: 'secret', obfs: 'salamander', obfs_password: 'obfs-visible-key' },
+    }
+    await showNodes([hy2Node])
+    fireEvent.click(screen.getByRole('button', { name: '编辑 HY2 Node' }))
+    const input = await screen.findByLabelText('混淆密码') as HTMLInputElement
+    expect(input.type).toBe('text')
+    expect(input.value).toBe('obfs-visible-key')
+  })
 })

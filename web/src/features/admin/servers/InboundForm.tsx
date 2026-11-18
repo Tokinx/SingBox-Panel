@@ -745,16 +745,29 @@ export default function InboundForm({
                     { value: 'gecko', label: 'gecko' },
                   ]} />
                 </Form.Item>
-                {obfsType === 'salamander' && (
-                  <Form.Item name="obfs_password" label="混淆密码">
-                    <Input.Password />
+                {(obfsType === 'salamander' || obfsType === 'gecko') && (
+                  <Form.Item label="混淆密码" required={obfsType === 'gecko'}>
+                    <Space.Compact>
+                      <Form.Item
+                        name="obfs_password"
+                        noStyle
+                        dependencies={['obfs_type']}
+                        rules={obfsType === 'gecko' ? [{ required: true, message: '请填写 gecko 混淆密码' }] : undefined}
+                      >
+                        <Input.Password
+                          className="mono"
+                          defaultVisible
+                          autoCorrect="off"
+                          autoCapitalize="none"
+                          spellCheck={false}
+                        />
+                      </Form.Item>
+                      <Button onClick={() => form.setFieldValue('obfs_password', randomHex(16))}>随机</Button>
+                    </Space.Compact>
                   </Form.Item>
                 )}
                 {obfsType === 'gecko' && (
                   <>
-                    <Form.Item name="obfs_password" label="混淆密码" rules={[{ required: true, message: '请填写 gecko 混淆密码' }]}>
-                      <Input.Password />
-                    </Form.Item>
                     <Form.Item name="gecko_min_packet_size" label="最小包大小">
                       <InputNumber min={512} precision={0} />
                     </Form.Item>

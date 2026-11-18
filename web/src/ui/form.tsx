@@ -38,6 +38,7 @@ export type FormInstance<T extends Values = any> = {
 const FormContext = createContext<FormInstance | null>(null)
 const ListContext = createContext<string>('')
 const RequiredMarkContext = createContext(true)
+const ItemControlsContext = createContext<((id: string) => () => void) | null>(null)
 const ItemErrorsContext = createContext<((id: string, error?: string) => void) | null>(null)
 const path = (name: Name) =>
   Array.isArray(name) ? name.join('.') : String(name)
@@ -147,8 +148,14 @@ function ItemLayout({
   error,
 }: ItemProps & { id?: string; error?: string }) {
   const showRequiredMark = useContext(RequiredMarkContext)
+  const registerControl = useContext(ItemControlsContext)
   const reportToParent = useContext(ItemErrorsContext)
+  const [childIds, setChildIds] = useState<string[]>([])
   const [childErrors, setChildErrors] = useState<Record<string, string>>({})
+  const registerChild = useCallback((fieldId: string) => {
+    setChildIds((current) => (current.includes(fieldId) ? current : [...current, fieldId]))
+    return () => setChildIds((current) => current.filter((item) => item !== fieldId))
+  }, [])
   const reportError = useCallback((fieldId: string, message?: string) => {
     setChildErrors((current) => {
       if (current[fieldId] === message) return current
@@ -158,6 +165,10 @@ function ItemLayout({
       return next
     })
   }, [])
+  useEffect(() => {
+    if (!noStyle || !registerControl || !id) return
+    return registerControl(id)
+  }, [noStyle, registerControl, id])
   useEffect(() => {
     if (!noStyle || !reportToParent || !id) return
     reportToParent(id, error)
@@ -174,6 +185,7 @@ function ItemLayout({
         )}
       </>
     )
+  const labelFor = id ?? (childIds.length === 1 ? childIds[0] : undefined)
   return (
     <div
       className={cn(
@@ -187,16 +199,18 @@ function ItemLayout({
       <div className="ui-form-item-row">
         {label && (
           <div className="ui-form-item-label">
-            <Label htmlFor={id}>
+            <Label htmlFor={labelFor}>
               {label}
               {required && showRequiredMark && <span className="ui-required">*</span>}
             </Label>
           </div>
         )}
         <div className="ui-form-item-control">
-          <ItemErrorsContext.Provider value={reportError}>
-            {children}
-          </ItemErrorsContext.Provider>
+          <ItemControlsContext.Provider value={registerChild}>
+            <ItemErrorsContext.Provider value={reportError}>
+              {children}
+            </ItemErrorsContext.Provider>
+          </ItemControlsContext.Provider>
           {Object.entries(childErrors).map(([fieldId, message]) => (
             <div key={fieldId} id={`${fieldId}-error`} className="ui-form-item-explain" role="alert">
               {message}
@@ -313,10 +327,12 @@ function BoundItem(props: ItemProps) {
         [props.valuePropName || 'value']:
           field.value ?? (props.valuePropName === 'checked' ? false : ''),
       }
+  const isRequired = props.required || rules.some((rule) => rule.required)
   const control = React.cloneElement(child, {
     ...valueProps,
     id,
     ref: field.ref,
+    'aria-required': child.props['aria-required'] ?? (isRequired || undefined),
     'aria-invalid': fieldState.invalid || undefined,
     'aria-describedby': fieldState.error ? `${id}-error` : undefined,
     onBlur: (...args: any[]) => {
@@ -341,7 +357,7 @@ function BoundItem(props: ItemProps) {
       {...props}
       id={id}
       error={fieldState.error?.message}
-      required={props.required || rules.some((rule) => rule.required)}
+      required={isRequired}
     >
       {control}
     </ItemLayout>

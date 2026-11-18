@@ -350,8 +350,19 @@ export function OutboundForm({
                 <Form.Item name="obfs_type" label="混淆类型">
                   <Select placeholder="无" options={[{ value: '', label: '无' }, { value: 'salamander', label: 'salamander' }, { value: 'gecko', label: 'gecko' }]} />
                 </Form.Item>
-                <Form.Item name="obfs_password" label="混淆密码">
-                  <Input.Password />
+                <Form.Item label="混淆密码">
+                  <Space.Compact>
+                    <Form.Item name="obfs_password" noStyle>
+                      <Input.Password
+                        className="mono"
+                        defaultVisible
+                        autoCorrect="off"
+                        autoCapitalize="none"
+                        spellCheck={false}
+                      />
+                    </Form.Item>
+                    <Button onClick={() => form.setFieldValue('obfs_password', randomHex(16))}>随机</Button>
+                  </Space.Compact>
                 </Form.Item>
                 {hysteriaObfsType === 'gecko' && (
                   <>

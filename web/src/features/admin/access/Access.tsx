@@ -2100,7 +2100,12 @@ export function CustomNodesPanel({ nodes, loading, error, onNodesChange }: {
                     />
                   </Form.Item>
                   <Form.Item name="obfs_password" label="混淆密码">
-                    <Input.Password />
+                    <Input.Password
+                      defaultVisible
+                      autoCorrect="off"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                    />
                   </Form.Item>
                   {nodeProtocol === 'hysteria2' && nodeObfsType === 'gecko' && (
                     <div className="um-form-grid">
