@@ -302,11 +302,16 @@ func resolveTestSingboxBinary() string {
 		"sing-box",
 	}
 	for _, c := range candidates {
-		if path, err := exec.LookPath(c); err == nil {
-			return path
+		path := c
+		if resolved, err := exec.LookPath(c); err == nil {
+			path = resolved
+		} else if info, err := os.Stat(c); err != nil || info.IsDir() {
+			continue
 		}
-		if info, err := os.Stat(c); err == nil && !info.IsDir() {
-			return c
+		// Ignore cross-platform build artifacts (for example a Linux binary in
+		// a local checkout on macOS) that cannot execute on this host.
+		if err := exec.Command(path, "version").Run(); err == nil {
+			return path
 		}
 	}
 	return ""
