@@ -1,8 +1,13 @@
 package agent
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +19,9 @@ import (
 
 func TestInstallSingboxPropagatesDownloadFailure(t *testing.T) {
 	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "apk"), []byte("#!/bin/sh\necho 'apk-tools 3.0.0'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(dir, "curl"), []byte("#!/bin/sh\necho mock-download-failed >&2\nexit 22\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -23,7 +31,7 @@ func TestInstallSingboxPropagatesDownloadFailure(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "download sing-box installer") || !strings.Contains(output, "mock-download-failed") {
 		t.Fatalf("download failure was swallowed: output=%q error=%v", output, err)
 	}
-	files, err := filepath.Glob(filepath.Join(dir, "singbox-install-*.sh"))
+	files, err := filepath.Glob(filepath.Join(dir, "singbox-install-*"))
 	if err != nil || len(files) != 0 {
 		t.Fatalf("temporary installer files remain: %v, %v", files, err)
 	}
@@ -31,6 +39,9 @@ func TestInstallSingboxPropagatesDownloadFailure(t *testing.T) {
 
 func TestInstallSingboxPropagatesInstallerFailure(t *testing.T) {
 	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "apk"), []byte("#!/bin/sh\necho 'apk-tools 3.0.0'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	// This curl fixture writes only a harmless local script; no remote installer
 	// or package manager is invoked by this test.
 	fixture := "#!/bin/sh\nprintf '#!/bin/sh\\necho mock-install-failed >&2\\nexit 9\\n' > \"$3\"\n"
@@ -237,4 +248,251 @@ func TestPrepareSingboxServiceEnablesBootStart(t *testing.T) {
 	if !enabled {
 		t.Fatal("sing-box service was not enabled at boot")
 	}
+}
+
+func TestParseAPKMajorVersion(t *testing.T) {
+	for _, tc := range []struct {
+		input string
+		major int
+		ok    bool
+	}{
+		{"apk-tools 2.14.13, compiled for aarch64.", 2, true},
+		{"apk-tools 3.0.9-r0, compiled for x86_64.", 3, true},
+		{"apk-tools 2.12.14", 2, true},
+		{"unknown", 0, false},
+		{"", 0, false},
+	} {
+		major, ok := parseAPKMajorVersion(tc.input)
+		if ok != tc.ok || major != tc.major {
+			t.Fatalf("parseAPKMajorVersion(%q) = (%d, %t), want (%d, %t)", tc.input, major, ok, tc.major, tc.ok)
+		}
+	}
+}
+
+func TestShouldUseAlpineMuslTarball(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		cmds       map[string]bool
+		openwrt    bool
+		apkVersion string
+		apkErr     error
+		want       bool
+	}{
+		{
+			name:       "alpine 3.22 apk v2",
+			cmds:       map[string]bool{"apk": true},
+			apkVersion: "apk-tools 2.14.13, compiled for aarch64.",
+			want:       true,
+		},
+		{
+			name:       "alpine 3.23 apk v3",
+			cmds:       map[string]bool{"apk": true},
+			apkVersion: "apk-tools 3.0.9-r0, compiled for x86_64.",
+			want:       false,
+		},
+		{
+			name:       "debian with stray apk",
+			cmds:       map[string]bool{"apk": true, "dpkg": true},
+			apkVersion: "apk-tools 2.14.13",
+			want:       false,
+		},
+		{
+			name:       "openwrt apk",
+			cmds:       map[string]bool{"apk": true},
+			openwrt:    true,
+			apkVersion: "apk-tools 2.14.13",
+			want:       false,
+		},
+		{
+			name:   "apk version failed",
+			cmds:   map[string]bool{"apk": true},
+			apkErr: errors.New("boom"),
+			want:   false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			inst := singboxInstaller{
+				lookPath:  func(name string) bool { return tc.cmds[name] },
+				isOpenWrt: func() bool { return tc.openwrt },
+				run: func(_ context.Context, cmd string, _ ...string) (string, error) {
+					if cmd == "apk" {
+						return tc.apkVersion, tc.apkErr
+					}
+					return "", nil
+				},
+			}
+			if got := inst.shouldUseAlpineMuslTarball(context.Background()); got != tc.want {
+				t.Fatalf("shouldUseAlpineMuslTarball() = %t, want %t", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestInstallScriptFailsWhenPackageInstallCommandFailsBeforeRm(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "apk"), []byte("#!/bin/sh\necho 'apk-tools 3.0.0'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// Upstream sing-box install.sh has no `set -e` and ends with `rm -f`; running
+	// it via `sh -e` must fail immediately instead of returning rm's exit 0.
+	curlFixture := `#!/bin/sh
+cat <<'EOF' > "$3"
+#!/bin/sh
+touch downloaded.apk
+sh -c 'echo "ERROR: IO ERROR" >&2; exit 2'
+rm -f downloaded.apk
+EOF
+`
+	if err := os.WriteFile(filepath.Join(dir, "curl"), []byte(curlFixture), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("TMPDIR", dir)
+
+	output, err := InstallSingbox(context.Background(), protocol.ChannelStable, "", "script")
+	if err == nil || !strings.Contains(err.Error(), "run sing-box installer") {
+		t.Fatalf("expected non-zero failure from failing command before rm, got output=%q err=%v", output, err)
+	}
+	if !strings.Contains(output, "ERROR: IO ERROR") {
+		t.Fatalf("expected package error in output, got %q", output)
+	}
+	leftovers, err := filepath.Glob(filepath.Join(dir, "singbox-install-*"))
+	if err != nil || len(leftovers) != 0 {
+		t.Fatalf("work directory was not cleaned up: %v, %v", leftovers, err)
+	}
+}
+
+func buildMockSingboxTarGz(t *testing.T, archiveDir, scriptBody string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	content := []byte(scriptBody)
+	if err := tw.WriteHeader(&tar.Header{
+		Name: archiveDir + "/sing-box",
+		Mode: 0o755,
+		Size: int64(len(content)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(content); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+func TestInstallAlpineMuslTarballInstallsAndVerifiesBinary(t *testing.T) {
+	dir := t.TempDir()
+	targetBin := filepath.Join(dir, "usr", "bin", "sing-box")
+	cfgFile := filepath.Join(dir, "etc", "sing-box", "config.json")
+	confFile := filepath.Join(dir, "etc", "conf.d", "sing-box")
+	writeTestFile(t, cfgFile, `{"log":{"level":"warn"}}`)
+	writeTestFile(t, confFile, "output_log=/var/log/sing-box.log\n")
+
+	stableTarball := buildMockSingboxTarGz(t, "sing-box-1.14.4-linux-amd64-musl", "#!/bin/sh\necho 1.14.4\n")
+	betaTarball := buildMockSingboxTarGz(t, "sing-box-1.15.0-alpha.13-linux-amd64-musl", "#!/bin/sh\necho 1.15.0-alpha.13\n")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/repos/SagerNet/sing-box/releases/latest":
+			_, _ = w.Write([]byte(`{"tag_name":"v1.14.4"}`))
+		case "/repos/SagerNet/sing-box/releases":
+			_, _ = w.Write([]byte(`[{"tag_name":"v1.15.0-alpha.13"},{"tag_name":"v1.14.4"}]`))
+		case "/SagerNet/sing-box/releases/download/v1.14.4/sing-box-1.14.4-linux-amd64-musl.tar.gz":
+			_, _ = w.Write(stableTarball)
+		case "/SagerNet/sing-box/releases/download/v1.15.0-alpha.13/sing-box-1.15.0-alpha.13-linux-amd64-musl.tar.gz":
+			_, _ = w.Write(betaTarball)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	var apkCalls [][]string
+	apkInstalled := map[string]bool{"sing-box": true}
+
+	newInstaller := func() singboxInstaller {
+		return singboxInstaller{
+			lookPath:           func(name string) bool { return name == "apk" },
+			isOpenWrt:          func() bool { return false },
+			goarch:             "amd64",
+			targetBinary:       targetBin,
+			apkCleanupPaths:    []string{cfgFile, confFile},
+			githubAPIBase:      srv.URL,
+			githubDownloadBase: srv.URL,
+			httpClient:         srv.Client(),
+			run: func(ctx context.Context, cmd string, args ...string) (string, error) {
+				if cmd == "apk" {
+					apkCalls = append(apkCalls, append([]string{cmd}, args...))
+					if len(args) == 1 && args[0] == "--version" {
+						return "apk-tools 2.14.13, compiled for x86_64.", nil
+					}
+					if len(args) == 3 && args[0] == "info" && args[1] == "-e" {
+						if apkInstalled[args[2]] {
+							return "", nil
+						}
+						return "", errors.New("not installed")
+					}
+					if len(args) == 2 && args[0] == "del" {
+						apkInstalled[args[1]] = false
+						_ = os.Remove(confFile) // simulate apk del removing unmodified conffile
+						return "", nil
+					}
+				}
+				return run(ctx, cmd, args...)
+			},
+			detectVersion: func(ctx context.Context) (bool, string) {
+				return detectVersionAt(ctx, run, targetBin)
+			},
+		}
+	}
+
+	out, err := newInstaller().install(context.Background(), protocol.ChannelStable, "", protocol.MethodScript)
+	if err != nil {
+		t.Fatalf("stable musl install failed: %v (out=%q)", err, out)
+	}
+	if !strings.Contains(out, "1.14.4") || !strings.Contains(out, "amd64-musl") {
+		t.Fatalf("unexpected output: %q", out)
+	}
+	if apkInstalled["sing-box"] {
+		t.Fatal("conflicting apk sing-box package was not removed")
+	}
+	if gotConf, err := os.ReadFile(confFile); err != nil || string(gotConf) != "output_log=/var/log/sing-box.log\n" {
+		t.Fatalf("conf.d file was lost during apk cleanup: %q, err=%v", gotConf, err)
+	}
+	if ok, ver := detectVersionAt(context.Background(), run, targetBin); !ok || ver != "1.14.4" {
+		t.Fatalf("installed binary version = (%t, %q), want (true, 1.14.4)", ok, ver)
+	}
+
+	// Beta channel resolves prerelease tag and replaces the binary.
+	out, err = newInstaller().install(context.Background(), protocol.ChannelBeta, "", protocol.MethodScript)
+	if err != nil {
+		t.Fatalf("beta musl install failed: %v (out=%q)", err, out)
+	}
+	if ok, ver := detectVersionAt(context.Background(), run, targetBin); !ok || ver != "1.15.0-alpha.13" {
+		t.Fatalf("beta binary version = (%t, %q), want (true, 1.15.0-alpha.13)", ok, ver)
+	}
+
+	// Pinned version mismatch inside archive must fail before replacing existing binary.
+	mismatchTar := buildMockSingboxTarGz(t, "sing-box-1.14.0-linux-amd64-musl", "#!/bin/sh\necho 1.14.9\n")
+	mismatchSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(mismatchTar)
+	}))
+	defer mismatchSrv.Close()
+	badInst := newInstaller()
+	badInst.githubDownloadBase = mismatchSrv.URL
+	badInst.httpClient = mismatchSrv.Client()
+	if _, err := badInst.install(context.Background(), protocol.ChannelStable, "1.14.0", protocol.MethodScript); err == nil || !strings.Contains(err.Error(), "mismatch") {
+		t.Fatalf("expected version mismatch error, got %v", err)
+	}
+	if ok, ver := detectVersionAt(context.Background(), run, targetBin); !ok || ver != "1.15.0-alpha.13" {
+		t.Fatalf("failed pinned install overwrote existing binary: (%t, %q)", ok, ver)
+	}
+	_ = apkCalls
 }

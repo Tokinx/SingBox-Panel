@@ -53,7 +53,16 @@ func (b *cappedCommandOutput) String() string {
 
 // run executes a command and returns trimmed combined output.
 func run(ctx context.Context, name string, args ...string) (string, error) {
+	return runInDir(ctx, "", name, args...)
+}
+
+// runInDir executes a command inside dir (when non-empty) and returns trimmed
+// combined output.
+func runInDir(ctx context.Context, dir, name string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
