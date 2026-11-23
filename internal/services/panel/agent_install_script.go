@@ -321,7 +321,7 @@ respawn_delay=5
 respawn_max=0
 output_log="/var/log/singbox-panel-agent.log"
 error_log="/var/log/singbox-panel-agent.log"
-umask 0077
+umask="0077"
 
 depend() {
   after net
