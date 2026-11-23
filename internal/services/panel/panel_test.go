@@ -560,36 +560,64 @@ func TestSwitchToManagedRollsBackWhenAgentIsOffline(t *testing.T) {
 }
 
 func TestInstallCommandQuotesEveryArgument(t *testing.T) {
-	baseURL := "https://panel.example.com/it's"
-	code := "code'one-time"
-	command := installCommand(baseURL, code)
-	for _, value := range []string{baseURL + "/api/agent/install.sh", baseURL, code} {
-		if !strings.Contains(command, shellQuote(value)) {
-			t.Fatalf("command does not quote %q: %s", value, command)
+	// Standard HTTPS URL and 22-char Base62 code produce one minimal line without
+	// redundant quotes, --url, --code, or wget fallback.
+	simpleCode := "0123456789ABCDEFGHIJkl"
+	simple := installCommand("https://panel.example.com/", simpleCode)
+	wantSimple := "curl -fsSL https://panel.example.com/api/agent/install.sh | sh -s -- " + simpleCode
+	if simple != wantSimple {
+		t.Fatalf("simple installCommand = %q; want %q", simple, wantSimple)
+	}
+	if strings.Count(simple, "\n") != 0 || strings.Count(simple, simpleCode) != 1 ||
+		strings.Contains(simple, "--url") || strings.Contains(simple, "--code") || strings.Contains(simple, "wget") {
+		t.Fatalf("simple installCommand unexpected format: %q", simple)
+	}
+
+	// Special characters in URL or code (including IPv6 brackets) are single-quoted.
+	specialCases := []struct {
+		baseURL string
+		code    string
+		want    string
+	}{
+		{
+			baseURL: "https://panel.example.com/it's",
+			code:    "code'one-time",
+			want:    "curl -fsSL 'https://panel.example.com/it'\"'\"'s/api/agent/install.sh' | sh -s -- 'code'\"'\"'one-time'",
+		},
+		{
+			baseURL: "https://[2001:db8::1]",
+			code:    simpleCode,
+			want:    "curl -fsSL 'https://[2001:db8::1]/api/agent/install.sh' | sh -s -- " + simpleCode,
+		},
+		{
+			baseURL: "https://panel.example.com",
+			code:    "-leading",
+			want:    "curl -fsSL https://panel.example.com/api/agent/install.sh | sh -s -- --code -leading",
+		},
+	}
+	for _, tc := range specialCases {
+		got := installCommand(tc.baseURL, tc.code)
+		if got != tc.want {
+			t.Fatalf("installCommand(%q, %q) = %q; want %q", tc.baseURL, tc.code, got, tc.want)
 		}
 	}
 	if got := shellQuote("a'b"); got != `'a'"'"'b'` {
 		t.Fatalf("shellQuote = %q", got)
 	}
-	// The pasted command stays one short line: privilege escalation and the
-	// curl/wget choice live in the served script, not here.
-	if strings.Count(command, "\n") != 0 || strings.Count(command, shellQuote(code)) != 1 {
-		t.Fatalf("install command is not a single short line: %s", command)
-	}
-	for _, required := range []string{"curl -fsSL", "wget -qO-", "| sh -s --"} {
-		if !strings.Contains(command, required) {
-			t.Fatalf("install command missing bootstrap step %q: %s", required, command)
+
+	for _, command := range []string{simple, specialCases[0].want, specialCases[1].want, specialCases[2].want} {
+		cmd := exec.Command("sh", "-n")
+		cmd.Stdin = strings.NewReader(command)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("install command syntax (%s): %v: %s", command, err, out)
 		}
-	}
-	cmd := exec.Command("sh", "-n")
-	cmd.Stdin = strings.NewReader(command)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("install command syntax: %v: %s", err, out)
 	}
 }
 
 func TestAgentInstallerVerifiesAndCanRollbackBinary(t *testing.T) {
 	for _, required := range []string{
+		"DEFAULT_URL=''",
+		`CODE="$1"`,
 		"/api/agent/register",
 		`printf 'header = "Authorization: Bearer %s"`,
 		`--config "$AUTH_CONFIG"`,

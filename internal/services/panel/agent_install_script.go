@@ -5,23 +5,29 @@ package panel
 // and manages the official sing-box on the host.
 const agentInstallScript = `#!/bin/sh
 set -eu
+DEFAULT_URL=''
 
 # The panel hands out one short command:
-#   curl -fsSL <panel>/api/agent/install.sh | sh -s -- --url <panel> --code <code>
+#   curl -fsSL <panel>/api/agent/install.sh | sh -s -- <code>
+# DEFAULT_URL is embedded by the panel and can be overridden with --url.
 # When that runs as an ordinary account, re-download this same script and feed
 # it to root through sudo or doas. Re-fetching instead of re-reading stdin is
 # deliberate: the invoking shell may already have buffered the rest of a piped
 # script, so a child process could otherwise see a truncated installer. Keeping
 # the escalation here is what allows the pasted command to stay on one line.
 if [ "$(id -u)" != "0" ]; then
-  panel_url=""; previous=""
+  panel_url="$DEFAULT_URL"; previous=""
   for arg in "$@"; do
     [ "$previous" = "--url" ] && panel_url="$arg"
     previous="$arg"
   done
+  panel_url="${panel_url%/}"
   case "$panel_url" in
-    https://*) ;;
+    https://?*) ;;
     *) echo "--url is required to run the installer as root" >&2; exit 1 ;;
+  esac
+  case "$panel_url" in
+    *[[:space:]]*) echo "--url must not contain whitespace" >&2; exit 1 ;;
   esac
   for elevate in sudo doas; do
     command -v "$elevate" >/dev/null 2>&1 || continue
@@ -31,7 +37,7 @@ if [ "$(id -u)" != "0" ]; then
   exit 1
 fi
 
-URL=""; TOKEN=""; CODE=""; TMP=""; AUTH_CONFIG=""
+URL="$DEFAULT_URL"; TOKEN=""; CODE=""; TMP=""; AUTH_CONFIG=""
 BIN=/usr/local/bin/singbox-panel-agent
 PREV=/usr/local/bin/singbox-panel-agent.prev
 CONFIG=/etc/singbox-panel-agent/agent.conf
@@ -165,12 +171,18 @@ while [ $# -gt 0 ]; do
       shift 2
       ;;
     --insecure) echo "--insecure is disabled in production"; exit 1 ;;
-    *) echo "unknown option: $1"; exit 1 ;;
+    -*) echo "unknown option: $1"; exit 1 ;;
+    *)
+      [ -n "$1" ] && [ -z "$CODE" ] || { echo "unexpected argument: $1"; exit 1; }
+      CODE="$1"
+      shift
+      ;;
   esac
 done
 [ "$(id -u)" = "0" ] || { echo "must run as root"; exit 1; }
+URL="${URL%/}"
 case "$URL" in
-  https://*) ;;
+  https://?*) ;;
   *) echo "--url must be a non-empty HTTPS URL"; exit 1 ;;
 esac
 case "$URL" in

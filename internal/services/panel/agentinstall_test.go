@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -104,8 +105,137 @@ func TestAgentInstallCommandNeverContainsLongLivedToken(t *testing.T) {
 	if strings.Contains(command, server.AgentToken) {
 		t.Fatal("install command exposed the long-lived Agent token")
 	}
-	if !strings.Contains(command, "--code") || len(a.agentInstallCodes) != 1 {
+	if len(a.agentInstallCodes) != 1 {
 		t.Fatalf("install command did not mint a one-time code: %s", command)
+	}
+	var mintedCode string
+	for code := range a.agentInstallCodes {
+		mintedCode = code
+	}
+	if !regexp.MustCompile(`^[0-9A-Za-z]{22}$`).MatchString(mintedCode) {
+		t.Fatalf("minted code = %q; want 22-char Base62", mintedCode)
+	}
+	want := "curl -fsSL https://panel.example.com/api/agent/install.sh | sh -s -- " + mintedCode
+	if command != want {
+		t.Fatalf("install command = %q; want %q", command, want)
+	}
+}
+
+func TestRandBase62FormatAndUniqueness(t *testing.T) {
+	if got := randBase62(0); got != "" {
+		t.Fatalf("randBase62(0) = %q", got)
+	}
+	re := regexp.MustCompile(`^[0-9A-Za-z]{22}$`)
+	seen := make(map[string]struct{}, 64)
+	for i := 0; i < 64; i++ {
+		code := randBase62(22)
+		if !re.MatchString(code) {
+			t.Fatalf("randBase62(22) = %q; want 22-char Base62", code)
+		}
+		if _, dup := seen[code]; dup {
+			t.Fatalf("duplicate code generated: %q", code)
+		}
+		seen[code] = struct{}{}
+	}
+}
+
+func TestHandleAgentInstallScriptEmbedsBaseURLAndValidSyntax(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, rawBaseURL := range []string{
+		"https://panel.example.com/",
+		"https://panel.example.com/it's",
+	} {
+		a := &App{cfg: config.PanelConfig{BaseURL: rawBaseURL}}
+		router := gin.New()
+		router.GET("/api/agent/install.sh", a.handleAgentInstallScript)
+
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/api/agent/install.sh", nil))
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("GET /api/agent/install.sh status = %d", recorder.Code)
+		}
+		if cacheControl := recorder.Header().Get("Cache-Control"); cacheControl != "no-store" {
+			t.Fatalf("Cache-Control = %q; want no-store", cacheControl)
+		}
+		script := recorder.Body.String()
+		expectedLine := "DEFAULT_URL=" + shellQuote(strings.TrimRight(rawBaseURL, "/"))
+		if !strings.Contains(script, expectedLine) {
+			t.Fatalf("rendered script missing %q", expectedLine)
+		}
+		cmd := exec.Command("sh", "-n")
+		cmd.Stdin = strings.NewReader(script)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("rendered script syntax (%s): %v: %s", rawBaseURL, err, out)
+		}
+	}
+}
+
+func TestRenderedInstallScriptParsesPositionalCodeAndDefaultURL(t *testing.T) {
+	script := renderAgentInstallScript("https://panel.example.com/")
+	marker := "\nif ! command -v curl"
+	idx := strings.Index(script, marker)
+	if idx < 0 {
+		t.Fatal("marker not found in rendered script")
+	}
+	harness := script[:idx] + "\nprintf 'URL=%s\\nCODE=%s\\nTOKEN=%s\\n' \"$URL\" \"$CODE\" \"$TOKEN\"\n"
+
+	rootBin := t.TempDir()
+	rootID := filepath.Join(rootBin, "id")
+	if err := os.WriteFile(rootID, []byte("#!/bin/sh\necho 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runRoot := func(args ...string) (string, error) {
+		cmdArgs := append([]string{"-s", "--"}, args...)
+		cmd := exec.Command("sh", cmdArgs...)
+		cmd.Stdin = strings.NewReader(harness)
+		cmd.Env = []string{"PATH=" + rootBin + ":" + os.Getenv("PATH")}
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+
+	out, err := runRoot("AbCdEf0123456789GhIjKl")
+	if err != nil {
+		t.Fatalf("positional code failed: %v\n%s", err, out)
+	}
+	if out != "URL=https://panel.example.com\nCODE=AbCdEf0123456789GhIjKl\nTOKEN=\n" {
+		t.Fatalf("positional code output = %q", out)
+	}
+
+	out, err = runRoot("--url", "https://override.example.com/", "--code", "legacyCode123")
+	if err != nil {
+		t.Fatalf("legacy flags failed: %v\n%s", err, out)
+	}
+	if out != "URL=https://override.example.com\nCODE=legacyCode123\nTOKEN=\n" {
+		t.Fatalf("legacy flags output = %q", out)
+	}
+
+	for _, badArgs := range [][]string{
+		{"--unknown", "AbCdEf0123456789GhIjKl"},
+		{"firstCode", "secondCode"},
+		{"--code", "firstCode", "secondCode"},
+	} {
+		if out, err := runRoot(badArgs...); err == nil {
+			t.Fatalf("expected failure for args %v, got %q", badArgs, out)
+		}
+	}
+
+	// Non-root execution falls back to DEFAULT_URL when --url is omitted.
+	userBin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(userBin, "id"), []byte("#!/bin/sh\necho 1000\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(userBin, "sudo"), []byte("#!/bin/sh\nprintf 'PANEL=%s\\nARGS=%s\\n' \"$4\" \"$5\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	nonRootCmd := exec.Command("sh", "-s", "--", "AbCdEf0123456789GhIjKl")
+	nonRootCmd.Stdin = strings.NewReader(script)
+	nonRootCmd.Env = []string{"PATH=" + userBin + ":/usr/bin:/bin"}
+	nonRootOut, err := nonRootCmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("non-root escalation failed: %v\n%s", err, nonRootOut)
+	}
+	if string(nonRootOut) != "PANEL=https://panel.example.com\nARGS=AbCdEf0123456789GhIjKl\n" {
+		t.Fatalf("non-root escalation output = %q", nonRootOut)
 	}
 }
 

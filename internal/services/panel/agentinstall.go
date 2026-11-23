@@ -18,7 +18,20 @@ import (
 
 func (a *App) handleAgentInstallScript(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
-	c.Data(http.StatusOK, "text/x-shellscript; charset=utf-8", []byte(agentInstallScript))
+	c.Data(http.StatusOK, "text/x-shellscript; charset=utf-8", []byte(a.renderAgentInstallScript()))
+}
+
+func (a *App) renderAgentInstallScript() string {
+	return renderAgentInstallScript(a.baseURL())
+}
+
+func renderAgentInstallScript(baseURL string) string {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	defaultLine := "DEFAULT_URL=''"
+	if baseURL != "" {
+		defaultLine = "DEFAULT_URL=" + shellQuote(baseURL)
+	}
+	return strings.Replace(agentInstallScript, "DEFAULT_URL=''", defaultLine, 1)
 }
 
 const agentInstallCodeTTL = 10 * time.Minute
@@ -41,7 +54,7 @@ func (a *App) newAgentInstallCommand(serverID uint) string {
 		Count(&active).Error != nil || active != 1 {
 		return ""
 	}
-	code := randHex(24)
+	code := randBase62(22)
 	now := time.Now()
 	a.agentInstallMu.Lock()
 	if a.agentInstallCodes == nil {
@@ -234,18 +247,43 @@ func fileChecksum(path string) (string, error) {
 }
 
 // installCommand returns a command containing only a short-lived, one-time
-// registration code. The long-lived Agent token is exchanged over HTTPS and
-// therefore never lands in shell history or the process argument list.
+// registration code. The panel URL is embedded directly into the served
+// /api/agent/install.sh script, and the long-lived Agent token is exchanged
+// over HTTPS so it never lands in shell history or the process argument list.
 func installCommand(baseURL, code string) string {
 	baseURL = strings.TrimRight(baseURL, "/")
-	scriptURL := shellQuote(baseURL + "/api/agent/install.sh")
-	args := fmt.Sprintf("--url %s --code %s", shellQuote(baseURL), shellQuote(code))
-	// One short line, as before OpenRC support. Fetching with wget and
-	// re-executing under sudo/doas both happen inside the script, so neither
-	// has to be repeated here three times just to cover Alpine and non-root
-	// shells.
-	return fmt.Sprintf(`{ curl -fsSL %s || wget -qO- %s; } | sh -s -- %s`,
-		scriptURL, scriptURL, args)
+	scriptURL := shellArg(baseURL + "/api/agent/install.sh")
+	if strings.HasPrefix(code, "-") {
+		return fmt.Sprintf("curl -fsSL %s | sh -s -- --code %s", scriptURL, shellArg(code))
+	}
+	return fmt.Sprintf("curl -fsSL %s | sh -s -- %s", scriptURL, shellArg(code))
+}
+
+// shellArg returns value unquoted when it is safe in POSIX shells, otherwise
+// falling back to shellQuote.
+func shellArg(value string) string {
+	if isSafeUnquotedShellArg(value) {
+		return value
+	}
+	return shellQuote(value)
+}
+
+func isSafeUnquotedShellArg(value string) bool {
+	if value == "" || value[0] == '~' {
+		return false
+	}
+	for i := 0; i < len(value); i++ {
+		b := value[i]
+		switch {
+		case b >= 'a' && b <= 'z',
+			b >= 'A' && b <= 'Z',
+			b >= '0' && b <= '9',
+			b == '.', b == '_', b == ':', b == '/', b == '-':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // shellQuote returns one POSIX-shell argument. The generated command is copied

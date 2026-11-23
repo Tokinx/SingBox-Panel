@@ -30,6 +30,64 @@ def command(*args):
     return subprocess.check_output(args, cwd=ROOT, text=True).strip()
 
 
+def _shell_segments(words):
+    operators = {"|", "||", "&&", ";", "&", "\n"}
+    segment = []
+    for word in words:
+        if word in operators or (len(word) > 1 and all(ch in ";|&" for ch in word)):
+            if segment:
+                yield segment
+                segment = []
+        else:
+            segment.append(word)
+    if segment:
+        yield segment
+
+
+def _extract_segment_code(segment):
+    idx = 0
+    while idx < len(segment) and segment[idx] in {"then", "else", "do", "elif", "sudo", "doas", "env"}:
+        idx += 1
+    if idx >= len(segment):
+        return None
+    cmd = os.path.basename(segment[idx])
+    if cmd not in {"sh", "bash"}:
+        return None
+    args = segment[idx + 1:]
+    if "--" in args:
+        args = args[args.index("--") + 1:]
+    elif args and args[0] == "-s":
+        args = args[1:]
+
+    code = None
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg in ("--url", "--token", "--code"):
+            if i + 1 >= len(args) or not args[i + 1]:
+                raise ValueError("install command has an incomplete option")
+            if arg == "--code":
+                val = args[i + 1]
+                if not re.fullmatch(r"[0-9A-Za-z]+", val):
+                    raise ValueError("install command has an invalid registration code")
+                if code is not None:
+                    raise ValueError("install command has multiple registration codes")
+                code = val
+            i += 2
+        elif arg.startswith("-"):
+            raise ValueError(f"install command has an unexpected option: {arg}")
+        else:
+            if not re.fullmatch(r"[0-9A-Za-z]+", arg):
+                raise ValueError("install command has an invalid registration code")
+            if code is not None:
+                raise ValueError("install command has multiple registration codes")
+            code = arg
+            i += 1
+    if code is None:
+        raise ValueError("install command is missing a registration code")
+    return code
+
+
 def registration_code(install_command):
     # Separate shell operators from adjacent arguments without executing the
     # installer. Plain shlex.split() includes the ';' after each branch's code.
@@ -37,12 +95,10 @@ def registration_code(install_command):
     lexer.whitespace_split = True
     words = list(lexer)
     codes = []
-    for index, word in enumerate(words):
-        if word != "--code":
-            continue
-        if index + 1 == len(words) or not re.fullmatch(r"[0-9a-f]+", words[index + 1]):
-            raise ValueError("install command has an invalid registration code")
-        codes.append(words[index + 1])
+    for segment in _shell_segments(words):
+        code = _extract_segment_code(segment)
+        if code is not None:
+            codes.append(code)
     if not codes or len(set(codes)) != 1:
         raise ValueError("install command must contain one consistent registration code")
     return codes[0]
@@ -140,6 +196,7 @@ def main():
             check_agent_download(agent_token)
             script = request("/api/agent/install.sh", auth="")[0].decode()
             assert "systemctl" in script, "native Agent installer missing"
+            assert "DEFAULT_URL='https://panel.example.test'" in script, "embedded DEFAULT_URL missing"
             # Check the actual HTTP Upgrade path with a real Agent credential.
             endpoint = urlsplit(base)
             host, port = endpoint.hostname, endpoint.port

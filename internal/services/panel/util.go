@@ -14,6 +14,8 @@ import (
 	"github.com/tokinx/singbox-panel/internal/domain/model"
 )
 
+const base62Alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
 // randHex returns a cryptographically-random hex string of 2*n characters.
 func randHex(n int) string {
 	b := make([]byte, n)
@@ -21,6 +23,31 @@ func randHex(n int) string {
 		panic(err) // crypto/rand failure is unrecoverable
 	}
 	return hex.EncodeToString(b)
+}
+
+// randBase62 returns a cryptographically-random Base62 string of length characters.
+func randBase62(length int) string {
+	if length <= 0 {
+		return ""
+	}
+	const maxValidByte = byte(len(base62Alphabet) * 4) // 248: largest multiple of 62 <= 256
+	out := make([]byte, 0, length)
+	buf := make([]byte, length*2)
+	for len(out) < length {
+		if _, err := rand.Read(buf); err != nil {
+			panic(err) // crypto/rand failure is unrecoverable
+		}
+		for _, b := range buf {
+			if b >= maxValidByte {
+				continue
+			}
+			out = append(out, base62Alphabet[int(b)%len(base62Alphabet)])
+			if len(out) == length {
+				break
+			}
+		}
+	}
+	return string(out)
 }
 
 // newUUID returns a random UUIDv4 string.

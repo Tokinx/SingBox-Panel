@@ -12,6 +12,7 @@ SPEC = importlib.util.spec_from_file_location("docker_smoke", SCRIPT)
 SMOKE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SMOKE)
 CODE = "0123456789abcdef" * 3
+BASE62_CODE = "0123456789ABCDEFGHIJkl"
 
 
 class RegistrationCodeTest(unittest.TestCase):
@@ -19,9 +20,18 @@ class RegistrationCodeTest(unittest.TestCase):
         command = f"curl -fsSL 'https://panel.example.test/api/agent/install.sh' | sudo bash -s -- --url 'https://panel.example.test' --code '{CODE}'"
         self.assertEqual(SMOKE.registration_code(command), CODE)
 
+    def test_single_curl_positional_code(self):
+        command = f"curl -fsSL https://panel.example.test/api/agent/install.sh | sh -s -- {BASE62_CODE}"
+        self.assertEqual(command.count(BASE62_CODE), 1)
+        self.assertEqual(SMOKE.registration_code(command), BASE62_CODE)
+
+    def test_quoted_url_with_positional_code(self):
+        script = shlex.quote("https://panel.example.test/it's/api/agent/install.sh")
+        command = f"curl -fsSL {script} | sh -s -- {BASE62_CODE}"
+        self.assertEqual(SMOKE.registration_code(command), BASE62_CODE)
+
     def test_short_bootstrap_with_single_registration_code(self):
-        # The panel emits one line; curl/wget and sudo/doas are resolved inside
-        # the served script, so the code appears exactly once.
+        # Legacy fallback form still supported by registration_code.
         url = shlex.quote("https://panel.example.test")
         script = shlex.quote("https://panel.example.test/api/agent/install.sh")
         args = f"--url {url} --code '{CODE}'"
@@ -42,7 +52,10 @@ class RegistrationCodeTest(unittest.TestCase):
 
     def test_missing_or_invalid_code_is_rejected(self):
         for command in ("", "sh -s -- --url https://panel.example.test", "sh --code", "sh --code; true",
-                        "sh --code ''", "sh --code 'not-hex'", f"sh --code '{CODE};'"):
+                        "sh --code ''", "sh --code 'not-hex'", f"sh --code '{CODE};'",
+                        f"curl -fsSL https://panel.example.test/api/agent/install.sh | sh -s -- {BASE62_CODE} extraCode",
+                        "curl -fsSL https://panel.example.test/api/agent/install.sh | sh -s -- not-base62!",
+                        f"curl -fsSL https://panel.example.test/api/agent/install.sh | sh -s -- --unknown {BASE62_CODE}"):
             with self.subTest(command=command):
                 with self.assertRaises(ValueError):
                     SMOKE.registration_code(command)

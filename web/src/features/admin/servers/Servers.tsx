@@ -193,7 +193,7 @@ export default function Servers() {
       form.resetFields()
       load()
       Modal.success({
-        title: '在服务器上以 root 执行',
+        title: '在服务器上执行',
         width: MODAL_MD,
         content: (
           <div>
