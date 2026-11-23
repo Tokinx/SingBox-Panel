@@ -1,13 +1,17 @@
+import { useEffect, useRef } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createServer, getOverview, getServersMeta, updateServer } from '../../../api'
 import type { Server } from '../../../types'
+import { Form } from '../../../ui'
+import { InstallSingboxModal } from './ServerDialogs'
 import Servers from './Servers'
 import { ServerOverviewCard } from './ServerOverviewCard'
 
 vi.mock('../../../api', () => ({
   createServer: vi.fn(), updateServer: vi.fn(), getServersMeta: vi.fn(), getOverview: vi.fn(),
+  installSingbox: vi.fn(),
   errMsg: (error: Error) => error.message, isCanceledRequest: () => false,
 }))
 
@@ -16,17 +20,24 @@ const server = {
   online: false, traffic_reset_day: 1,
 } as Server
 const metadata = (servers: Server[]) => ({ servers, latest_agent_version: 'v1.0.7' })
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollIntoView')
 
 beforeEach(() => {
   vi.resetAllMocks()
   vi.stubGlobal('matchMedia', () => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
+  Object.defineProperty(Element.prototype, 'scrollIntoView', { configurable: true, writable: true, value: vi.fn() })
   vi.mocked(getServersMeta).mockResolvedValue(metadata([server]))
   vi.mocked(getOverview).mockResolvedValue({ users_total: 0 } as Awaited<ReturnType<typeof getOverview>>)
   vi.mocked(updateServer).mockResolvedValue({ ok: true })
   vi.mocked(createServer).mockResolvedValue({ server, install_command: 'install-agent', public_url: '' })
 })
-afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+  if (originalScrollIntoView) Object.defineProperty(Element.prototype, 'scrollIntoView', originalScrollIntoView)
+  else Reflect.deleteProperty(Element.prototype, 'scrollIntoView')
+})
 
 describe('server remarks', () => {
   it('never shows an inbound count in the server list', async () => {
@@ -298,5 +309,79 @@ describe('server remarks', () => {
     fireEvent.change(screen.getByLabelText(/IPv6 连接地址/), { target: { value: 'v6.example.com' } })
     fireEvent.click(screen.getByRole('button', { name: '确定' }))
     await waitFor(() => expect(updateServer).toHaveBeenCalledWith(2, expect.objectContaining({ ipv6_mode: 'custom', address_v6: 'v6.example.com' })))
+  })
+})
+
+function InstallModalHarness({ open, serverOS, presetMethod }: { open: boolean; serverOS?: string; presetMethod?: string }) {
+  const [form] = Form.useForm()
+  const appliedRef = useRef(false)
+  if (presetMethod && !appliedRef.current) {
+    appliedRef.current = true
+    form.setFieldsValue({ method: presetMethod })
+  }
+  useEffect(() => {
+    if (presetMethod && !appliedRef.current) {
+      appliedRef.current = true
+      form.setFieldsValue({ method: presetMethod })
+    }
+  }, [presetMethod, form])
+  return <InstallSingboxModal open={open} form={form} serverOS={serverOS} onCancel={vi.fn()} onConfirm={vi.fn()} />
+}
+
+describe('Alpine sing-box install method guard', () => {
+  it('forces script method and disables APT/DNF options on Alpine nodes', async () => {
+    const { rerender } = render(<InstallModalHarness open serverOS="Alpine Linux v3.22" presetMethod="apt" />)
+
+    await waitFor(() => expect(screen.getByText('Alpine 节点使用官方脚本安装（自动适配 APK / musl）')).toBeTruthy())
+    const methodSelect = screen.getByRole('combobox', { name: '安装方式' })
+    await waitFor(() => expect(methodSelect.textContent).toContain('官方脚本'))
+
+    fireEvent.click(methodSelect)
+    const aptOption = await screen.findByRole('option', { name: 'APT 源' })
+    const dnfOption = screen.getByRole('option', { name: 'DNF 源' })
+    expect(aptOption.getAttribute('aria-disabled')).toBe('true')
+    expect(dnfOption.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(screen.getByRole('option', { name: '官方脚本' }))
+
+    rerender(<InstallModalHarness open serverOS="Debian GNU/Linux 12 (bookworm)" />)
+    expect(screen.queryByText('Alpine 节点使用官方脚本安装（自动适配 APK / musl）')).toBeNull()
+    fireEvent.click(screen.getByRole('combobox', { name: '安装方式' }))
+    expect((await screen.findByRole('option', { name: 'APT 源' })).getAttribute('aria-disabled')).not.toBe('true')
+    expect(screen.getByRole('option', { name: 'DNF 源' }).getAttribute('aria-disabled')).not.toBe('true')
+  })
+
+  it('guards batch sing-box updates when online servers are Alpine or mixed', async () => {
+    vi.mocked(getServersMeta).mockResolvedValue(metadata([
+      { ...server, id: 10, name: 'AlpineNode', online: true, load1: 0.1, os: 'Alpine Linux v3.22' } as Server,
+      { ...server, id: 11, name: 'OfflineDebian', online: false, load1: 0, os: 'Debian GNU/Linux 12' } as Server,
+    ]))
+
+    const { unmount } = render(<MemoryRouter><Servers /></MemoryRouter>)
+    await screen.findByText('AlpineNode')
+
+    fireEvent.keyDown(screen.getByRole('button', { name: /批量维护/ }), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: '更新 sing-box' }))
+
+    expect(await screen.findByText('在线节点均为 Alpine，请使用官方安装脚本（自动适配 APK / musl）')).toBeTruthy()
+    fireEvent.click(screen.getByRole('combobox', { name: '安装方式' }))
+    expect((await screen.findByRole('option', { name: '官方 APT 源' })).getAttribute('aria-disabled')).toBe('true')
+    expect(screen.getByRole('option', { name: '官方 DNF 源' }).getAttribute('aria-disabled')).toBe('true')
+    unmount()
+
+    vi.mocked(getServersMeta).mockResolvedValue(metadata([
+      { ...server, id: 10, name: 'AlpineNode', online: true, load1: 0.1, os: 'Alpine Linux v3.22' } as Server,
+      { ...server, id: 11, name: 'DebianNode', online: true, load1: 0.2, os: 'Debian GNU/Linux 12' } as Server,
+    ]))
+
+    render(<MemoryRouter><Servers /></MemoryRouter>)
+    await screen.findByText('DebianNode')
+
+    fireEvent.keyDown(screen.getByRole('button', { name: /批量维护/ }), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: '更新 sing-box' }))
+    fireEvent.click(await screen.findByRole('combobox', { name: '安装方式' }))
+    const mixedAptOption = await screen.findByRole('option', { name: '官方 APT 源' })
+    expect(mixedAptOption.getAttribute('aria-disabled')).not.toBe('true')
+    fireEvent.click(mixedAptOption)
+    expect(await screen.findByText('在线节点包含 Alpine，选择 APT/DNF 时 Alpine 节点会失败，建议使用官方安装脚本')).toBeTruthy()
   })
 })

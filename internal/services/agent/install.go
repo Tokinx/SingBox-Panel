@@ -647,6 +647,9 @@ func pkgName(channel string) string {
 }
 
 func (i singboxInstaller) installAPT(ctx context.Context, channel string) (string, error) {
+	if i.lookPath != nil && !i.lookPath("apt-get") {
+		return "", fmt.Errorf("当前节点未检测到 apt-get，不支持 APT 安装方式，请改用官方脚本安装")
+	}
 	script := `set -e
 mkdir -p /etc/apt/keyrings
 curl -fsSL https://sing-box.app/gpg.key -o /etc/apt/keyrings/sagernet.asc
@@ -658,6 +661,9 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y ` + pkgName(channel)
 }
 
 func (i singboxInstaller) installDNF(ctx context.Context, channel string) (string, error) {
+	if i.lookPath != nil && !i.lookPath("dnf") {
+		return "", fmt.Errorf("当前节点未检测到 dnf，不支持 DNF 安装方式，请改用官方脚本安装")
+	}
 	script := `set -e
 dnf config-manager addrepo --from-repofile=https://sing-box.app/sing-box.repo 2>/dev/null || dnf config-manager --add-repo https://sing-box.app/sing-box.repo
 dnf install -y ` + pkgName(channel)

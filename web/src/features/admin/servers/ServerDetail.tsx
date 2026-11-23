@@ -1338,6 +1338,7 @@ export default function ServerDetail() {
       <InstallSingboxModal
         open={installOpen}
         form={installForm}
+        serverOS={server.os}
         onCancel={() => setInstallOpen(false)}
         onConfirm={doInstall}
       />

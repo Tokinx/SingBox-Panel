@@ -622,3 +622,21 @@ func TestFinalizeSingboxServiceAfterUpgrade(t *testing.T) {
 		}
 	})
 }
+
+func TestPackageInstallRejectsMissingPackageManager(t *testing.T) {
+	for _, method := range []string{protocol.MethodAPT, protocol.MethodDNF} {
+		t.Run(method, func(t *testing.T) {
+			inst := singboxInstaller{
+				lookPath: func(name string) bool { return name == "apk" },
+				run: func(context.Context, string, ...string) (string, error) {
+					t.Fatal("missing package manager should fail before running commands")
+					return "", nil
+				},
+			}
+			_, err := inst.install(context.Background(), protocol.ChannelStable, "", method)
+			if err == nil || !strings.Contains(err.Error(), "官方脚本") {
+				t.Fatalf("expected official script guidance error, got %v", err)
+			}
+		})
+	}
+}

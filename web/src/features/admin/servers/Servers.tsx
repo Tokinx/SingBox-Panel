@@ -9,7 +9,7 @@ import { formatBytes } from '../../../util'
 import { RequestState } from '../../../components/RequestState'
 import { PageHeader, Pills, Stats, Status } from '../../../ui/Page'
 import { ServerAddressTags } from './ServerAddressTags'
-import { ServerEditModal, normalizeServerFormValues, serverFormInitialValues } from './ServerDialogs'
+import { ServerEditModal, isAlpineOS, normalizeServerFormValues, serverFormInitialValues } from './ServerDialogs'
 import '../../../styles/servers.css'
 import { MODAL_MD, MODAL_SM } from '../../../ui/modal'
 
@@ -82,7 +82,19 @@ export default function Servers() {
     })
   }
 
+  const online = servers.filter((s) => s.online)
+  const hasAlpineOnline = online.some((s) => isAlpineOS(s.os))
+  const allAlpineOnline = online.length > 0 && online.every((s) => isAlpineOS(s.os))
+  useEffect(() => {
+    if (singboxModalOpen && allAlpineOnline && singboxForm.getFieldValue('method') !== 'script') {
+      singboxForm.setFieldsValue({ method: 'script' })
+    }
+  }, [singboxModalOpen, allAlpineOnline, singboxForm])
+
   const handleUpdateSingbox = () => {
+    if (allAlpineOnline && singboxForm.getFieldValue('method') !== 'script') {
+      singboxForm.setFieldsValue({ method: 'script' })
+    }
     setSingboxModalOpen(true)
   }
 
@@ -342,7 +354,6 @@ export default function Servers() {
     setDropTarget(null)
   }
 
-  const online = servers.filter((s) => s.online)
   const totalDown = online.reduce((sum, s) => sum + (s.traffic_available ? s.traffic_download_rate ?? 0 : 0), 0)
   const totalUp = online.reduce((sum, s) => sum + (s.traffic_available ? s.traffic_upload_rate ?? 0 : 0), 0)
   const shown = servers.filter((s) => filter === 'all' || (filter === 'online') === s.online)
@@ -501,15 +512,25 @@ export default function Servers() {
           <Form.Item name="channel" label="版本渠道">
             <Segmented options={[{ value: 'stable', label: '稳定版' }, { value: 'beta', label: '测试版' }]} />
           </Form.Item>
-          <Form.Item name="method" label="安装方式">
+          <Form.Item
+            name="method"
+            label="安装方式"
+            extra={
+              allAlpineOnline
+                ? '在线节点均为 Alpine，请使用官方安装脚本（自动适配 APK / musl）'
+                : hasAlpineOnline && singboxMethod !== 'script'
+                  ? '在线节点包含 Alpine，选择 APT/DNF 时 Alpine 节点会失败，建议使用官方安装脚本'
+                  : undefined
+            }
+          >
             <Select
               onChange={(value) => {
                 if (value !== 'script') singboxForm.setFieldsValue({ version: undefined })
               }}
               options={[
                 { value: 'script', label: '官方安装脚本' },
-                { value: 'apt', label: '官方 APT 源' },
-                { value: 'dnf', label: '官方 DNF 源' },
+                { value: 'apt', label: '官方 APT 源', disabled: allAlpineOnline },
+                { value: 'dnf', label: '官方 DNF 源', disabled: allAlpineOnline },
               ]}
             />
           </Form.Item>

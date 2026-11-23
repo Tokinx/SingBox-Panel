@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { Form, Input, Modal, Segmented, Select, Table, type FormInstance } from '../../../ui'
 import type { ImportSummary } from '../../../api'
 import type { Server } from '../../../types'
@@ -157,27 +157,38 @@ export function ConfigEditorModal({
   )
 }
 
+export function isAlpineOS(os?: string | null): boolean {
+  return /alpine/i.test(os ?? '')
+}
+
 export function InstallSingboxModal({
-  open, form, onCancel, onConfirm,
+  open, form, serverOS, onCancel, onConfirm,
 }: {
   open: boolean
   form: FormInstance
+  serverOS?: string
   onCancel: () => void
   onConfirm: () => void
 }) {
   const method = Form.useWatch('method', form) ?? 'script'
+  const alpine = isAlpineOS(serverOS)
+  useEffect(() => {
+    if (open && alpine && form.getFieldValue('method') !== 'script') {
+      form.setFieldsValue({ method: 'script' })
+    }
+  }, [open, alpine, form])
   return (
     <Modal className="fm-modal" title="安装 / 升级 sing-box" open={open} onOk={onConfirm} onCancel={onCancel} okText="开始安装" width={MODAL_SM}>
       <Form form={form} layout="vertical" className="fm-form" initialValues={{ channel: 'stable', method: 'script' }}>
         <div className="fm-grid" style={{ paddingTop: 6 }}>
           <Form.Item name="channel" label="渠道"><Select options={[{ value: 'stable', label: 'stable' }, { value: 'beta', label: 'beta' }]} /></Form.Item>
-          <Form.Item name="method" label="安装方式">
+          <Form.Item name="method" label="安装方式" extra={alpine ? 'Alpine 节点使用官方脚本安装（自动适配 APK / musl）' : undefined}>
             <Select onChange={(value) => {
               if (value !== 'script') form.setFieldsValue({ version: undefined })
             }} options={[
               { value: 'script', label: '官方脚本' },
-              { value: 'apt', label: 'APT 源' },
-              { value: 'dnf', label: 'DNF 源' },
+              { value: 'apt', label: 'APT 源', disabled: alpine },
+              { value: 'dnf', label: 'DNF 源', disabled: alpine },
             ]} />
           </Form.Item>
           <Form.Item name="version" label="版本" className="fm-full" extra={method !== 'script' ? '指定版本请使用官方脚本' : undefined}>
