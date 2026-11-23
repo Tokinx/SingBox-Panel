@@ -109,7 +109,7 @@ func (m openRCServiceManager) waitForConfigStart(ctx context.Context) error {
 func (m openRCServiceManager) LogCommand(lines int, follow bool) (string, []string) {
 	args := []string{"-n", strconv.Itoa(lines)}
 	if follow {
-		args = append(args, "-f")
+		args = append(args, "-F")
 	}
 	args = append(args, openRCLogPath())
 	return "tail", args
@@ -134,16 +134,26 @@ func openRCLogPathFromConfig(raw string) string {
 }
 
 func ensureOpenRCSingboxService(binary string) error {
-	if _, err := os.Stat(openRCSingboxInit); err == nil {
-		return nil
+	return ensureOpenRCSingboxServiceAt(openRCSingboxInit, binary)
+}
+
+func ensureOpenRCSingboxServiceAt(path, binary string) error {
+	desired := openRCSingboxServiceScript(binary)
+	existing, err := os.ReadFile(path)
+	if err == nil {
+		if !strings.Contains(string(existing), openRCManagedMarker) {
+			return nil
+		}
+		if string(existing) == desired {
+			return nil
+		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("inspect OpenRC sing-box service: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(openRCSingboxInit), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create OpenRC service directory: %w", err)
 	}
-	script := openRCSingboxServiceScript(binary)
-	if err := writeAtomicFile(openRCSingboxInit, []byte(script), 0o755); err != nil {
+	if err := writeAtomicFile(path, []byte(desired), 0o755); err != nil {
 		return fmt.Errorf("write OpenRC sing-box service: %w", err)
 	}
 	return nil
@@ -152,10 +162,26 @@ func ensureOpenRCSingboxService(binary string) error {
 func openRCSingboxServiceScript(binary string) string {
 	return fmt.Sprintf(`#!/sbin/openrc-run
 # %s. This service is removed only when it still carries this marker.
+name=$RC_SVCNAME
 description="sing-box service"
 supervisor="supervise-daemon"
 command=%q
-command_args="run --disable-color -C /etc/sing-box"
+extra_commands="checkconfig"
+extra_started_commands="reload"
+
+: ${SINGBOX_CONFIG:=${config:-"/etc/sing-box"}}
+
+if [ -d "$SINGBOX_CONFIG" ]; then
+	_config_opt="-C $SINGBOX_CONFIG"
+elif [ -z "$SINGBOX_CONFIG" ]; then
+	_config_opt=""
+else
+	_config_opt="-c $SINGBOX_CONFIG"
+fi
+
+_workdir=${SINGBOX_WORKDIR:-${workdir:-"/var/lib/sing-box"}}
+
+command_args="run --disable-color -D $_workdir $_config_opt"
 respawn_delay=5
 respawn_max=0
 
@@ -163,8 +189,21 @@ depend() {
 	after net dns
 }
 
+checkconfig() {
+	ebegin "Checking $RC_SVCNAME configuration"
+	"$command" check -D "$_workdir" $_config_opt
+	eend $?
+}
+
 start_pre() {
-	"$command" check -C /etc/sing-box
+	mkdir -p "$_workdir"
+	checkconfig
+}
+
+reload() {
+	ebegin "Reloading $RC_SVCNAME"
+	checkconfig && $supervisor "$RC_SVCNAME" --signal HUP
+	eend $?
 }
 `, openRCManagedMarker, binary)
 }

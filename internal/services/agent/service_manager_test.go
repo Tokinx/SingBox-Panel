@@ -102,8 +102,12 @@ func TestOpenRCServiceManagerUsesNativeCommandsAndLogFile(t *testing.T) {
 		t.Fatalf("OpenRC enable call missing: %q", calls)
 	}
 	command, args := manager.LogCommand(40, true)
-	if command != "tail" || !reflect.DeepEqual(args, []string{"-n", "40", "-f", openRCSingboxLog}) {
-		t.Fatalf("OpenRC log command = %s %q", command, args)
+	if command != "tail" || !reflect.DeepEqual(args, []string{"-n", "40", "-F", openRCSingboxLog}) {
+		t.Fatalf("OpenRC live log command = %s %q", command, args)
+	}
+	command, args = manager.LogCommand(40, false)
+	if command != "tail" || !reflect.DeepEqual(args, []string{"-n", "40", openRCSingboxLog}) {
+		t.Fatalf("OpenRC snapshot log command = %s %q", command, args)
 	}
 }
 
@@ -137,7 +141,16 @@ func TestAppendOpenRCLoggingPreservesCustomSettings(t *testing.T) {
 
 func TestOpenRCSingboxServiceScriptIsValidShell(t *testing.T) {
 	script := openRCSingboxServiceScript("/usr/bin/sing-box")
-	for _, required := range []string{openRCManagedMarker, "supervise-daemon", `command="/usr/bin/sing-box"`, "check -C /etc/sing-box"} {
+	for _, required := range []string{
+		openRCManagedMarker,
+		"supervise-daemon",
+		`command="/usr/bin/sing-box"`,
+		"-D $_workdir",
+		"/var/lib/sing-box",
+		"checkconfig",
+		`extra_started_commands="reload"`,
+		"reload()",
+	} {
 		if !strings.Contains(script, required) {
 			t.Fatalf("OpenRC service missing %q:\n%s", required, script)
 		}
@@ -146,6 +159,46 @@ func TestOpenRCSingboxServiceScriptIsValidShell(t *testing.T) {
 	cmd.Stdin = strings.NewReader(script)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("OpenRC service shell syntax: %v: %s", err, out)
+	}
+}
+
+func TestEnsureOpenRCSingboxServiceUpdatesManagedAndPreservesExternal(t *testing.T) {
+	dir := t.TempDir()
+	initPath := filepath.Join(dir, "etc", "init.d", "sing-box")
+
+	// Creates managed service when missing.
+	if err := ensureOpenRCSingboxServiceAt(initPath, "/usr/bin/sing-box"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(initPath)
+	if err != nil || !strings.Contains(string(got), "extra_started_commands=\"reload\"") {
+		t.Fatalf("created OpenRC init = %q, err=%v", got, err)
+	}
+
+	// Updates older panel-managed script in place when marker is present.
+	oldManaged := "#!/sbin/openrc-run\n# " + openRCManagedMarker + "\ncommand=\"/usr/bin/sing-box\"\n"
+	if err := os.WriteFile(initPath, []byte(oldManaged), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureOpenRCSingboxServiceAt(initPath, "/usr/local/bin/sing-box"); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := os.ReadFile(initPath)
+	if err != nil || !strings.Contains(string(updated), `command="/usr/local/bin/sing-box"`) || !strings.Contains(string(updated), "reload()") {
+		t.Fatalf("managed OpenRC init was not updated:\n%s", updated)
+	}
+
+	// Never overwrites external/official or user-customized scripts without marker.
+	external := "#!/sbin/openrc-run\n# official or custom script\ncommand=\"/usr/bin/sing-box\"\n"
+	if err := os.WriteFile(initPath, []byte(external), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureOpenRCSingboxServiceAt(initPath, "/usr/local/bin/sing-box"); err != nil {
+		t.Fatal(err)
+	}
+	preserved, err := os.ReadFile(initPath)
+	if err != nil || string(preserved) != external {
+		t.Fatalf("external OpenRC init was overwritten:\n%s", preserved)
 	}
 }
 

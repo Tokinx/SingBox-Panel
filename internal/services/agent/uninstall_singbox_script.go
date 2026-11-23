@@ -13,11 +13,13 @@ umask 077
 mkdir -p /var/lib/singbox-panel-agent
 backup_root="$(mktemp -d /var/lib/singbox-panel-agent/.singbox-uninstall.XXXXXX)"
 committed=0
+conf_tmp=""
 
 cleanup() {
   status=$?
   trap - EXIT HUP INT TERM
   set +e
+  [ -z "$conf_tmp" ] || rm -f "$conf_tmp"
   if [ "$committed" != "1" ]; then
     echo 'sing-box 卸载失败；正在恢复配置和服务状态' >&2
     if [ -d "$backup_root/config" ]; then
@@ -123,7 +125,20 @@ if [ -f /etc/init.d/sing-box ] && grep -F "Managed by SingBox Panel" /etc/init.d
   rm -f /etc/init.d/sing-box
 fi
 if [ -f /etc/conf.d/sing-box ] && grep -F "BEGIN Managed by SingBox Panel" /etc/conf.d/sing-box >/dev/null 2>&1; then
-  rm -f /etc/conf.d/sing-box
+  conf_tmp="$(mktemp /etc/conf.d/.sing-box.XXXXXX)"
+  awk '
+    /^# BEGIN Managed by SingBox Panel log forwarding$/ { skip=1; next }
+    /^# END Managed by SingBox Panel log forwarding$/ { skip=0; next }
+    !skip { print }
+  ' /etc/conf.d/sing-box > "$conf_tmp"
+  if grep -q '[^[:space:]]' "$conf_tmp"; then
+    chmod 644 "$conf_tmp"
+    mv -f "$conf_tmp" /etc/conf.d/sing-box
+    conf_tmp=""
+  else
+    rm -f "$conf_tmp" /etc/conf.d/sing-box
+    conf_tmp=""
+  fi
 fi
 if [ -d "$backup_root/config" ]; then
   mkdir -p /etc/sing-box
