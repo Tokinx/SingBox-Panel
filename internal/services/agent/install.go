@@ -76,7 +76,8 @@ func InstallSingbox(ctx context.Context, channel, version, method string) (strin
 		runInDir:           runInDir,
 		lookPath:           commandExists,
 		detectVersion:      DetectVersion,
-		prepareService:     prepareSingboxService,
+		serviceManager:     currentServiceManager,
+		binaryHash:         currentSingboxBinaryHash,
 		goarch:             runtime.GOARCH,
 		targetBinary:       SingboxBinary,
 		httpClient:         &http.Client{Timeout: 5 * time.Minute},
@@ -93,6 +94,8 @@ type singboxInstaller struct {
 	lookPath           func(string) bool
 	detectVersion      func(context.Context) (bool, string)
 	prepareService     func(context.Context) error
+	serviceManager     func() (serviceManager, error)
+	binaryHash         func() string
 	goarch             string
 	targetBinary       string
 	apkCleanupPaths    []string
@@ -114,6 +117,12 @@ func (i singboxInstaller) install(ctx context.Context, channel, version, method 
 	}
 	if version != "" && (method == protocol.MethodAPT || method == protocol.MethodDNF) {
 		return "", fmt.Errorf("specific sing-box versions require the script installation method")
+	}
+	var pre preInstallServiceState
+	if i.prepareService == nil && i.serviceManager != nil {
+		if mgr, mgrErr := i.serviceManager(); mgrErr == nil {
+			pre = capturePreInstallState(ctx, mgr, i.binaryHash)
+		}
 	}
 	var output string
 	var err error
@@ -147,16 +156,85 @@ func (i singboxInstaller) install(ctx context.Context, channel, version, method 
 		if err := i.prepareService(ctx); err != nil {
 			return output, fmt.Errorf("prepare sing-box service: %w", err)
 		}
+	} else if i.serviceManager != nil {
+		mgr, err := i.serviceManager()
+		if err != nil {
+			return output, fmt.Errorf("prepare sing-box service: %w", err)
+		}
+		var postHash string
+		if i.binaryHash != nil {
+			postHash = i.binaryHash()
+		}
+		if err := finalizeSingboxServiceWithManager(ctx, mgr, pre, postHash); err != nil {
+			return output, fmt.Errorf("prepare sing-box service: %w", err)
+		}
 	}
 	return output, nil
 }
 
-func prepareSingboxService(ctx context.Context) error {
-	manager, err := currentServiceManager()
+type preInstallServiceState struct {
+	wasActive  bool
+	pid        int
+	startedAt  time.Time
+	binaryHash string
+}
+
+func currentSingboxBinaryHash() string {
+	sum, err := fileSHA256(singboxBinary())
 	if err != nil {
+		return ""
+	}
+	return sum
+}
+
+func capturePreInstallState(ctx context.Context, manager serviceManager, hashBinary func() string) preInstallServiceState {
+	if manager == nil {
+		return preInstallServiceState{}
+	}
+	state := preInstallServiceState{
+		wasActive: manager.Active(ctx),
+	}
+	if state.wasActive {
+		if pid, err := manager.MainPID(ctx); err == nil && pid > 0 {
+			state.pid = pid
+			if startedAt, err := manager.StartedAt(ctx, pid); err == nil {
+				state.startedAt = startedAt
+			}
+		}
+	}
+	if hashBinary != nil {
+		state.binaryHash = hashBinary()
+	}
+	return state
+}
+
+func finalizeSingboxServiceWithManager(ctx context.Context, manager serviceManager, pre preInstallServiceState, postHash string) error {
+	if err := prepareSingboxServiceWithManager(ctx, manager); err != nil {
 		return err
 	}
-	return prepareSingboxServiceWithManager(ctx, manager)
+	if !pre.wasActive {
+		return nil
+	}
+	binaryChanged := pre.binaryHash == "" || postHash == "" || pre.binaryHash != postHash
+	if !binaryChanged {
+		return nil
+	}
+	alreadyRestarted := false
+	if manager.Active(ctx) {
+		if curPID, err := manager.MainPID(ctx); err == nil && curPID > 0 {
+			if curStartedAt, err := manager.StartedAt(ctx, curPID); err == nil &&
+				pre.pid > 0 && !pre.startedAt.IsZero() &&
+				(curPID != pre.pid || !curStartedAt.Equal(pre.startedAt)) {
+				alreadyRestarted = true
+			}
+		}
+	}
+	if !alreadyRestarted {
+		if out, err := manager.Action(ctx, "restart"); err != nil {
+			return fmt.Errorf("restart service after upgrade: %w: %s", err, out)
+		}
+	}
+	return nil
 }
 
 func prepareSingboxServiceWithManager(ctx context.Context, manager serviceManager) error {

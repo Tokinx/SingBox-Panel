@@ -496,3 +496,129 @@ func TestInstallAlpineMuslTarballInstallsAndVerifiesBinary(t *testing.T) {
 	}
 	_ = apkCalls
 }
+
+type stubServiceManager struct {
+	kind      serviceKind
+	active    bool
+	enabled   bool
+	pid       int
+	startedAt time.Time
+	actionErr error
+	actions   []string
+	prepared  int
+}
+
+func (s *stubServiceManager) Kind() serviceKind { return s.kind }
+func (s *stubServiceManager) Prepare(context.Context) (string, error) {
+	s.prepared++
+	return "", nil
+}
+func (s *stubServiceManager) Action(_ context.Context, action string) (string, error) {
+	s.actions = append(s.actions, action)
+	if s.actionErr != nil {
+		return "boom", s.actionErr
+	}
+	return "", nil
+}
+func (s *stubServiceManager) SetEnabled(_ context.Context, enabled bool) (string, error) {
+	s.enabled = enabled
+	return "", nil
+}
+func (s *stubServiceManager) Active(context.Context) bool          { return s.active }
+func (s *stubServiceManager) Enabled(context.Context) bool         { return s.enabled }
+func (s *stubServiceManager) Status(context.Context) string        { return "" }
+func (s *stubServiceManager) MainPID(context.Context) (int, error) { return s.pid, nil }
+func (s *stubServiceManager) StartedAt(context.Context, int) (time.Time, error) {
+	return s.startedAt, nil
+}
+func (s *stubServiceManager) LogCommand(int, bool) (string, []string) { return "", nil }
+
+func TestFinalizeSingboxServiceAfterUpgrade(t *testing.T) {
+	t0 := time.Unix(1700000000, 0)
+	t1 := t0.Add(5 * time.Second)
+
+	t.Run("active service restarted when binary hash changes and pid unchanged", func(t *testing.T) {
+		mgr := &stubServiceManager{kind: serviceKindOpenRC, active: true, enabled: true, pid: 100, startedAt: t0}
+		pre := capturePreInstallState(context.Background(), mgr, func() string { return "old-sha" })
+		if err := finalizeSingboxServiceWithManager(context.Background(), mgr, pre, "new-sha"); err != nil {
+			t.Fatal(err)
+		}
+		if len(mgr.actions) != 1 || mgr.actions[0] != "restart" {
+			t.Fatalf("actions = %v, want [restart]", mgr.actions)
+		}
+	})
+
+	t.Run("skips restart when package installer already restarted process", func(t *testing.T) {
+		mgr := &stubServiceManager{kind: serviceKindSystemd, active: true, enabled: true, pid: 100, startedAt: t0}
+		pre := capturePreInstallState(context.Background(), mgr, func() string { return "old-sha" })
+		mgr.pid = 205
+		mgr.startedAt = t1
+		if err := finalizeSingboxServiceWithManager(context.Background(), mgr, pre, "new-sha"); err != nil {
+			t.Fatal(err)
+		}
+		if len(mgr.actions) != 0 {
+			t.Fatalf("expected no double restart, got actions = %v", mgr.actions)
+		}
+	})
+
+	t.Run("skips restart when binary hash is unchanged", func(t *testing.T) {
+		mgr := &stubServiceManager{kind: serviceKindOpenRC, active: true, enabled: true, pid: 100, startedAt: t0}
+		pre := capturePreInstallState(context.Background(), mgr, func() string { return "same-sha" })
+		if err := finalizeSingboxServiceWithManager(context.Background(), mgr, pre, "same-sha"); err != nil {
+			t.Fatal(err)
+		}
+		if len(mgr.actions) != 0 {
+			t.Fatalf("expected no restart on identical binary, got actions = %v", mgr.actions)
+		}
+	})
+
+	t.Run("inactive service is enabled without starting", func(t *testing.T) {
+		mgr := &stubServiceManager{kind: serviceKindOpenRC, active: false, enabled: false}
+		pre := capturePreInstallState(context.Background(), mgr, func() string { return "" })
+		if err := finalizeSingboxServiceWithManager(context.Background(), mgr, pre, "new-sha"); err != nil {
+			t.Fatal(err)
+		}
+		if !mgr.enabled || mgr.prepared != 1 || len(mgr.actions) != 0 {
+			t.Fatalf("unexpected state: enabled=%t prepared=%d actions=%v", mgr.enabled, mgr.prepared, mgr.actions)
+		}
+	})
+
+	t.Run("surfaces restart failure", func(t *testing.T) {
+		mgr := &stubServiceManager{
+			kind:      serviceKindOpenRC,
+			active:    true,
+			enabled:   true,
+			pid:       100,
+			startedAt: t0,
+			actionErr: errors.New("exit status 1"),
+		}
+		pre := capturePreInstallState(context.Background(), mgr, func() string { return "old-sha" })
+		err := finalizeSingboxServiceWithManager(context.Background(), mgr, pre, "new-sha")
+		if err == nil || !strings.Contains(err.Error(), "restart service after upgrade") {
+			t.Fatalf("expected restart error, got %v", err)
+		}
+	})
+
+	t.Run("installer end-to-end restarts active service on binary change", func(t *testing.T) {
+		mgr := &stubServiceManager{kind: serviceKindOpenRC, active: true, enabled: false, pid: 42, startedAt: t0}
+		hash := "before"
+		inst := singboxInstaller{
+			run: func(_ context.Context, cmd string, args ...string) (string, error) {
+				if cmd == "curl" {
+					return "", os.WriteFile(args[2], []byte("#!/bin/sh\nexit 0\n"), 0o600)
+				}
+				hash = "after"
+				return "", nil
+			},
+			detectVersion:  func(context.Context) (bool, string) { return true, "1.14.4" },
+			serviceManager: func() (serviceManager, error) { return mgr, nil },
+			binaryHash:     func() string { return hash },
+		}
+		if _, err := inst.install(context.Background(), protocol.ChannelStable, "", protocol.MethodScript); err != nil {
+			t.Fatal(err)
+		}
+		if !mgr.enabled || len(mgr.actions) != 1 || mgr.actions[0] != "restart" {
+			t.Fatalf("expected enable+restart, got enabled=%t actions=%v", mgr.enabled, mgr.actions)
+		}
+	})
+}
