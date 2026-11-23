@@ -59,7 +59,7 @@ var versionRe = regexp.MustCompile(`^[0-9][0-9A-Za-z.\-]*$`)
 var apkVersionRe = regexp.MustCompile(`apk-tools\s+(\d+)\.`)
 
 const (
-	maxGitHubReleaseJSONBytes  = 4 << 20
+	maxGitHubReleaseJSONBytes  = 16 << 20
 	maxSingboxTarballBytes     = 256 << 20
 	maxSingboxBinaryBytes      = 256 << 20
 	defaultGitHubAPIBase       = "https://api.github.com"
@@ -470,7 +470,7 @@ func (i singboxInstaller) installAlpineMuslTarball(ctx context.Context, channel,
 func (i singboxInstaller) resolveSingboxReleaseVersion(ctx context.Context, channel string) (string, error) {
 	endpoint := i.apiBase() + "/repos/SagerNet/sing-box/releases/latest"
 	if channel == protocol.ChannelBeta {
-		endpoint = i.apiBase() + "/repos/SagerNet/sing-box/releases?per_page=15"
+		endpoint = i.apiBase() + "/repos/SagerNet/sing-box/releases?per_page=1"
 	}
 	req, err := i.newGitHubRequest(ctx, endpoint)
 	if err != nil {

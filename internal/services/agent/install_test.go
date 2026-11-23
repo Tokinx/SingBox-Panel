@@ -403,7 +403,11 @@ func TestInstallAlpineMuslTarballInstallsAndVerifiesBinary(t *testing.T) {
 		case "/repos/SagerNet/sing-box/releases/latest":
 			_, _ = w.Write([]byte(`{"tag_name":"v1.14.4"}`))
 		case "/repos/SagerNet/sing-box/releases":
-			_, _ = w.Write([]byte(`[{"tag_name":"v1.15.0-alpha.13"},{"tag_name":"v1.14.4"}]`))
+			if r.URL.RawQuery != "per_page=1" {
+				http.Error(w, "unexpected query: "+r.URL.RawQuery, http.StatusBadRequest)
+				return
+			}
+			_, _ = w.Write([]byte(`[{"tag_name":"v1.15.0-alpha.13"}]`))
 		case "/SagerNet/sing-box/releases/download/v1.14.4/sing-box-1.14.4-linux-amd64-musl.tar.gz":
 			_, _ = w.Write(stableTarball)
 		case "/SagerNet/sing-box/releases/download/v1.15.0-alpha.13/sing-box-1.15.0-alpha.13-linux-amd64-musl.tar.gz":
