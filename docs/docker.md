@@ -151,9 +151,9 @@ panel.example.com {
 
 ## 节点接入
 
-在面板创建服务器，复制节点详情页生成的安装命令，在目标 VPS 的宿主机执行。目标 VPS 需为 Linux amd64/arm64，并运行 systemd 或 Alpine OpenRC。生成的命令只有一行 `curl … | sh -s -- <一次性码>`：脚本在普通账号下运行时自动通过 `sudo`/`doas` 提权；若极简系统（如最小 Alpine）尚未安装 `curl`，可先安装 `curl` 或将命令开头的 `curl -fsSL` 替换为 `wget -qO-`，脚本后续仍会自动补齐 `curl` 依赖并保留官方脚本方式安装 sing-box。面板镜像内同时包含两种架构的 Agent，镜像自身架构不会限制可管理的节点架构。
+在面板创建服务器，复制节点详情页生成的安装命令，在目标 VPS 的宿主机执行。目标 VPS 需为 Linux amd64/arm64，并运行 systemd 或 Alpine OpenRC。生成的命令只有一行 `curl … | sh -s -- <一次性码>`：脚本在普通账号下运行时自动通过 `sudo`/`doas` 提权；若极简系统（如最小 Alpine）尚未安装 `curl`，可先安装 `curl` 或将命令开头的 `curl -fsSL` 替换为 `wget -qO-`，脚本后续仍会自动补齐 `curl` 依赖并保留官方脚本方式安装 sing-box（Alpine 3.23+ 安装上游 `.apk`，Alpine 3.22 及更早版本自动改用上游 GitHub Release `musl.tar.gz` 静态二进制；二进制变更时若服务运行中会自动重启）。面板镜像内同时包含两种架构的 Agent，镜像自身架构不会限制可管理的节点架构。
 
-Agent 不进入容器，sing-box 的安装、启停、更新、配置下发、日志及流量采集仍走现有原生流程。systemd 节点从 journal 读取日志；Alpine/OpenRC 节点使用 `/var/log/sing-box.log`，Agent 本身写入 `/var/log/singbox-panel-agent.log`，两者应纳入节点现有的日志轮转策略。节点不需开放额外管理端口。
+Agent 不进入容器，sing-box 的安装、启停、更新、配置下发、日志及流量采集仍走现有原生流程。systemd 节点从 journal 读取日志；Alpine/OpenRC 节点使用 `/var/log/sing-box.log`（实时日志使用 `tail -F` 跟踪），Agent 本身写入 `/var/log/singbox-panel-agent.log`，两者应纳入节点现有的日志轮转策略（由于由 `supervise-daemon` 重定向输出，建议配置 `copytruncate` 或在轮转后重启对应服务）。节点不需开放额外管理端口。
 
 ## 数据与备份
 

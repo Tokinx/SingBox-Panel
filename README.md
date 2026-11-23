@@ -14,7 +14,7 @@ curl -fsSL https://github.com/Tokinx/SingBox-Panel/releases/latest/download/inst
 
 安装脚本支持非交互安装（`--base-url`、`--admin`、`--password`、`--non-interactive`），用 `--version vX.Y.Z` 可指定版本。安装完成后在面板中创建服务器，并在目标 VPS 上执行该节点详情页生成的 Agent 安装命令。
 
-节点 Agent 支持 Linux amd64/arm64 的 systemd 节点，也支持 Alpine Linux 的 OpenRC。面板生成的安装命令是一行 `curl … | sh -s -- <一次性码>`：以普通账号执行时，脚本会自行通过 `sudo` 或 `doas` 提权；在无 `curl` 的极简系统（如最小 Alpine）上可先安装 `curl` 或将命令开头的 `curl -fsSL` 替换为 `wget -qO-`，脚本后续仍会自动补齐 `curl` 依赖并为 Agent、sing-box 服务及面板日志读取配置 OpenRC。
+节点 Agent 支持 Linux amd64/arm64 的 systemd 节点，也支持 Alpine Linux 的 OpenRC。面板生成的安装命令是一行 `curl … | sh -s -- <一次性码>`：以普通账号执行时，脚本会自行通过 `sudo` 或 `doas` 提权；在无 `curl` 的极简系统（如最小 Alpine）上可先安装 `curl` 或将命令开头的 `curl -fsSL` 替换为 `wget -qO-`，脚本后续仍会自动补齐 `curl` 依赖并为 Agent、sing-box 服务及面板日志读取配置 OpenRC。在 Alpine 节点通过「官方脚本」安装或升级 sing-box 时，Alpine 3.23+（`apk-tools 3.x`）使用上游官方 `.apk`，Alpine 3.22 及更早版本自动回退安装上游 GitHub Release 官方 `musl.tar.gz` 静态二进制；若二进制发生变更且服务正在运行，升级后会自动重启 sing-box 进程。
 
 ### Docker 部署
 
@@ -103,7 +103,7 @@ docker compose down
 
 ## 工作模式
 
-面板通过 HTTPS 提供管理界面，节点上的 Agent 主动以 WSS 连接面板，节点无需开放额外管理端口，也不提供任意 Shell 执行能力。Agent 以官方方式安装 sing-box，下发配置前执行 `sing-box check`，程序与配置更新采用校验、原子替换与失败回滚。systemd 节点从 journal 读取 sing-box 日志；Alpine/OpenRC 节点的服务输出写入 `/var/log/sing-box.log`，Agent 日志写入 `/var/log/singbox-panel-agent.log`，应纳入节点现有的日志轮转策略。
+面板通过 HTTPS 提供管理界面，节点上的 Agent 主动以 WSS 连接面板，节点无需开放额外管理端口，也不提供任意 Shell 执行能力。Agent 以官方方式安装 sing-box，下发配置前执行 `sing-box check`，程序与配置更新采用校验、原子替换与失败回滚，并在升级替换二进制后自动重启运行中的 sing-box 服务。systemd 节点从 journal 读取 sing-box 日志；Alpine/OpenRC 节点的服务输出写入 `/var/log/sing-box.log`（实时日志通过 `tail -F` 跟踪），Agent 日志写入 `/var/log/singbox-panel-agent.log`，两者应纳入节点日志轮转策略（配合 `supervise-daemon` 建议使用 `copytruncate` 或在轮转后重启服务）。
 
 面板支持两种配置模式：管理模式根据面板中的节点、协议与路由设置生成配置；原始配置模式保存并下发完整 JSON，适合面板暂未结构化支持的 sing-box 配置项。
 
