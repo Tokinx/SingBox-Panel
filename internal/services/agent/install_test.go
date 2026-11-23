@@ -606,6 +606,7 @@ func TestFinalizeSingboxServiceAfterUpgrade(t *testing.T) {
 	t.Run("installer end-to-end restarts active service on binary change", func(t *testing.T) {
 		mgr := &stubServiceManager{kind: serviceKindOpenRC, active: true, enabled: false, pid: 42, startedAt: t0}
 		hash := "before"
+		mgrCalls := 0
 		inst := singboxInstaller{
 			run: func(_ context.Context, cmd string, args ...string) (string, error) {
 				if cmd == "curl" {
@@ -614,12 +615,22 @@ func TestFinalizeSingboxServiceAfterUpgrade(t *testing.T) {
 				hash = "after"
 				return "", nil
 			},
-			detectVersion:  func(context.Context) (bool, string) { return true, "1.14.4" },
-			serviceManager: func() (serviceManager, error) { return mgr, nil },
-			binaryHash:     func() string { return hash },
+			detectVersion: func(context.Context) (bool, string) { return true, "1.14.4" },
+			serviceManager: func() (serviceManager, error) {
+				mgrCalls++
+				if mgrCalls == 1 {
+					return mgr, nil
+				}
+				// Returning a shifted clock anchor on a second call must not happen.
+				return &stubServiceManager{kind: serviceKindOpenRC, active: true, enabled: false, pid: 42, startedAt: t1}, nil
+			},
+			binaryHash: func() string { return hash },
 		}
 		if _, err := inst.install(context.Background(), protocol.ChannelStable, "", protocol.MethodScript); err != nil {
 			t.Fatal(err)
+		}
+		if mgrCalls != 1 {
+			t.Fatalf("serviceManager called %d times, want 1 (must reuse clock anchor)", mgrCalls)
 		}
 		if !mgr.enabled || len(mgr.actions) != 1 || mgr.actions[0] != "restart" {
 			t.Fatalf("expected enable+restart, got enabled=%t actions=%v", mgr.enabled, mgr.actions)

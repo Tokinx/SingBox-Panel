@@ -118,9 +118,11 @@ func (i singboxInstaller) install(ctx context.Context, channel, version, method 
 	if version != "" && (method == protocol.MethodAPT || method == protocol.MethodDNF) {
 		return "", fmt.Errorf("specific sing-box versions require the script installation method")
 	}
+	var mgr serviceManager
 	var pre preInstallServiceState
 	if i.prepareService == nil && i.serviceManager != nil {
-		if mgr, mgrErr := i.serviceManager(); mgrErr == nil {
+		if m, mgrErr := i.serviceManager(); mgrErr == nil {
+			mgr = m
 			pre = capturePreInstallState(ctx, mgr, i.binaryHash)
 		}
 	}
@@ -157,9 +159,12 @@ func (i singboxInstaller) install(ctx context.Context, channel, version, method 
 			return output, fmt.Errorf("prepare sing-box service: %w", err)
 		}
 	} else if i.serviceManager != nil {
-		mgr, err := i.serviceManager()
-		if err != nil {
-			return output, fmt.Errorf("prepare sing-box service: %w", err)
+		if mgr == nil {
+			var err error
+			mgr, err = i.serviceManager()
+			if err != nil {
+				return output, fmt.Errorf("prepare sing-box service: %w", err)
+			}
 		}
 		var postHash string
 		if i.binaryHash != nil {
