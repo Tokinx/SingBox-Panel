@@ -294,7 +294,7 @@ describe('editing a selected user subscription', () => {
     mount('/admin/users/2')
     await screen.findByRole('textbox', { name: '自定义 Tokyo 的节点名称' })
     selectTab(/外部节点/)
-    fireEvent.click(screen.getByRole('button', { name: '展开 External' }))
+    expect(screen.queryByRole('button', { name: /^(展开|收起|全部展开|全部收起)/ })).toBeNull()
     const checkbox = screen.getByRole('checkbox', { name: '分配 Singapore' })
     expect(checkbox.getAttribute('aria-checked')).toBe('true')
     expect(checkbox.closest('label')!.parentElement?.closest('label')).toBeNull()
@@ -450,7 +450,7 @@ describe('editing a selected user subscription', () => {
     // Navigate to user detail access editor and assign the inbound-targeting forward.
     await act(() => router.navigate('/admin/users/2'))
     selectTab(/面板节点/)
-    fireEvent.click(screen.getByRole('button', { name: '展开 Tokyo' }))
+    expect(screen.queryByRole('button', { name: /^(展开|收起|全部展开|全部收起)/ })).toBeNull()
     expect(screen.queryByRole('checkbox', { name: /fwd-custom-http/ })).toBeNull()
     const fwdCheckbox = screen.getByRole('checkbox', { name: '分配 fwd-lax-reality -> LAX' })
     fireEvent.click(fwdCheckbox)
@@ -501,7 +501,6 @@ describe('editing a selected user subscription', () => {
     await screen.findByRole('textbox', { name: '自定义 Tokyo 的节点名称' })
 
     selectTab(/面板节点/)
-    fireEvent.click(screen.getByRole('button', { name: '展开 Tokyo' }))
     const v4Btn = screen.getByRole('button', { name: '分配 vless-main IPv4' })
     const v6Btn = screen.getByRole('button', { name: '分配 vless-main IPv6' })
     expect(v4Btn.textContent?.trim()).toBe('IPv4')
@@ -568,7 +567,6 @@ describe('editing a selected user subscription', () => {
     expect(screen.queryByRole('button', { name: '分配 Tokyo 全部 IPv4' })).toBeNull()
     expect(screen.queryByRole('button', { name: '分配 Tokyo 全部 IPv6' })).toBeNull()
 
-    fireEvent.click(screen.getByRole('button', { name: '展开 Tokyo' }))
     fireEvent.click(screen.getByRole('button', { name: '分配 vless-main IPv4' }))
     fireEvent.click(screen.getByRole('button', { name: '分配 vless-main IPv6' }))
     fireEvent.click(screen.getByRole('button', { name: '分配 trojan-backup IPv6' }))

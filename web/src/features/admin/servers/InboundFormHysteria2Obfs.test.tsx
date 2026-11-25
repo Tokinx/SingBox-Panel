@@ -54,7 +54,7 @@ function openHysteria2(settings: InboundSettings) {
     },
   }
   render(<InboundForm serverId={1} inbound={inbound} open onClose={vi.fn()} onSaved={vi.fn()} />)
-  fireEvent.click(screen.getByText('协议参数'))
+  expect(document.querySelectorAll('details')).toHaveLength(0)
 }
 
 async function saveSettings() {

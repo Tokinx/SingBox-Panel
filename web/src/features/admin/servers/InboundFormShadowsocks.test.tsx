@@ -46,7 +46,6 @@ function openShadowsocks(method: string, multiUser = false) {
     settings: { method, ss_server_psk: psk, multi_user: multiUser, single_user: !multiUser },
   }
   render(<InboundForm serverId={1} inbound={inbound} open onClose={vi.fn()} onSaved={vi.fn()} />)
-  fireEvent.click(screen.getByText('认证'))
   return psk
 }
 

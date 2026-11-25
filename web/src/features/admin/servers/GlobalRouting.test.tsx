@@ -57,8 +57,11 @@ function renderRule(rule: RouteRule | null = null) {
 }
 
 describe('rule-set IP match direction', () => {
-  it('keeps legacy rules on destination IP', async () => {
+  it('keeps legacy rules on destination IP and renders flat sections without details', async () => {
     renderRule({ ...sourceRejectRule, match: { action: 'reject', rule_set: ['geoip-cn'] } })
+    expect(document.querySelectorAll('details')).toHaveLength(0)
+    expect(screen.getByRole('heading', { name: /匹配条件/ })).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: '其他' })).toBeNull()
     expect((await screen.findByRole('radio', { name: '目标 IP' })).getAttribute('aria-checked')).toBe('true')
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
     await waitFor(() => expect(updateRule).toHaveBeenCalled())
@@ -112,6 +115,7 @@ describe('Hysteria2 outbound obfuscation password', () => {
   it('shows obfs password in plaintext by default and fills a random value on click', async () => {
     vi.mocked(createOutbound).mockResolvedValue({ apply_state: 'pending' } as Awaited<ReturnType<typeof createOutbound>>)
     render(<OutboundForm serverId={1} outbound={null} open onClose={vi.fn()} onSaved={vi.fn()} />)
+    expect(document.querySelectorAll('details')).toHaveLength(0)
 
     fireEvent.click(await screen.findByLabelText(/^类型/))
     fireEvent.click(await screen.findByRole('option', { name: 'Hysteria2' }))
@@ -121,10 +125,8 @@ describe('Hysteria2 outbound obfuscation password', () => {
     fireEvent.change(screen.getByLabelText(/服务器地址/), { target: { value: 'hy2.example.com' } })
     fireEvent.change(screen.getByLabelText(/端口/), { target: { value: '443' } })
 
-    fireEvent.click(screen.getByText('认证'))
     fireEvent.change(screen.getByLabelText(/^密码/), { target: { value: 'hy2-secret' } })
 
-    fireEvent.click(screen.getByText('协议参数'))
     fireEvent.click(await screen.findByLabelText('混淆类型'))
     fireEvent.click(await screen.findByRole('option', { name: 'salamander' }))
     await waitFor(() => expect(screen.getByLabelText('混淆类型').textContent).toContain('salamander'))

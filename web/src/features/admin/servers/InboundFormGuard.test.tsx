@@ -113,7 +113,7 @@ describe('REALITY front SNI guard form', () => {
     expect(alpn()).toBe('h3')
     await chooseProtocol('vless')
     expect(alpn()).toBe('h2, http/1.1')
-    fireEvent.click(screen.getByText('传输'))
+    expect(document.querySelectorAll('details')).toHaveLength(0)
     await chooseTransport('WebSocket')
     expect(alpn()).toBe('http/1.1')
     await chooseTransport('HTTPUpgrade')

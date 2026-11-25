@@ -79,16 +79,13 @@
 .um-access-modal-body { display: flex; flex-direction: column; border: 1px solid var(--console-border); border-radius: var(--app-radius); overflow: hidden; }
 .um-access-modal-group { flex: none; }
 .um-access-modal-group + .um-access-modal-group { border-top: 1px solid var(--console-border); }
-.um-access-modal-group-head { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 14px 6px 8px; }
-.um-access-modal-group-head:hover { background: var(--console-surface); }
+.um-access-modal-group-head { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 10px 14px 6px; }
 .um-access-modal-group-head strong { min-width: 0; font-weight: 500; color: var(--console-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .um-access-modal-group-head small { min-width: 0; color: var(--console-faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .um-access-group-unnamed { color: var(--console-muted); }
 .um-access-group-count { margin-left: auto; flex: none; color: var(--console-faint); font-family: var(--app-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
-.um-access-group-toggle { flex: none; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--console-faint); font-size: 10px; cursor: pointer; }
-.um-access-group-toggle:hover { color: var(--console-ink); background: var(--console-hover); }
-.um-access-group-toggle:focus-visible, .um-access-order-handle:focus-visible, .um-access-stack-btn:focus-visible { outline: 2px solid var(--console-focus); outline-offset: 1px; }
-.um-access-modal-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 6px; padding: 4px 14px 14px 42px; }
+.um-access-order-handle:focus-visible, .um-access-stack-btn:focus-visible { outline: 2px solid var(--console-focus); outline-offset: 1px; }
+.um-access-modal-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 6px; padding: 4px 14px 14px; }
 .um-access-chip { display: flex; align-items: center; gap: 8px; min-width: 0; height: 32px; padding: 0 10px; border: 1px solid var(--console-border); border-radius: 6px; background: var(--console-container); cursor: pointer; transition: border-color .15s, background .15s; }
 .um-access-chip:hover { border-color: var(--console-border-hover); }
 .um-access-chip > .ui-checkbox + span { display: flex; flex: 1; align-items: center; gap: 8px; min-width: 0; }
@@ -161,7 +158,7 @@
   .um-rule-pattern, .um-rule-replacement, .um-rule-none { grid-column: 2 / -1; }
   .um-rule-none { display: none; }
   .um-rule-actions { grid-column: 3; grid-row: 1; }
-  .um-access-modal-items { grid-template-columns: minmax(0, 1fr); padding-left: 14px; }
+  .um-access-modal-items { grid-template-columns: minmax(0, 1fr); padding: 4px 12px 12px; }
   .um-access-order-item { grid-template-columns: var(--app-control-h) minmax(0, 1fr) auto; grid-template-areas: 'handle content actions'; column-gap: 4px; row-gap: 6px; min-height: 64px; padding: 8px 6px; }
   .um-access-order-item.is-renaming { grid-template-areas: 'handle content actions' 'input input input'; }
   .um-access-order-handle { grid-area: handle; width: var(--app-control-h); height: 40px; }
@@ -176,15 +173,13 @@
   .um-access-order-name-input input { padding-block: 4px; font-size: 16px; }
   .um-access-order-actions { grid-area: actions; }
   .um-access-order-actions .ui-btn { width: var(--app-control-h); height: var(--app-control-h); padding: 0; color: var(--console-muted); }
-  .um-access-editor .ui-pills-actions > .ui-btn { height: var(--app-control-h); gap: 4px; padding: 0 8px; }
   .um-access-editor .um-access-chip { height: 36px; }
   .um-access-editor .um-access-stack-btn { min-width: 44px; height: 24px; }
-  .um-access-editor .um-access-modal-group-head { gap: 6px; }
-  .um-access-editor .um-access-group-toggle { width: var(--app-control-h); height: var(--app-control-h); }
+  .um-access-editor .um-access-modal-group-head { padding: 8px 12px 4px; gap: 6px; }
   .um-access-editor .um-access-modal-group-head .ui-checkbox-wrapper { flex: none; width: var(--app-control-h); height: var(--app-control-h); justify-content: center; }
   .um-user-detail .ui-page-actions .ui-btn, .um-access-page-footer .ui-btn { height: var(--app-control-h); gap: 6px; padding: 0 10px; }
   .um-user-detail .ui-page-actions .ui-btn-icon-only { width: var(--app-control-h); padding: 0; }
-  .um-user-detail .ui-btn .lucide, .um-access-editor .um-access-group-toggle .lucide { width: 14px; height: 14px; }
+  .um-user-detail .ui-btn .lucide { width: 14px; height: 14px; }
   .um-user-detail .um-back { min-height: var(--app-control-h); margin-bottom: 10px; }
   .um-user-detail .sub-clients { grid-template-columns: minmax(0, 1fr); gap: 0; border: 1px solid var(--console-border); border-radius: var(--app-radius); overflow: clip; }
   .um-user-detail .sub-client { height: 52px; padding: 0 14px; border: 0; border-radius: 0; }

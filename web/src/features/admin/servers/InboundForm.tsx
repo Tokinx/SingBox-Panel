@@ -545,7 +545,7 @@ export default function InboundForm({
     >
       <fieldset disabled={submitting} aria-busy={submitting} className="inbound-compact-fieldset">
       <Form form={form} layout="vertical" className="fm-form inbound-compact-form">
-        <FormGroup title="基本" panel="inbound">
+        <FormGroup panel="inbound">
           <Form.Item name="type" label="协议" rules={[{ required: true }]} className="inbound-compact-type">
             <Select
               options={TYPES}
@@ -1103,21 +1103,15 @@ export default function InboundForm({
 }
 
 export function FormGroup({ title, extra, panel, children }: {
-  title: ReactNode
+  title?: ReactNode
   extra?: ReactNode
   panel?: 'inbound' | 'outbound'
   children: ReactNode
 }) {
-  if (title === '基本' || title === '动作') {
-    return <section className="fm-group fm-group-basic">
-      <h3 className="fm-group-title">{title}{extra && <small>{extra}</small>}</h3>
-      <div className="fm-grid" data-panel={panel}>{children}</div>
-    </section>
-  }
-  return <details className="fm-group fm-group-fold">
-    <summary className="fm-group-title">{title}{extra && <small>{extra}</small>}</summary>
+  return <section className="fm-group">
+    {title && <h3 className="fm-group-title">{title}{extra && <small>{extra}</small>}</h3>}
     <div className="fm-grid" data-panel={panel}>{children}</div>
-  </details>
+  </section>
 }
 
 // Validation failed: bring the first invalid field into view inside the
@@ -1125,9 +1119,6 @@ export function FormGroup({ title, extra, panel, children }: {
 export function scrollToFirstError(form: FormInstance, err: unknown) {
   const name = (err as { errorFields?: { name: (string | number)[] }[] })?.errorFields?.[0]?.name
   if (name) {
-    // Fields remain mounted inside collapsed sections. Reveal them before
-    // scrolling, including validation errors that have not painted yet.
-    document.querySelectorAll<HTMLDetailsElement>('details.fm-group').forEach((group) => { group.open = true })
     form.scrollToField(name, { block: 'center', behavior: 'smooth' })
   }
 }

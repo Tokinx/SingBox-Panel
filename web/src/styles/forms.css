@@ -1,8 +1,9 @@
-/* Design A — modal editors: outlined groups, compact navigation, minimal hints. */
+/* Design A — modal editors: flat divided parameter sections, minimal hints. */
 
 /* ---------- Groups ---------- */
 .fm-group { padding: 18px 0 4px; }
 .fm-group:first-child { padding-top: 6px; }
+.fm-group:last-child { padding-bottom: 0; }
 .fm-group + .fm-group { border-top: 1px solid var(--console-border); }
 .fm-group-title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 14px; font-size: 13px; font-weight: 600; line-height: 1.4; letter-spacing: -.1px; color: var(--console-ink); }
 .fm-group-title small { font-size: 12px; font-weight: 400; color: var(--console-faint); font-variant-numeric: tabular-nums; }
@@ -87,26 +88,12 @@
   .fm-form .fm-actions .ui-segmented-item-label { padding-inline: 4px; font-size: 13px; }
 }
 
-/* Dialog forms use framed parameter sections, matching the panel cards. */
+/* Dialog forms use flat divided parameter sections. */
 .fm-source-picker { min-width: 0; padding: 0; margin: 0 0 20px; border: 0; }
 .fm-source-picker .ui-pills-row { margin-bottom: 0; }
 .fm-source-picker .ui-pill.is-active { box-shadow: none; outline: 1px solid var(--console-border); }
 .fm-source-picker:disabled { opacity: .6; }
 .fm-source-picker:disabled .ui-pill { cursor: not-allowed; }
-.fm-modal .fm-grid { grid-template-columns: minmax(0, 1fr); }
-.fm-modal .fm-group { padding: 0; margin-bottom: 16px; }
-.fm-modal .fm-group:last-child { margin-bottom: 0; }
-.fm-modal .fm-group-basic > .fm-group-title { display: none; }
-.fm-modal .fm-group-fold { border: 1px solid var(--console-border-strong); border-radius: var(--app-radius-pop); overflow: hidden; }
-.fm-modal .fm-group-fold > summary.fm-group-title { display: flex; align-items: center; justify-content: flex-start; gap: 10px; min-height: 48px; margin: 0; padding: 0 16px; font-size: 14px; font-weight: 500; list-style: none; cursor: pointer; user-select: none; }
-.fm-modal .fm-group-fold > summary::-webkit-details-marker { display: none; }
-.fm-modal .fm-group-fold > summary::before { content: ''; width: 6px; height: 6px; flex: none; border-right: 1.5px solid var(--console-faint); border-bottom: 1.5px solid var(--console-faint); transform: rotate(-45deg); }
-.fm-modal .fm-group-fold[open] > summary::before { transform: rotate(45deg); }
-.fm-modal .fm-group-fold > summary:hover { background: var(--console-surface); }
-.fm-modal .fm-group-fold > summary:focus-visible { outline: 2px solid var(--console-focus); outline-offset: -3px; }
-.fm-modal .fm-group-fold > summary small { margin-left: auto; }
-.fm-modal .fm-group-fold[open] > summary { border-bottom: 1px solid var(--console-border); }
-.fm-modal .fm-group-fold > .fm-grid { padding: 20px 16px 0; }
 .fm-import-form > .ui-form-item:last-child { margin-bottom: 0; }
 .fm-import-preview { margin: 8px 0 20px; border: 1px solid var(--console-border); border-radius: var(--app-radius-pop); overflow: hidden; }
 .fm-import-preview h3 { display: flex; align-items: center; justify-content: space-between; margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--console-border); font-size: 13px; font-weight: 500; }

@@ -204,7 +204,7 @@ export function OutboundForm({
         <OutboundImport key={serverId} serverId={serverId} onClose={onClose} onSaved={onSaved} onSavingChange={setSubmitting} formId={importFormId} onReadyChange={setImportReady} />
       ) : <fieldset disabled={submitting} aria-busy={submitting} className="min-w-0 border-0 p-0 m-0">
       <Form form={form} layout="vertical" className="fm-form">
-        <FormGroup title="基本">
+        <FormGroup>
           <Form.Item name="tag" label="标签" rules={[{ required: true }]}>
             <Input placeholder="hk-out" />
           </Form.Item>
@@ -762,7 +762,7 @@ export function RuleForm({
     >
       <fieldset disabled={submitting} aria-busy={submitting} className="min-w-0 border-0 p-0 m-0">
       <Form form={form} layout="vertical" className="fm-form">
-        <FormGroup title="动作">
+        <FormGroup>
           <Form.Item name="action" rules={[{ required: true, message: '请选择规则动作' }]} className="fm-full">
             <Segmented block options={ACTION_OPTIONS} className="fm-actions" aria-label="规则动作" />
           </Form.Item>
@@ -945,7 +945,7 @@ export function RuleForm({
           </FormGroup>
         )}
 
-        <FormGroup title="其他">
+        <FormGroup>
           <Form.Item name="remark" label="备注" className="fm-full">
             <Input placeholder="国内直连" maxLength={120} />
           </Form.Item>

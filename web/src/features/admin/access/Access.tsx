@@ -24,7 +24,6 @@ import {
   GripVertical,
   Plus,
   RotateCw,
-  ChevronRight,
   Search,
   Undo2,
   X,
@@ -271,7 +270,6 @@ export function UserAccessEditor({ userId, onStateChange }: {
   const assignmentSessionRef = useRef(0)
   const [activeTab, setActiveTab] = useState<'nodes' | 'order'>('order')
   const [activeNodeTab, setActiveNodeTab] = useState<'managed' | 'custom'>('managed')
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set())
   const [draggedNodeKey, setDraggedNodeKey] = useState<string | null>(null)
   const [dropIndex, setDropIndex] = useState<number | null>(null)
   const [sortAnnouncement, setSortAnnouncement] = useState('')
@@ -461,11 +459,6 @@ export function UserAccessEditor({ userId, onStateChange }: {
     })
   }, [nodes])
 
-  const allGroupKeys = useMemo(
-    () => (activeNodeTab === 'managed' ? managedGroups : customGroups).map((g) => g.key),
-    [activeNodeTab, customGroups, managedGroups],
-  )
-
   const allNodeGroups = useMemo(
     () => [...managedGroups, ...customGroups],
     [customGroups, managedGroups],
@@ -578,20 +571,6 @@ export function UserAccessEditor({ userId, onStateChange }: {
   const toggleItemIPv6 = useCallback((item: AccessNodeItem, checked: boolean) => {
     setIDs('managed_ipv6', [item.id], checked)
   }, [setIDs])
-
-  const toggleGroupExpanded = (key: string) => {
-    setExpandedGroups((current) => {
-      const next = new Set(current)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
-  }
-
-  const allCollapsed = allGroupKeys.length > 0 && allGroupKeys.every((key) => !expandedGroups.has(key))
-  const toggleAllGroups = () => {
-    setExpandedGroups(allCollapsed ? new Set(allGroupKeys) : new Set())
-  }
 
   const discardChanges = () => {
     setRenamingNode(null)
@@ -763,9 +742,8 @@ export function UserAccessEditor({ userId, onStateChange }: {
   }
 
   // Renders panel-server groups and external-node groups together as
-  // expandable, select-all-able sections in the unified node tab.
+  // always-expanded, select-all-able sections in the unified node tab.
   const renderGroupSections = (groupList: AccessGroup[]) => groupList.map((group) => {
-    const expanded = expandedGroups.has(group.key)
     const kinds = group.items.reduce<Record<AccessKind, number[]>>((result, item) => {
       result[item.kind].push(item.id)
       if (item.kind === 'managed' && item.ipv6Host) {
@@ -779,16 +757,6 @@ export function UserAccessEditor({ userId, onStateChange }: {
     return (
       <section className="um-access-modal-group" key={group.key}>
         <div className="um-access-modal-group-head">
-          <button
-            type="button"
-            className="um-access-group-toggle"
-            onClick={() => toggleGroupExpanded(group.key)}
-            title={expanded ? '收起' : '展开'}
-            aria-label={`${expanded ? '收起' : '展开'} ${group.label}`}
-            aria-expanded={expanded}
-          >
-            {expanded ? <ChevronDown /> : <ChevronRight />}
-          </button>
           <Checkbox
             aria-label={`选择 ${group.label} 全部节点`}
             checked={groupSelectedCount === groupEndpointCount && groupEndpointCount > 0}
@@ -805,21 +773,19 @@ export function UserAccessEditor({ userId, onStateChange }: {
           {group.meta ? <small>{group.meta}</small> : null}
           <span className="um-access-group-count">{groupSelectedCount} / {groupEndpointCount}</span>
         </div>
-        {expanded ? (
-          <div className="um-access-modal-items">
-            {group.items.map((item) => (
-              <AccessItem
-                key={`${item.kind}:${item.id}`}
-                item={item}
-                checked={isSelected(item)}
-                ipv6Checked={item.kind === 'managed' && Boolean(item.ipv6Host) && selectedIPv6Set.has(item.id)}
-                disabled={saving}
-                onToggle={toggleItem}
-                onToggleIPv6={toggleItemIPv6}
-              />
-            ))}
-          </div>
-        ) : null}
+        <div className="um-access-modal-items">
+          {group.items.map((item) => (
+            <AccessItem
+              key={`${item.kind}:${item.id}`}
+              item={item}
+              checked={isSelected(item)}
+              ipv6Checked={item.kind === 'managed' && Boolean(item.ipv6Host) && selectedIPv6Set.has(item.id)}
+              disabled={saving}
+              onToggle={toggleItem}
+              onToggleIPv6={toggleItemIPv6}
+            />
+          ))}
+        </div>
       </section>
     )
   })
@@ -1023,11 +989,6 @@ export function UserAccessEditor({ userId, onStateChange }: {
             { key: 'managed', label: '面板节点', count: managedCount },
             { key: 'custom', label: '外部节点', count: customCount },
           ]}
-          actions={view !== 'order' && allGroupKeys.length > 1 ? (
-            <Button size="small" type="text" icon={allCollapsed ? <ChevronDown /> : <ChevronRight />} onClick={toggleAllGroups}>
-              {allCollapsed ? '全部展开' : '全部收起'}
-            </Button>
-          ) : null}
         />
         {loadedServerWide ? (
           <p className="um-access-note">

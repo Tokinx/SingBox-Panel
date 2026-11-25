@@ -88,8 +88,6 @@ function useForm<T extends Values = any>(): [FormInstance<T>] {
       },
       scrollToField: (name, options) => {
         const field = document.getElementById(`${id}-${path(name)}`)
-        for (let parent = field?.parentElement; parent; parent = parent.parentElement)
-          if (parent.tagName === 'DETAILS') parent.setAttribute('open', '')
         field?.scrollIntoView(options)
         field?.focus({ preventScroll: true })
       },
